@@ -1,4 +1,4 @@
-# surrealdb.go
+# surrealdb.php
 
 The official SurrealDB library for PHP.
 
