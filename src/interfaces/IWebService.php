@@ -1,5 +1,5 @@
 <?php
-namespace SurrealDB\interfaces;
+namespace surreal\interfaces;
 
 interface IWebService{
 
