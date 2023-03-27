@@ -30,13 +30,20 @@ class WebService implements IWebService{
             }
             $modelConnection = $this->surrealObject;
             $protocol = "http";
-            if($modelConnection->getIsSSH())
+            $useSSLTLS = "N";
+            if($modelConnection->getIsSSL())
             {
+                $useSSLTLS = "S";
                 $protocol = "https";
             }
             $initialUrl = $protocol."://".$modelConnection->getHostname() . ':' . $modelConnection->getPort() . '/'. $endPoint;
             $curl = curl_init($initialUrl);
             curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);//Return response 
+            //TLS/SSL 
+            if($useSSLTLS == "S")
+            {
+                curl_setopt($curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_MAX_TLSv1_1); 
+            }
             //Authentication
             curl_setopt($curl,CURLOPT_USERPWD, $modelConnection->getUsername().":".$modelConnection->getPassword());
             //Setings Namespaces, databases and accept response JSON
