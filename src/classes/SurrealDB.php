@@ -1,11 +1,11 @@
 <?php 
-namespace SurrealDB\classes;
+namespace surreal\classes;
 
 require __DIR__."/../interfaces/ISurrealDB.php";
 require __DIR__."/WebService.php";
 
-use SurrealDB\interfaces\ISurrealDB;
-use SurrealDB\WebService\WebService;
+use surreal\interfaces\ISurrealDB;
+use surreal\WebService\WebService;
 class  SurrealDB implements ISurrealDB
 {
     private $hostname;

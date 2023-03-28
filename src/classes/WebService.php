@@ -1,7 +1,7 @@
 <?php
-namespace SurrealDB\WebService;
+namespace surreal\WebService;
 require __DIR__."/../interfaces/IWebService.php";
-use SurrealDB\interfaces\IWebService;
+use surreal\interfaces\IWebService;
 
 class WebService implements IWebService{
 
