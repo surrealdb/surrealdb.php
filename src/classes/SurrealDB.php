@@ -14,7 +14,7 @@ class  SurrealDB implements ISurrealDB
     private $password;
     private $db;
     private $ns;
-    private $isSSH;
+    private $isSSL;
     
     public function getHostname()
     {
@@ -46,9 +46,9 @@ class  SurrealDB implements ISurrealDB
         return $this->ns;
     }
     
-    public function getIsSSH()
+    public function getIsSSL()
     {
-        return $this->isSSH;
+        return $this->isSSL;
     }
 
     public function __construct($params)
@@ -84,9 +84,9 @@ class  SurrealDB implements ISurrealDB
                 throw new \Exception('Namespace is required');
             }
 
-            if(!isset($params['isSSH']))
+            if(!isset($params['isSSL']))
             {
-                throw new \Exception('isSSH is required');
+                throw new \Exception('isSSL is required');
             }
 
             $this->hostname = $params['hostname'];
@@ -95,7 +95,7 @@ class  SurrealDB implements ISurrealDB
             $this->password = $params['password'];
             $this->ns = $params['ns'];
             $this->db = $params['db'];
-            $this->isSSH = $params['isSSH'];
+            $this->isSSL = $params['isSSL'];
         }catch(\Exception $e){
             var_dump($e->getMessage());
             return $e->getMessage();
