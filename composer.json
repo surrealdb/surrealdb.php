@@ -1,0 +1,71 @@
+{
+  "name": "surrealdb/surrealdb.php",
+  "description": "The official SurrealDB library for PHP.",
+  "keywords": [
+    "SurrealDB"
+  ],
+  "homepage": "https://github.com/surrealdb/surrealdb.php",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Przemyslaw Hugh Kaznowski",
+      "role": "Contributor",
+      "homepage": "https://github.com/phughk"
+    },
+    {
+      "name": "Enzo Nicolas Stagno Piriz",
+      "role": "Contributor",
+      "homepage": "https://github.com/mcprog1"
+    },
+    {
+      "name": "Luis Lucas",
+      "role": "Contributor",
+      "homepage": "https://github.com/LLNet"
+    },
+    {
+      "name": "Sam Parton",
+      "role": "Contributor",
+      "homepage": "https://github.com/idevelopthings"
+    }
+  ],
+  "require": {
+    "php": "^8.1",
+    "netresearch/jsonmapper": "^4.2",
+    "spatie/url": "^2.2"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^8.5",
+    "pestphp/pest": "^2.6",
+    "phpunit/phpunit": "^10.1"
+  },
+  "autoload": {
+    "files": [
+      "src/helpers.php"
+    ],
+    "psr-4": {
+      "Surreal\\": "src"
+    }
+  },
+  "autoload-dev": {
+    "classmap": [
+      "tests"
+    ],
+    "psr-4": {
+      "Surreal\\Tests\\": "tests",
+      "Surreal\\Tests\\Fixtures\\": "tests/Fixtures"
+    }
+  },
+  "scripts": {
+    "post-autoload-dump": "@php ./vendor/bin/testbench package:discover --ansi",
+    "test": "vendor/bin/pest",
+    "test-coverage": "vendor/bin/pest --coverage"
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
