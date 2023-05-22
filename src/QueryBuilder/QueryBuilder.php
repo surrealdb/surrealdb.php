@@ -196,12 +196,9 @@ class QueryBuilder
 	}
 
 	/**
-	 * @return array{
-	 *     sql: string,
-	 *     parameters: array<string, mixed>
-	 * }
+	 * @return QueryData
 	 */
-	public function toSql(): array
+	public function toSql(): QueryData
 	{
 		$parameters = [];
 
@@ -281,8 +278,7 @@ class QueryBuilder
 
 		$query .= ';';
 
-
-		return [$query, $parameters];
+		return QueryData::make($query, $parameters);
 	}
 
 	/**
@@ -292,9 +288,9 @@ class QueryBuilder
 	 */
 	public function execute(): ApiQueryResponse
 	{
-		[$sql, $parameters] = $this->toSql();
+		$query = $this->toSql();
 
-		$results = $this->model::raw($sql, $parameters);
+		$results = $this->model::raw($query->query, $query->parameters);
 
 		if ($results->hasError()) {
 			$results->throw();

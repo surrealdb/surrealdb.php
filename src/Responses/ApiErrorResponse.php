@@ -16,6 +16,17 @@ class ApiErrorResponse
 
 	public function __construct(object $response)
 	{
+		/**
+		 * RPC errors don't always have the same fields
+		 */
+		if (isset($response->code) && isset($response->message)) {
+			$this->description = $response->description ?? $response->message;
+			$this->code        = $response->code;
+			$this->details     = $response->details ?? $response->message;
+			$this->information = $response->information ?? $response->message;
+
+			return;
+		}
 		$this->code        = $response->code;
 		$this->description = $response->description;
 		$this->details     = $response->details;

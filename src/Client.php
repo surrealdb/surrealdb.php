@@ -2,9 +2,16 @@
 
 namespace Surreal;
 
+use Surreal\Config\ConfigContract;
+use Surreal\Exceptions\FailedRpcResponseError;
+use Surreal\QueryBuilder\QueryData;
 use Surreal\Responses\ApiQueryResponse;
 use Surreal\Serialization\DefaultSerializationFactory;
 use Surreal\Serialization\SerializationFactoryContract;
+use Surreal\WebService\BaseWebService;
+use Surreal\WebService\RpcMessages\QueryRpcMessage;
+use Surreal\WebService\WebService;
+use Surreal\WebService\WebServiceContract;
 
 class Client
 {
@@ -12,17 +19,17 @@ class Client
 
 	public static function configure(ConfigContract $config): void
 	{
-		[$configIsValid, $errorMessage] = self::validateConfig($config);
-		if (!$configIsValid) {
-			throw new \InvalidArgumentException($errorMessage);
-		}
-
 		if ($config->getWebService() === null) {
-			$config->webservice(new WebService($config));
+			$config->webservice(WebService::class);
 		}
 
 		if ($config->getSerializerFactory() === null) {
 			$config->serializerFactory(new DefaultSerializationFactory());
+		}
+
+		[$configIsValid, $errorMessage] = self::validateConfig($config);
+		if (!$configIsValid) {
+			throw new \InvalidArgumentException($errorMessage);
 		}
 
 		self::$config = $config;
@@ -55,6 +62,10 @@ class Client
 			return [false, 'Password is required'];
 		}
 
+		if (!class_exists($config->getWebService())) {
+			return [false, 'Web service class does not exist'];
+		}
+
 		return [true, ''];
 	}
 
@@ -65,6 +76,14 @@ class Client
 		}
 
 		return self::$config;
+	}
+
+	public static function getWebService(): WebServiceContract
+	{
+		/** @var BaseWebService $service */
+		$service = self::$config->getWebService();
+
+		return $service::getOrCreateService(self::$config);
 	}
 
 	/**
@@ -78,11 +97,9 @@ class Client
 	 */
 	public static function query(string $sql, array $parameters = [], mixed $model = null): ApiQueryResponse
 	{
-		$response = self::$config->getWebService()->makeRequest($sql, $parameters);
-
-		if (isset($response->error)) {
-			throw new \RuntimeException($response->error);
-		}
+		$response = self::getWebService()
+			->prepareRequest()
+			->send(new QueryRpcMessage(QueryData::make($sql, $parameters)));
 
 		return new ApiQueryResponse($response, $model);
 	}
@@ -103,7 +120,7 @@ class Client
 
 	public static function getSerializer(): SerializationFactoryContract
 	{
-		if(self::$config?->getSerializerFactory() === null) {
+		if (self::$config?->getSerializerFactory() === null) {
 			throw new \Exception('Serializer factory is not set');
 		}
 

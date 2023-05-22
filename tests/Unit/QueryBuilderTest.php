@@ -1,4 +1,6 @@
 <?php
+/** @noinspection SqlNoDataSourceInspection */
+/** @noinspection SqlResolve */
 
 use Surreal\Client;
 use Tests\Fixtures\PersonModel;
@@ -11,10 +13,10 @@ test('basic sql query', function () {
 		->from('person')
 		->select('name');
 
-	[$sql, $parameters] = $query->toSql();
+	$queryData = $query->toSql();
 
-	expect($sql)->toBe('SELECT * FROM person WHERE name = $name_0;')
-		->and($parameters)->toBe(['name_0' => 'Tobie']);
+	expect($queryData->query)->toBe('SELECT name FROM person WHERE name = $name_0;')
+		->and($queryData->parameters)->toBe(['name_0' => 'Tobie']);
 });
 
 test('running basic query and getting all results', function () {
@@ -36,7 +38,6 @@ test('running basic query and getting first result', function () {
 		->where('name', 'Tobie')
 		->first();
 
-	expect($person)->toBeArray()
-		->and($person)->toBeInstanceOf(PersonModel::class)
+	expect($person)->toBeInstanceOf(PersonModel::class)
 		->and($person->name)->toBe('Tobie');
 });

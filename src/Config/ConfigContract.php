@@ -1,23 +1,24 @@
 <?php
 
-namespace Surreal;
+namespace Surreal\Config;
 
 use Surreal\Serialization\SerializationFactoryContract;
+use Surreal\WebService\WebServiceContract;
 
-interface ConfigContract
+interface ConfigContract extends BaseConfigContract
 {
 
 	/**
-	 * @return WebServiceContract|null
+	 * @return string|null
 	 */
-	public function getWebService(): ?WebServiceContract;
+	public function getWebService(): ?string;
 
 	/**
-	 * @param WebServiceContract|null $webService
+	 * @param class-string|null $webService
 	 *
 	 * @return ConfigContract
 	 */
-	public function webservice(?WebServiceContract $webService): ConfigContract;
+	public function webservice(?string $webService): ConfigContract;
 
 	/**
 	 * @return string|null
@@ -75,9 +76,9 @@ interface ConfigContract
 	/**
 	 * @param string|null $url
 	 *
-	 * @return ConfigContract
+	 * @return ConfigContract|BaseConfigContract
 	 */
-	public function url(?string $url): ConfigContract;
+	public function url(?string $url): ConfigContract|BaseConfigContract;
 
 	/**
 	 * @param SerializationFactoryContract|null $serializerFactory

@@ -12,8 +12,7 @@ This allows it to work with any framework/application.
 
 ```php
 
-use Surreal\Client;
-use Surreal\Config;
+use Surreal\Client;use Surreal\Config\Config;
 
 Client::configure(
     (new Config())

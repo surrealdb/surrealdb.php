@@ -1,14 +1,19 @@
 <?php
 
-namespace Surreal;
+namespace Surreal\Config;
 
 
 use Surreal\Serialization\SerializationFactoryContract;
+use Surreal\WebService\WebServiceContract;
 
-class Config implements ConfigContract
+class Config extends BaseConfig implements ConfigContract
 {
 
-	private ?WebServiceContract $webService = null;
+	/**
+	 * The class FQN of the web service to be used.
+	 * @var class-string|null
+	 */
+	private ?string $webService = null;
 
 	private ?string $url = null;
 
@@ -24,19 +29,19 @@ class Config implements ConfigContract
 
 
 	/**
-	 * @return WebServiceContract|null
+	 * @return string|null
 	 */
-	public function getWebService(): ?WebServiceContract
+	public function getWebService(): ?string
 	{
 		return $this->webService;
 	}
 
 	/**
-	 * @param WebServiceContract|null $webService
+	 * @param class-string|null $webService
 	 *
 	 * @return ConfigContract
 	 */
-	public function webservice(?WebServiceContract $webService): ConfigContract
+	public function webservice(?string $webService): ConfigContract
 	{
 		$this->webService = $webService;
 

@@ -2,6 +2,7 @@
 
 namespace Surreal\Responses;
 
+use Illuminate\Support\Collection;
 use Surreal\Model\SurrealModel;
 
 /**
@@ -9,7 +10,7 @@ use Surreal\Model\SurrealModel;
  */
 class ApiQueryResponse
 {
-	protected array|object $response;
+	protected Collection|ApiErrorResponse $rawResults;
 
 	/**
 	 * @var QueryResponse<T>[]
@@ -22,22 +23,17 @@ class ApiQueryResponse
 	 */
 	protected ?string $modelClassFqn = null;
 
-	/**
-	 * @param array|object      $response
-	 * @param class-string|null $modelClassFqn
-	 */
-	public function __construct(array|object $response, ?string $modelClassFqn = null)
+	public function __construct(Collection|ApiErrorResponse $results, ?string $modelClassFqn = null)
 	{
-		$this->response      = $response;
+		$this->rawResults    = $results;
 		$this->modelClassFqn = $modelClassFqn;
 
-		if (!is_array($response) && $response?->code !== 200) {
-			$this->error = new ApiErrorResponse($response);
-
+		if($results instanceof ApiErrorResponse) {
+			$this->error = $results;
 			return;
 		}
 
-		$this->responses = array_map(fn($response) => new QueryResponse($response, $this->modelClassFqn), $response);
+		$this->responses = $results->map(fn($response) => new QueryResponse($response, $this->modelClassFqn))->toArray();
 	}
 
 	/**
@@ -79,10 +75,15 @@ class ApiQueryResponse
 
 	public function __toString(): string
 	{
-		return json_encode($this->response);
+		return json_encode($this->rawResults);
 	}
 
-	public function hasError()
+	public function count(): int
+	{
+		return count($this->responses);
+	}
+
+	public function hasError(): bool
 	{
 		return $this->error !== null;
 	}

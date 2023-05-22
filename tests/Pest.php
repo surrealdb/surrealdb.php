@@ -1,7 +1,8 @@
 <?php
 
-use Surreal\Config;
-use Surreal\ConfigContract;
+use Surreal\Config\Config;
+use Surreal\Config\ConfigContract;
+use Surreal\WebService\JsonRpcWebService;
 
 /*
 |--------------------------------------------------------------------------
@@ -43,14 +44,20 @@ use Surreal\ConfigContract;
 */
 
 
-function createClientConfig(): ConfigContract
+function createClientConfig(bool $useRpc = false): ConfigContract
 {
-	return (new Config())
+	$config = (new Config())
 		->username('root')
 		->password('secret')
 		->url('http://127.0.0.1:4269')
 		->namespace('tests')
 		->db('tests');
+
+	if($useRpc) {
+		$config->webservice(JsonRpcWebService::class);
+	}
+
+	return $config;
 }
 
 // function something()
