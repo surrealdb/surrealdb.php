@@ -23,17 +23,18 @@ class ApiQueryResponse
 	 */
 	protected ?string $modelClassFqn = null;
 
-	public function __construct(Collection|ApiErrorResponse $results, ?string $modelClassFqn = null)
+	public function __construct(Collection|ApiErrorResponse $results, ?string $modelClassFqn = null, bool $isDirectResults = false)
 	{
 		$this->rawResults    = $results;
 		$this->modelClassFqn = $modelClassFqn;
 
-		if($results instanceof ApiErrorResponse) {
+		if ($results instanceof ApiErrorResponse) {
 			$this->error = $results;
+
 			return;
 		}
 
-		$this->responses = $results->map(fn($response) => new QueryResponse($response, $this->modelClassFqn))->toArray();
+		$this->responses = $results->map(fn($response) => new QueryResponse($response, $this->modelClassFqn, $isDirectResults))->toArray();
 	}
 
 	/**
@@ -88,6 +89,11 @@ class ApiQueryResponse
 		return $this->error !== null;
 	}
 
+	public function getError(): ?ApiErrorResponse
+	{
+		return $this->error;
+	}
+
 	public function getErrorDetails(): ?string
 	{
 		return $this->error?->details;
@@ -115,6 +121,20 @@ class ApiQueryResponse
 		}
 
 		throw new \Exception($this->error->description, $this->error->code);
+	}
+
+	/**
+	 * @return T[]
+	 */
+	public function getAllItems() : array
+	{
+		$items = [];
+
+		foreach ($this->responses as $response) {
+			$items = array_merge($items, $response->all());
+		}
+
+		return $items;
 	}
 
 

@@ -8,9 +8,7 @@ use Surreal\WebService\RpcMessages\RpcMessageContract;
 
 class FailedRpcResponseError extends Exception
 {
-
 	protected ?RpcMessageContract $sentMessage = null;
-
 
 	public function setSentMessage(?RpcMessageContract $sentMessage): self
 	{

@@ -2,6 +2,7 @@
 
 namespace Surreal\Responses;
 
+use Exception;
 use Surreal\Client;
 use Surreal\Model\SurrealModel;
 
@@ -20,23 +21,34 @@ class QueryResponse
 	/**
 	 * @var T[]|null
 	 */
-	private ?array  $result = null;
+	private mixed   $result = null;
 	private ?string $status = null;
 	private ?string $time   = null;
 
 	/**
 	 * @param                   $response
 	 * @param class-string|null $modelClassFqn
+	 * @param bool              $isDirectResults
 	 *
-	 * @throws \Exception
+	 * @throws Exception
 	 */
-	public function __construct($response, ?string $modelClassFqn = null)
+	public function __construct($response, ?string $modelClassFqn = null, bool $isDirectResults = false)
 	{
+		if (!is_object($response)) {
+			$this->result = [$response];
+
+			return;
+		}
+
 		$this->status = $response->status ?? null;
 		$this->time   = $response->time ?? null;
 
-		if (!isset($response->result)) {
+		if (!isset($response->result) && !$isDirectResults) {
 			return;
+		}
+
+		if ($isDirectResults) {
+			$this->status = 'OK';
 		}
 
 		if (!$modelClassFqn) {
@@ -46,15 +58,15 @@ class QueryResponse
 		}
 
 		$serializer = Client::getSerializer();
-		$result     = array_map(fn($item) => $serializer->deserialize($item, $modelClassFqn), wrap($response->result));
+		$result     = array_map(fn($item) => $serializer->deserialize($item, $modelClassFqn), wrap($isDirectResults ? $response : $response->result));
 
 		$this->result = $result;
 	}
 
 	/**
-	 * @return array|null
+	 * @return array|string|object|null
 	 */
-	public function getResult(): ?array
+	public function getResult(): mixed
 	{
 		return $this->result;
 	}
@@ -78,7 +90,7 @@ class QueryResponse
 	/**
 	 * @return T|null
 	 */
-	public function first(): ?object
+	public function first(): object|array|string|null
 	{
 		return $this->result[0] ?? null;
 	}
@@ -86,7 +98,7 @@ class QueryResponse
 	/**
 	 * @return T[]
 	 */
-	public function all() : array
+	public function all(): array
 	{
 		return $this->result ?? [];
 	}

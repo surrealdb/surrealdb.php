@@ -119,7 +119,8 @@ class JsonRpcWebService extends BaseWebService implements WebServiceContract
 			return new ApiErrorResponse($serverMessage->error);
 		}
 
-		return new Collection($serverMessage->result ?? []);
+		$items = wrap($serverMessage->result ?? []);
+		return new Collection($items);
 	}
 
 	public function close(): void

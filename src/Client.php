@@ -3,13 +3,25 @@
 namespace Surreal;
 
 use Surreal\Config\ConfigContract;
+use Surreal\Exceptions\AuthenticationFailedException;
 use Surreal\Exceptions\FailedRpcResponseError;
+use Surreal\Exceptions\NotSupportedForWebServiceException;
 use Surreal\QueryBuilder\QueryData;
 use Surreal\Responses\ApiQueryResponse;
 use Surreal\Serialization\DefaultSerializationFactory;
 use Surreal\Serialization\SerializationFactoryContract;
 use Surreal\WebService\BaseWebService;
+use Surreal\WebService\Data\SigninData;
+use Surreal\WebService\Data\SignupData;
+use Surreal\WebService\JsonRpcWebService;
+use Surreal\WebService\RpcMessages\CreateRpcMessage;
 use Surreal\WebService\RpcMessages\QueryRpcMessage;
+use Surreal\WebService\RpcMessages\RpcMessage;
+use Surreal\WebService\RpcMessages\SelectRpcMessage;
+use Surreal\WebService\RpcMessages\SigninRpcMessage;
+use Surreal\WebService\RpcMessages\SignupRpcMessage;
+use Surreal\WebService\RpcMessages\UpdateRpcMessage;
+use Surreal\WebService\RpcMessages\UseRpcMessage;
 use Surreal\WebService\WebService;
 use Surreal\WebService\WebServiceContract;
 
@@ -86,6 +98,15 @@ class Client
 		return $service::getOrCreateService(self::$config);
 	}
 
+	public static function getSerializer(): SerializationFactoryContract
+	{
+		if (self::$config?->getSerializerFactory() === null) {
+			throw new \Exception('Serializer factory is not set');
+		}
+
+		return self::$config->getSerializerFactory()->createSerializer();
+	}
+
 	/**
 	 * @template T of class-string
 	 *
@@ -118,13 +139,145 @@ class Client
 		return self::query($sql, $parameters, $model);
 	}
 
-	public static function getSerializer(): SerializationFactoryContract
+	private static function isUsingJsonRpc(): bool
 	{
-		if (self::$config?->getSerializerFactory() === null) {
-			throw new \Exception('Serializer factory is not set');
+		return self::$config->getWebService() === JsonRpcWebService::class;
+	}
+
+	public static function use(?string $ns, ?string $db): ApiQueryResponse
+	{
+		if (!self::isUsingJsonRpc()) {
+			throw new NotSupportedForWebServiceException('use');
 		}
 
-		return self::$config->getSerializerFactory()->createSerializer();
+		$response = self::getWebService()
+			->prepareRequest()
+			->send(new UseRpcMessage($ns, $db));
+
+
+		return new ApiQueryResponse($response);
+	}
+
+	public static function signup(SignupData $data): ?string
+	{
+		if (!self::isUsingJsonRpc()) {
+			throw new NotSupportedForWebServiceException('signup');
+		}
+
+		$response = self::getWebService()
+			->prepareRequest()
+			->send(new SignupRpcMessage($data));
+
+		$result = new ApiQueryResponse($response);
+
+		if ($result->hasError()) {
+			throw new AuthenticationFailedException($result->getError());
+		}
+
+
+		return $result->firstResult()?->first();
+	}
+
+	public static function signin(SigninData $data)
+	{
+		if (!self::isUsingJsonRpc()) {
+			throw new NotSupportedForWebServiceException('signin');
+		}
+
+		$response = self::getWebService()
+			->prepareRequest()
+			->send(new SigninRpcMessage($data));
+
+		$result = new ApiQueryResponse($response);
+
+		if ($result->hasError()) {
+			throw new AuthenticationFailedException($result->getError());
+		}
+
+
+		return $result->firstResult()?->first();
+	}
+
+	public static function invalidate(): void
+	{
+		if (!self::isUsingJsonRpc()) {
+			throw new NotSupportedForWebServiceException('signin');
+		}
+
+		$response = self::getWebService()
+			->prepareRequest()
+			->send(new RpcMessage('invalidate'));
+
+		$result = new ApiQueryResponse($response);
+
+		if ($result->hasError()) {
+			throw new FailedRpcResponseError($result->getErrorInformation(), $result->getErrorCode());
+		}
+	}
+
+	/**
+	 * @template T of class-string
+	 *
+	 * @param string $thing
+	 * @param T|null $model
+	 *
+	 * @return array<T>
+	 */
+	public static function select(string $thing, mixed $model = null): array
+	{
+		$response = self::getWebService()
+			->prepareRequest()
+			->send(new SelectRpcMessage($thing));
+
+		$result = new ApiQueryResponse($response, $model, true);
+
+		return $result->getAllItems();
+	}
+
+	/**
+	 * @template T of class-string
+	 *
+	 * @param string $thing
+	 * @param array  $data
+	 * @param T|null $model
+	 *
+	 * @return T|object
+	 */
+	public static function create(string $thing, array $data, mixed $model = null): mixed
+	{
+		$response = self::getWebService()
+			->prepareRequest()
+			->send(new CreateRpcMessage($thing, $data));
+
+		$result = new ApiQueryResponse($response, $model, true);
+
+		return $result->getAllItems()[0] ?? null;
+	}
+
+	/**
+	 * @template T of class-string
+	 *
+	 * @param string|Thing $thing
+	 * @param array        $data
+	 * @param T|null       $model
+	 *
+	 * @return T|object
+	 */
+	public static function update(string|Thing $thing, array $data, mixed $model = null): mixed
+	{
+		$thing = thing($thing);
+
+		$response = self::getWebService()
+			->prepareRequest()
+			->send(new UpdateRpcMessage($thing, $data));
+
+		$result = new ApiQueryResponse($response, $model, true);
+
+		if($thing->hasId()) {
+			return $result->first();
+		}
+
+		return $result->getAllItems();
 	}
 
 
