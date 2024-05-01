@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" displayDetailsOnTestsThatTriggerWarnings="true" colors="true" bootstrap="tests/bootstrap.php" stopOnFailure="false" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd">
+  <testsuites>
+    <testsuite name="protocol-http">
+      <directory>tests/Protocol/http</directory>
+    </testsuite>
+    <testsuite name="protocol-websocket">
+      <directory>tests/Protocol/websocket</directory>
+    </testsuite>
+    <testsuite name="abstract">
+      <directory>tests/Abstract</directory>
+    </testsuite>
+    <testsuite name="parsers">
+      <directory>tests/Parsers</directory>
+    </testsuite>
+    <testsuite name="core">
+      <directory>tests/Core</directory>
+    </testsuite>
+    <testsuite name="cbor">
+      <directory>tests/Cbor</directory>
+    </testsuite>
+    <testsuite name="curl">
+      <directory>tests/Curl</directory>
+    </testsuite>
+    <testsuite name="utils">
+      <directory>tests/Utils</directory>
+    </testsuite>
+  </testsuites>
+  <coverage>
+    <report>
+      <html outputDirectory="coverage"/>
+    </report>
+  </coverage>
+  <source>
+    <include>
+      <directory suffix=".php">src</directory>
+    </include>
+  </source>
+</phpunit>

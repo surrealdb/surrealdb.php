@@ -1,0 +1,65 @@
+{
+	"name": "surrealdb/surrealdb.php",
+	"description": "Official SurrealDB PHP Driver",
+	"type": "library",
+	"homepage": "https://github.com/surrealdb/surrealdb.php",
+	"license": "MIT",
+	"readme": "README.md",
+	"version": "2.0.0",
+	"autoload": {
+		"psr-4": {
+			"SurrealDB\\": "src/"
+		}
+	},
+	"scripts": {
+		"phpstan": "vendor/bin/phpstan -c phpstan.neon",
+		"test-coverage": "./vendor/bin/phpunit -c phpunit.xml",
+		"run-surreal-1.2.2": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.2.2 start --auth --user root --pass root --allow-all --log trace ",
+		"run-surreal-1.3.1": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.3.1 start --auth --user root --pass root --allow-all --log trace ",
+		"run-surreal-1.4.x": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.4.2 start --auth --user root --pass root --allow-all --log trace "
+	},
+	"authors": [
+		{
+			"name": "Beau",
+			"email": "beaudenheijer@gmail.com"
+		},
+		{
+			"name": "SurrealDB"
+		}
+	],
+	"require": {
+		"ext-curl": "*",
+		"ramsey/uuid": "4.7.5",
+		"phrity/websocket": "2.2.1",
+		"php": ">=8.2",
+		"welpie21/cbor.php": "1.0.1",
+		"brick/math": "^0.11.0",
+		"khill/php-duration": "^1.1"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "10.5.19",
+		"phpstan/phpstan": "1.10.67",
+		"phpstan/phpstan-beberlei-assert": "1.1.2",
+		"phpstan/extension-installer": "1.3.1",
+		"nikic/php-parser": "v4.19.1",
+		"vimeo/psalm": "5.23.1",
+		"phpunit/php-code-coverage": "10.1.14"
+	},
+	"config": {
+		"allow-plugins": {
+			"phpstan/extension-installer": true
+		}
+	},
+	"extra": {
+		"phpstan": {
+			"includes": [
+				"extension.neon"
+			]
+		},
+		"phpstan/extension-installer": {
+			"ignore": [
+				"phpstan/phpstan-phpunit"
+			]
+		}
+	}
+}
