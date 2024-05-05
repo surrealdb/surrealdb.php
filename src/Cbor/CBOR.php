@@ -6,6 +6,7 @@ use Beau\CborPHP\CborDecoder;
 use Beau\CborPHP\CborEncoder;
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\exceptions\CborException;
+use DateTimeImmutable;
 use Exception;
 use Ramsey\Uuid\UuidInterface;
 use Surreal\Cbor\Types\DateTime;
@@ -17,9 +18,11 @@ use Surreal\Cbor\Types\GeometryMultiPoint;
 use Surreal\Cbor\Types\GeometryMultiPolygon;
 use Surreal\Cbor\Types\GeometryPoint;
 use Surreal\Cbor\Types\GeometryPolygon;
+use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
 use Surreal\Cbor\Types\Table;
 use Surreal\Cbor\Types\Uuid;
+use Brick\Math\BigDecimal;
 
 class CBOR
 {
@@ -36,12 +39,14 @@ class CBOR
             return match($value::class) {
 
                 // Tags from spec
-                \DateTime::class => new TaggedValue(0, $value->format(\DateTimeInterface::ATOM)),
-                \DateTimeImmutable::class => new TaggedValue(12, $value->format(\DateTimeInterface::ATOM)),
+                DateTime::class => new TaggedValue(0, $value->format(\DateTimeInterface::ATOM)),
+                DateTimeImmutable::class => new TaggedValue(12, $value->format(\DateTimeInterface::ATOM)),
+                None::class => new TaggedValue(6, null),
 
                 // Custom classes
                 Table::class => new TaggedValue(7, $value->getTable()),
                 RecordId::class => new TaggedValue(8, (string)$value),
+                BigDecimal::class => new TaggedValue(10, $value->toFloat()),
                 UuidInterface::class => new TaggedValue(37, $value),
 
                 GeometryPoint::class => new TaggedValue(88, $value->point),
@@ -73,13 +78,13 @@ class CBOR
 
             return match ($tagged->tag) {
                 0 => new \DateTime($tagged->value),
-                6 => null,
+                6 => new None(),
 
-                7 => Table::fromString($tagged->value),
+                7 => Table::create($tagged->value),
                 8 => RecordId::fromArray($tagged->value),
                 9 => Uuid::fromString($tagged->value),
 
-                10 => new \Decimal($tagged->value),
+                10 => BigDecimal::of($tagged->value),
 
                 12 => DateTime::fromCborCustomDate($tagged->value),
                 13 => new Duration($tagged->value),

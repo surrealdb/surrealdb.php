@@ -2,8 +2,8 @@
 
 namespace Surreal\Core\Responses\Types;
 
+use Surreal\Core\Curl\HttpContentFormat;
 use Surreal\Core\Responses\ResponseInterface;
-use Surreal\Curl\HttpContentType;
 use Surreal\Exceptions\AuthException;
 
 readonly class ImportResponse implements ResponseInterface
@@ -20,11 +20,11 @@ readonly class ImportResponse implements ResponseInterface
     /**
      * @throws AuthException
      */
-    public static function from(mixed $data, HttpContentType $type, int $status): ResponseInterface
+    public static function from(mixed $data, HttpContentFormat $type, int $status): ResponseInterface
     {
         return match ([$status, $type]) {
             // TODO: implement the rest of the cases here.
-            [401, HttpContentType::UTF8] => throw new AuthException($data),
+            [401, HttpContentFormat::UTF8] => throw new AuthException($data),
             default => new self($data, $status),
         };
     }

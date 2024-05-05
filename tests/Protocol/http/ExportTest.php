@@ -4,7 +4,7 @@ namespace protocol\http;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Surreal\Core\Client\SurrealHTTP;
+use Surreal\Surreal;
 
 class ExportTest extends TestCase
 {
@@ -13,14 +13,13 @@ class ExportTest extends TestCase
      */
     public function testExport(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = new Surreal("http://localhost:8000");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
 
         $result = $db->export("root", "root");
         $this->assertIsString($result);
 
-        $db->close();
+        $db->disconnect();
     }
 }

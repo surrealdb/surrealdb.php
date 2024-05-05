@@ -1,8 +1,8 @@
 <?php
 
-namespace Surreal\Curl;
+namespace Surreal\Core\Curl;
 
-enum HttpContentType: string
+enum HttpContentFormat: string
 {
     case JSON = "application/json";
     case CBOR = "application/cbor";

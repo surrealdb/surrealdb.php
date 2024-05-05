@@ -5,35 +5,31 @@ namespace protocol\websocket;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\Types\RecordId;
-use Surreal\Core\Client\SurrealWebsocket;
+use Surreal\Cbor\Types\Table;
+use Surreal\Core\Engines\WsEngine;
 use Surreal\Core\Utils\SurrealPatch;
+use Surreal\Surreal;
 use Throwable;
 
 class QueryTest extends TestCase
 {
-    private static SurrealWebsocket $db;
-
-    /**
-     * @throws \Exception
-     */
-    public static function setUpBeforeClass(): void
+    private function getDb(): Surreal
     {
-        self::$db = new SurrealWebsocket(
-            host: "ws://127.0.0.1:8000/rpc",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = new Surreal("ws://localhost:8000/rpc");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
 
-        $token = self::$db->signin([
+        $jwt = $db->signin([
             "user" => "root",
             "pass" => "root"
         ]);
 
-        self::assertIsString($token, "The token is not a string");
-        self::assertTrue(self::$db->isConnected());
+        $this->assertIsString($jwt, "Token is not a string");
+        $this->assertTrue($db->status() === 200);
 
-        self::$db->authenticate($token);
+        $db->authenticate($jwt);
 
-        parent::setUpBeforeClass();
+        return $db;
     }
 
     /**
@@ -42,10 +38,10 @@ class QueryTest extends TestCase
      */
     public function testCRUD(): void
     {
-        $created_person = self::$db->create("person:beaudh", [
-            "name" => "Beau",
-            "age" => 30
-        ]);
+        $db = $this->getDb();
+
+        $id = RecordId::create("person", "beaudh");
+        $created_person = $db->create($id, ["name" => "Beau", "age" => 30]);
 
         $this->assertIsArray($created_person, "The created person is not an array");
         $this->assertEquals(RecordId::class, $created_person["id"]::class);
@@ -53,7 +49,8 @@ class QueryTest extends TestCase
         $this->assertEquals("Beau", $created_person["name"], "The created person's name is not Beau");
         $this->assertEquals(30, $created_person["age"], "The created person's age is not 30");
 
-        $selected_person = self::$db->select("person:beaudh");
+        $id = RecordId::create("person", "beaudh");
+        $selected_person = $db->select($id);
 
         $this->assertIsArray($selected_person, "The selected person is not an array");
         $this->assertArrayHasKey("id", $selected_person, "The selected person does not have an id");
@@ -61,9 +58,8 @@ class QueryTest extends TestCase
         $this->assertEquals("Beau", $selected_person["name"], "The selected person's name is not Beau");
         $this->assertEquals(30, $selected_person["age"], "The selected person's age is not 30");
 
-        $updated_person = self::$db->update("person:beaudh", [
-            "age" => 31
-        ]);
+        $id = RecordId::create("person", "beaudh");
+        $updated_person = $db->update($id, ["age" => 31]);
 
         $this->assertIsArray($updated_person, "The updated person is not an array");
         $this->assertArrayHasKey("id", $updated_person, "The updated person does not have an id");
@@ -71,13 +67,16 @@ class QueryTest extends TestCase
         $this->assertArrayNotHasKey("name", $updated_person, "The deleted person's name is not empty");
         $this->assertEquals(31, $updated_person["age"], "The updated person's age is not 31");
 
-        $deleted_person = self::$db->delete("person:beaudh");
+        $id = RecordId::create("person", "beaudh");
+        $deleted_person = $db->delete($id);
 
         $this->assertIsArray($deleted_person, "The deleted person is not an array");
         $this->assertArrayHasKey("id", $deleted_person, "The deleted person does not have an id");
 
         $this->assertArrayNotHasKey("name", $deleted_person, "The deleted person's name is not empty");
         $this->assertEquals(31, $deleted_person["age"], "The deleted person's age is not 31");
+
+        $db->disconnect();
     }
 
     /**
@@ -85,16 +84,16 @@ class QueryTest extends TestCase
      */
     public function testPatch(): void
     {
-        $created_person = self::$db->create("person:beaudx", [
-            "name" => "Beau",
-            "age" => 30
-        ]);
+        $id = RecordId::create("person", "beaudx");
+        $db = $this->getDb();
+
+        $created_person = $db->create($id, ["name" => "Beau", "age" => 30]);
 
         $this->assertIsArray($created_person, "The created person is not an array");
         $this->assertArrayHasKey("id", $created_person, "The created person does not have an id");
 
-        $patched_person = self::$db->patch("person:beaudx", [
-            SurrealPatch::create("replace", "/name", "Beaudha")
+        $patched_person = $db->patch($id, [
+            ["op" => "replace", "path" => "/name", "value" => "Beaudha"],
         ], true);
 
         $this->assertIsArray($patched_person, "The patched person is not an array");
@@ -105,12 +104,14 @@ class QueryTest extends TestCase
             $this->assertArrayHasKey("value", $person, "The patched person does not have a value");
         }
 
-        $deleted_person = self::$db->delete("person:beaudx");
+        $deleted_person = $db->delete($id);
 
         $this->assertIsArray($deleted_person, "The deleted person is not an array");
         $this->assertArrayHasKey("id", $deleted_person, "The deleted person does not have an id");
         $this->assertArrayHasKey("name", $deleted_person, "The deleted person's name is not empty");
         $this->assertEquals(30, $deleted_person["age"], "The deleted person's age is not 30");
+
+        $db->disconnect();
     }
 
     /**
@@ -118,17 +119,15 @@ class QueryTest extends TestCase
      */
     public function testMerge(): void
     {
-        $created_person = self::$db->create("person:beaudzx", [
-            "name" => "Beau",
-            "age" => 30
-        ]);
+        $db = $this->getDb();
+
+        $id = RecordId::create("person", "beaudzx");
+        $created_person = $db->create($id, ["name" => "Beau", "age" => 30]);
 
         $this->assertIsArray($created_person, "The created person is not an array");
         $this->assertArrayHasKey("id", $created_person, "The created person does not have an id");
 
-        $merged_person = self::$db->merge("person:beaudzx", [
-            "age" => 31
-        ]);
+        $merged_person = $db->merge($id, ["age" => 31]);
 
         $this->assertIsArray($merged_person, "The merged person is not an array");
         $this->assertArrayHasKey("id", $merged_person, "The merged person does not have an id");
@@ -137,6 +136,8 @@ class QueryTest extends TestCase
         $this->assertEquals("Beau", $merged_person["name"], "The merged person's name is not Beau");
 
         $this->assertEquals(31, $merged_person["age"], "The merged person's age is not 31");
+
+        $db->disconnect();
     }
 
     /**
@@ -144,7 +145,11 @@ class QueryTest extends TestCase
      */
     public function testInsert(): void
     {
-        $inserted_person = self::$db->insert("person", [
+        $db = $this->getDb();
+
+        $table = new Table("person");
+
+        $inserted_person = $db->insert($table, [
             ["name" => "Beau", "age" => 25],
             ["name" => "Julian", "age" => 24]
         ]);
@@ -156,6 +161,8 @@ class QueryTest extends TestCase
             $this->assertArrayHasKey("name", $person, "The inserted person does not have a name");
             $this->assertArrayHasKey("age", $person, "The inserted person does not have an age");
         }
+
+        $db->disconnect();
     }
 
     /**
@@ -163,15 +170,8 @@ class QueryTest extends TestCase
      */
     public function testQuery(): void
     {
-        $persons = self::$db->query("SELECT * FROM person");
+        $db = $this->getDb();
+        $persons = $db->query("SELECT * FROM person");
         $this->assertIsArray($persons, "The persons is not an array");
-    }
-
-    public static function tearDownAfterClass(): void
-    {
-        self::$db->close();
-        self::assertFalse(self::$db->isConnected());
-
-        parent::tearDownAfterClass();
     }
 }

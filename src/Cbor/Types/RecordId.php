@@ -15,21 +15,16 @@ final class RecordId
 		$this->id = $id;
 	}
 
-	/**
-	 * Parses a record id from a string in the format "table:id"
-	 * @param string $recordId
-	 * @return RecordId
-	 */
-	public static function fromString(string $recordId): RecordId
-	{
-		$parts = explode(":", $recordId);
-
-		if (count($parts) !== 2) {
-			throw new InvalidArgumentException("Invalid record id: " . $recordId);
-		}
-
-		return new RecordId($parts[0], $parts[1]);
-	}
+    /**
+     * Creates a new record id from a table name and an id
+     * @param string $table
+     * @param string $id
+     * @return RecordId
+     */
+    public static function create(string $table, string $id): RecordId
+    {
+        return new RecordId($table, $id);
+    }
 
     /**
      * Parses a record id from an array in the format [table, id]
@@ -72,37 +67,11 @@ final class RecordId
 	}
 
     /**
-     * Converts this record id to an associative array
-     * @return array{table:string,id:string}
-     */
-	public function toAssoc(): array
-	{
-		return [
-			"table" => $this->table,
-			"id" => $this->id
-		];
-	}
-
-    /**
      * Converts this record id to an array
      * @return array - [table, id]
      */
 	public function toArray(): array
 	{
 		return [$this->table, $this->id];
-	}
-
-    /**
-     * Checks if this record id is equal to another record id
-     * @param RecordId|string $recordId
-     * @return boolean
-     */
-	public function equals(RecordId|string $recordId): bool
-	{
-		if (is_string($recordId)) {
-			$recordId = RecordId::fromString($recordId);
-		}
-
-		return $this->table === $recordId->table && $this->id === $recordId->id;
 	}
 }

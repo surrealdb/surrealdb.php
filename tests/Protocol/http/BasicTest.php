@@ -4,42 +4,51 @@ namespace protocol\http;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Surreal\Core\Client\SurrealHTTP;
+use Surreal\Cbor\Types\RecordId;
+use Surreal\Core\Engines\HttpEngine;
 use Surreal\Exceptions\SurrealException;
+use Surreal\Surreal;
 
 final class BasicTest extends TestCase
 {
+
+    private function getDb(): Surreal
+    {
+        $db = new Surreal("http://localhost:8000");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
+
+        return $db;
+    }
+
     /**
      * @throws Exception
      */
     public function testStatus(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = $this->getDb();
 
         $status = $db->status();
 
         $this->assertIsInt($status);
         $this->assertEquals(200, $status);
 
-        $db->close();
+        $db->disconnect();
     }
 
+    /**
+     * @throws Exception
+     */
     public function testHealth(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = $this->getDb();
 
         $health = $db->health();
 
         $this->assertIsInt($health);
         $this->assertEquals(200, $health);
 
-        $db->close();
+        $db->disconnect();
     }
 
     /**
@@ -47,65 +56,44 @@ final class BasicTest extends TestCase
      */
     public function testVersion(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = $this->getDb();
 
         $version = $db->version();
 
         $this->assertIsString($version);
         $this->assertStringStartsWith("surrealdb-", $version);
 
-        $db->close();
-    }
-
-    /**
-     * @throws Exception
-     */
-    public function testToken(): void
-    {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
-
-        $db->auth->setToken("sometoken");
-        $token = $db->auth->getToken();
-
-        $this->assertEquals("sometoken", $token);
-
-        $db->auth->setToken(null);
-        $this->assertNull($db->auth->getToken());
-
-        $db->close();
+        $db->disconnect();
     }
 
     /**
      * @throws SurrealException
      * @throws Exception
      */
-//    public function testInfo(): void
-//    {
-//        $token = self::$db->signin([
-//            "email" => "beau@user.nl",
-//            "pass" => "123!",
-//            "NS" => "test",
-//            "DB" => "test",
-//            "SC" => "account"
-//        ]);
-//
-//        self::$db->auth->setScope("account");
-//        self::$db->auth->setToken($token);
-//
-//        $info = self::$db->info();
-//
-//        $this->assertIsArray($info);
-//
-//        $this->assertArrayHasKey("email", $info);
-//        $this->assertArrayHasKey("id", $info);
-//        $this->assertArrayHasKey("pass", $info);
-//
-//        $this->assertInstanceOf(RecordId::class, $info["id"]);
-//    }
+    public function testInfo(): void
+    {
+        $db = $this->getDb();
+
+        $jwt = $db->signin([
+            "email" => "beau@user.nl",
+            "pass" => "123!",
+            "NS" => "test",
+            "DB" => "test",
+            "SC" => "account"
+        ]);
+
+        $db->authenticate($jwt);
+
+        $info = $db->info();
+
+        $this->assertIsArray($info);
+
+        $this->assertArrayHasKey("email", $info);
+        $this->assertArrayHasKey("id", $info);
+        $this->assertArrayHasKey("pass", $info);
+
+        $this->assertInstanceOf(RecordId::class, $info["id"]);
+
+        $db->disconnect();
+    }
 }

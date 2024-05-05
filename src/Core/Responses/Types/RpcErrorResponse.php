@@ -3,9 +3,9 @@
 namespace Surreal\Core\Responses\Types;
 
 use InvalidArgumentException;
+use Surreal\Core\Curl\HttpContentFormat;
 use Surreal\Core\Responses\ErrorResponseInterface;
 use Surreal\Core\Responses\ResponseInterface;
-use Surreal\Curl\HttpContentType;
 use Surreal\Exceptions\SurrealException;
 
 readonly class RpcErrorResponse implements ResponseInterface, ErrorResponseInterface
@@ -23,7 +23,7 @@ readonly class RpcErrorResponse implements ResponseInterface, ErrorResponseInter
         $this->status = $code;
     }
 
-    public static function from(mixed $data, HttpContentType $type, int $status): RpcErrorResponse
+    public static function from(mixed $data, HttpContentFormat $type, int $status): RpcErrorResponse
     {
         return new self($data, $status);
     }
@@ -31,7 +31,7 @@ readonly class RpcErrorResponse implements ResponseInterface, ErrorResponseInter
     /**
      * @throws SurrealException
      */
-    public static function tryFrom(mixed $data, HttpContentType $type, int $status): ?ResponseInterface
+    public static function tryFrom(mixed $data, HttpContentFormat $type, int $status): ?ResponseInterface
     {
         if ($status !== 200) {
             return self::from($data, $type, $status);

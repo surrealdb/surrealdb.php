@@ -2,8 +2,6 @@
 
 namespace Surreal\Cbor\Types;
 
-use InvalidArgumentException;
-
 final class Table
 {
     private string $table;
@@ -13,12 +11,13 @@ final class Table
         $this->table = $table;
     }
 
-    public static function fromString(string $table): Table
+    /**
+     * Creates a new table from a table name.
+     * @param string $table
+     * @return Table
+     */
+    public static function create(string $table): Table
     {
-        if(str_contains($table, ':')) {
-            throw new InvalidArgumentException('Table name cannot contain ":" character');
-        }
-
         return new Table($table);
     }
 
@@ -35,5 +34,15 @@ final class Table
     public function __toString(): string
     {
         return $this->table;
+    }
+
+    /**
+     * Checks if this table is equal to another table
+     * @param Table $table
+     * @return bool
+     */
+    public function equals(Table $table): bool
+    {
+        return $this->table === $table->table;
     }
 }

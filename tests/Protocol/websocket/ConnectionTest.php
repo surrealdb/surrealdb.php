@@ -4,46 +4,38 @@ namespace protocol\websocket;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Surreal\Core\Client\SurrealWebsocket;
+use Surreal\Core\Engines\WsEngine;
+use Surreal\Surreal;
 
 class ConnectionTest extends TestCase
 {
-    private static SurrealWebsocket $db;
+    private static WsEngine $db;
 
-    /**
-     * @throws Exception
-     */
-    public static function setUpBeforeClass(): void
+    private function getDb(): Surreal
     {
-        self::$db = new SurrealWebsocket(
-            host: "ws://localhost:8000/rpc",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = new Surreal("ws://localhost:8000/rpc");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
 
-        parent::setUpBeforeClass();
-    }
-
-    public function testConnection(): void
-    {
-        $connected = self::$db->isConnected();
+        $connected = $db->status() === 200;
         $this->assertTrue($connected, "The websocket is not connected");
+
+        return $db;
     }
 
     public function testTimeout(): void
     {
-        self::$db->setTimeout(10);
-        $this->assertEquals(10, self::$db->getTimeout(), "The timeout is not set correctly");
+        $db = $this->getDb();
 
-        self::$db->setTimeout(5);
-        $this->assertEquals(5, self::$db->getTimeout(), "The timeout is not set correctly");
+        $db->setTimeout(10);
+        $this->assertEquals(10, $db->getTimeout(), "The timeout is not set correctly");
 
-        self::$db->setTimeout(0);
-        $this->assertEquals(0, self::$db->getTimeout(), "The timeout is not set correctly");
-    }
+        $db->setTimeout(5);
+        $this->assertEquals(5, $db->getTimeout(), "The timeout is not set correctly");
 
-    public static function tearDownAfterClass(): void
-    {
-        self::$db->close();
-        parent::tearDownAfterClass();
+        $db->setTimeout(0);
+        $this->assertEquals(0, $db->getTimeout(), "The timeout is not set correctly");
+
+        $db->disconnect();
     }
 }

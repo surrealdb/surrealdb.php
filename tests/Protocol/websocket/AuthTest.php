@@ -4,34 +4,30 @@ namespace protocol\websocket;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Surreal\Core\Client\SurrealWebsocket;
+use Surreal\Cbor\Types\None;
+use Surreal\Core\Engines\WsEngine;
 use Surreal\Exceptions\SurrealException;
+use Surreal\Surreal;
 
 class AuthTest extends TestCase
 {
-    private static SurrealWebsocket $db;
-
-    /**
-     * @throws Exception
-     */
-    public static function setUpBeforeClass(): void
+    private function getDb(): Surreal
     {
-        self::$db = new SurrealWebsocket(
-            host: "ws://127.0.0.1:8000/rpc",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = new Surreal("ws://127.0.0.1:8000/rpc");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
 
-        self::assertTrue(self::$db->isConnected());
+        self::assertTrue($db->status() === 200);
 
-        $token = self::$db->signin([
+        $jwt = $db->signin([
             "user" => "root",
             "pass" => "root"
         ]);
 
-        self::assertIsString($token);
-        self::$db->authenticate($token);
+        self::assertIsString($jwt);
+        $db->authenticate($jwt);
 
-        parent::setUpBeforeClass();
+        return $db;
     }
 
     /**
@@ -40,31 +36,35 @@ class AuthTest extends TestCase
      */
     public function testInfo(): void
     {
+        $db = $this->getDb();
+
         try {
-            self::$db->info();
+            $db->info();
         } catch (SurrealException $exception) {
             $this->assertInstanceOf(SurrealException::class, $exception);
         }
 
-        $token = self::$db->signup([
+        $token = $db->signup([
             "email" => "mario2",
             "pass" => "supermario",
-            "ns" => "test",
-            "db" => "test",
-            "sc" => "account"
+            "NS" => "test",
+            "DB" => "test",
+            "SC" => "account"
         ]);
 
         $this->assertIsString($token, "The token is not a string");
 
-        $token = self::$db->signin([
+        $token = $db->signin([
             "email" => "mario2",
             "pass" => "supermario",
-            "ns" => "test",
-            "db" => "test",
-            "sc" => "account"
+            "NS" => "test",
+            "DB" => "test",
+            "SC" => "account"
         ]);
 
         $this->assertIsString($token, "The token is not a string");
+
+        $db->disconnect();
     }
 
     /**
@@ -72,25 +72,28 @@ class AuthTest extends TestCase
      */
     public function testScopeAuth(): void
     {
-        $token = self::$db->signup([
+        $db = $this->getDb();
+
+        $token = $db->signup([
             "email" => "mario",
             "pass" => "supermario",
-            "ns" => "test",
-            "db" => "test",
-            "sc" => "account"
+            "NS" => "test",
+            "DB" => "test",
+            "SC" => "account"
         ]);
 
-        self::assertIsString($token);
+        $this->assertIsString($token);
 
-        $token = self::$db->signin([
+        $token = $db->signin([
             "email" => "mario",
             "pass" => "supermario",
-            "ns" => "test",
-            "db" => "test",
-            "sc" => "account"
+            "NS" => "test",
+            "DB" => "test",
+            "SC" => "account"
         ]);
 
-        self::assertIsString($token);
+        $this->assertIsString($token);
+        $db->disconnect();
     }
 
     /**
@@ -98,11 +101,15 @@ class AuthTest extends TestCase
      */
     public function testAuthenticate(): void
     {
-        $token = self::$db->signin(["user" => "root", "pass" => "root"]);
+        $db = $this->getDb();
+
+        $token = $db->signin(["user" => "root", "pass" => "root"]);
         $this->assertIsString($token);
 
-        $result = self::$db->authenticate($token);
-        self::assertNull($result, "The result is not null");
+        $result = $db->authenticate($token);
+        $this->assertInstanceOf(None::class, $result, "The result is not null");
+
+        $db->disconnect();
     }
 
     /**
@@ -110,29 +117,23 @@ class AuthTest extends TestCase
      */
     public function testInvalidate(): void
     {
-        $token = self::$db->signin(["user" => "root", "pass" => "root"]);
+        $db = $this->getDb();
+
+        $token = $db->signin(["user" => "root", "pass" => "root"]);
         $this->assertIsString($token);
 
-        $info = self::$db->info();
+        $info = $db->info();
         $this->assertNotNull($info);
 
-        $result = self::$db->invalidate();
-        $this->assertNull($result);
+        $result = $db->invalidate();
+        $this->assertInstanceOf(None::class, $result);
 
         try {
-            self::$db->info();
+            $db->info();
         } catch (SurrealException $exception) {
             $this->assertInstanceOf(SurrealException::class, $exception);
         }
-    }
 
-    public static function tearDownAfterClass(): void
-    {
-        self::$db->close();
-
-        $connected = self::$db->isConnected();
-        self::assertFalse($connected);
-
-        parent::tearDownAfterClass(); // TODO: Change the autogenerated stub
+        $db->disconnect();
     }
 }

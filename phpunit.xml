@@ -7,23 +7,11 @@
     <testsuite name="protocol-websocket">
       <directory>tests/Protocol/websocket</directory>
     </testsuite>
-    <testsuite name="abstract">
-      <directory>tests/Abstract</directory>
-    </testsuite>
     <testsuite name="parsers">
       <directory>tests/Parsers</directory>
     </testsuite>
-    <testsuite name="core">
-      <directory>tests/Core</directory>
-    </testsuite>
     <testsuite name="cbor">
       <directory>tests/Cbor</directory>
-    </testsuite>
-    <testsuite name="curl">
-      <directory>tests/Curl</directory>
-    </testsuite>
-    <testsuite name="utils">
-      <directory>tests/Utils</directory>
     </testsuite>
   </testsuites>
   <coverage>

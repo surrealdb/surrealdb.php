@@ -20,44 +20,24 @@ composer require surrealdb/surrealdb
 ### Getting started
 
 To get started, you need to create a new instance of the SurrealDB HTTP or Websocket Class.
+
 ```php
-$db = new Surreal\Core\Client\SurrealHttp(
-    host: "http://localhost:8000",
-    target: [
-        "namespace" => "test",
-        "database" => "test"
-    ]    
-);
-
-// or
-
-$db = new Surreal\Core\Client\SurrealWebsocket(
-    host: "ws://localhost:8000",
-    target: [
-        "namespace" => "test",
-        "database" => "test"
-    ]
-);
+// Make a new instance of the SurrealDB class. Use the ws or wss protocol for having Websocket functionality.
+$db = new Surreal\Surreal("http://localhost:8000"); 
+$db->use(["namespace" => "test", "database" => "test"]);
 ```
 
 ### Basic Quering
 In the PHP SDK, We have a simple API that allows you to interact with SurrealDB. The following example shows how to interact with the database.
+
 ```php
 
 // Connect set the specified namespace and database.
-$db = new Surreal\Core\Client\SurrealHttp(
-    host: "http://localhost:8000",
-    target: [
-        "namespace" => "test",
-        "database" => "test"
-    ]    
-);
+$db = new Surreal\Surreal("http://localhost:8000");
+$db->connect();
 
 // We can also specify the namespace and database after the connection.
-$db->use([
-    "namespace" => "test",
-    "database" => "test"
-]);
+$db->use(["namespace" => "test", "database" => "test"]);
 
 // We want to authenticate as a root user.
 $token = $db->signin([
@@ -65,11 +45,9 @@ $token = $db->signin([
     "pass" => "root"
 ]);
 
-// Assign the token to the database.
-$db->setToken($token);
-
 // Create a new person in the database with a custom id.
-$person = $db->create("person", [
+$table = \Surreal\Cbor\Types\Table::create("person");
+$person = $db->create($table, [
     "title" => "Founder & CEO",
     "name" => [
         "first" => "Tobie",
@@ -79,19 +57,24 @@ $person = $db->create("person", [
 ]); 
 
 // Get the person with the name "John Doe".
-$person = $db->select("person:john");
+$record = Surreal\Cbor\Types\RecordId::create("person", "john");
+$person = $db->select($record);
 
 // Update a person record with a specific id
-$record = new Surreal\Cbor\Types\RecordId("person", "john");
+$record = Surreal\Cbor\Types\RecordId::create("person", "john");
 $person = $db->merge($record, ["age" => 31]);
 
 // Select all people records.
-$people = $db->select("person");
+$record = Surreal\Cbor\Types\RecordId::create("person", "john");
+$people = $db->select($table);
 
 // Perform a custom advanced query.
 $groups = $db->query('SELECT marketing, count() FROM $tb GROUP BY marketing', [
-    "tb" => \Surreal\Cbor\Types\Table::fromString("person")->toString()
+    "tb" => \Surreal\Cbor\Types\Table::create("person")
 ]);
+
+// Close the connection between the application and the database.
+$db->disconnect();
 
 ```
 

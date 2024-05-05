@@ -4,19 +4,26 @@ namespace protocol\http;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Surreal\Core\Client\SurrealHTTP;
+use Surreal\Cbor\Types\None;
+use Surreal\Surreal;
 
 class AuthTest extends TestCase
 {
+    private function getDb(): Surreal
+    {
+        $db = new Surreal("http://localhost:8000");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
+
+        return $db;
+    }
+
     /**
      * @throws Exception
      */
     public function testScopeAuth(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = $this->getDb();
 
         $token = $db->signup([
             "email" => "beau.one",
@@ -32,15 +39,15 @@ class AuthTest extends TestCase
         $token = $db->signin([
             "email" => "beau.one",
             "pass" => "beau.one",
-            "ns" => "test",
-            "db" => "test",
-            "sc" => "account"
+            "NS" => "test",
+            "DB" => "test",
+            "SC" => "account"
         ]);
 
         $this->assertIsString($token);
         $this->assertNotEmpty($token);
 
-        $db->close();
+        $db->disconnect();
     }
 
     /**
@@ -48,10 +55,7 @@ class AuthTest extends TestCase
      */
     public function testSigninRoot(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = $this->getDb();
 
         $token = $db->signin([
             "user" => "root",
@@ -60,25 +64,25 @@ class AuthTest extends TestCase
 
         $this->assertIsString($token);
 
-        $db->close();
+        $db->disconnect();
     }
 
+    /**
+     * @throws Exception
+     */
     public function testSigninNamespace(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = $this->getDb();
 
-        $token = $db->signin([
+        $jwt = $db->signin([
             "user" => "julian",
             "pass" => "123!",
-            "ns" => "test"
+            "NS" => "test"
         ]);
 
-        $this->assertIsString($token);
+        $this->assertIsString($jwt);
 
-        $db->close();
+        $db->disconnect();
     }
 
     /**
@@ -87,30 +91,27 @@ class AuthTest extends TestCase
      */
     public function testSigninDatabase(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = $this->getDb();
 
         $token = $db->signin([
             "user" => "beau",
             "pass" => "123!",
-            "ns" => "test",
-            "db" => "test"
+            "NS" => "test",
+            "DB" => "test"
         ]);
 
         $this->assertIsString($token);
 
-        $db->close();
+        $db->disconnect();
     }
 
+    /**
+     * @throws Exception
+     */
     public function testInvalidate(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
-
-        $this->assertNull($db->auth->getToken());
+        $db = $this->getDb();
+        $this->assertInstanceOf(None::class, $db->invalidate());
+        $db->disconnect();
     }
 }

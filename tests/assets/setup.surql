@@ -13,7 +13,7 @@ DEFINE TABLE likes
 DEFINE TABLE test
     PERMISSIONS FULL;
 
-DEFINE TABLE account
+DEFINE TABLE user
     PERMISSIONS
         FOR select WHERE id = $auth.id;
 

@@ -6,7 +6,7 @@ use Surreal\Core\Responses\ResponseInterface;
 use Surreal\Core\Responses\Types\ImportErrorResponse;
 use Surreal\Core\Responses\Types\ImportResponse;
 use Surreal\Exceptions\SurrealException;
-use Surreal\Utils\ArrayHelper;
+use Surreal\Core\Utils\Helpers;
 
 class ImportResult implements ResultInterface
 {
@@ -16,7 +16,7 @@ class ImportResult implements ResultInterface
     public static function from(ResponseInterface $response): mixed
     {
         $data = $response->data();
-        $isAssoc = ArrayHelper::isAssoc($data);
+        $isAssoc = Helpers::isAssoc($data);
 
         if(!$isAssoc) {
             return $data;

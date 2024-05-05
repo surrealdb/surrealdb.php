@@ -4,9 +4,9 @@ namespace protocol\http;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Surreal\Core\Client\SurrealHTTP;
 use Surreal\Exceptions\AuthException;
 use Surreal\Exceptions\SurrealException;
+use Surreal\Surreal;
 
 class ImportTest extends TestCase
 {
@@ -15,10 +15,9 @@ class ImportTest extends TestCase
      */
     public function testImport(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = new Surreal("http://localhost:8000");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
 
         $file = __DIR__ . "/../../assets/import.surql";
         $file = file_get_contents($file);
@@ -27,15 +26,14 @@ class ImportTest extends TestCase
 
         $this->assertIsArray($result);
 
-        $db->close();
+        $db->disconnect();
     }
 
     public function testImportWithWrongCredentials(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = new Surreal("http://localhost:8000");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
 
         $file = __DIR__ . "/../../assets/import.surql";
         $file = file_get_contents($file);
@@ -47,7 +45,7 @@ class ImportTest extends TestCase
         } catch (AuthException $e) {
             $this->assertInstanceOf(AuthException::class, $e);
         } finally {
-            $db->close();
+            $db->disconnect();
         }
     }
 }

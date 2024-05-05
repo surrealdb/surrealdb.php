@@ -29,8 +29,8 @@
 	],
 	"require": {
 		"ext-curl": "*",
-		"ramsey/uuid": "4.7.5",
-		"phrity/websocket": "2.2.1",
+		"ramsey/uuid": "4.7.6",
+		"phrity/websocket": "2.2.2",
 		"php": ">=8.2",
 		"welpie21/cbor.php": "1.0.1",
 		"brick/math": "^0.11.0",

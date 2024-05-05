@@ -9,7 +9,7 @@ use Surreal\Cbor\Types\RecordId;
 
 class TestCborTypeRecordId extends TestCase
 {
-    const RECORD_ID = "record:some-record";
+    const RECORD_ID = ["record", "some-record"];
     const RECORD_CBOR_STRING = "c8727265636f72643a736f6d652d7265636f7264";
     const RECORD_CBOR_ARRAY = "C882667265636F72646B736F6D652D7265636F7264";
 
@@ -18,7 +18,7 @@ class TestCborTypeRecordId extends TestCase
      */
     public function testEncodeRecordId(): void
     {
-        $recordId = RecordId::fromString(self::RECORD_ID);
+        $recordId = RecordId::create(...self::RECORD_ID);
         $result = CBOR::encode($recordId);
 
         $this->assertEquals(self::RECORD_CBOR_STRING, bin2hex($result));

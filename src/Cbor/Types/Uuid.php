@@ -12,7 +12,6 @@ class Uuid
     {
         return \Ramsey\Uuid\Uuid::fromString($uuid);
     }
-
     public static function fromCborByteString(CborByteString $byteString): UuidInterface
     {
         return \Ramsey\Uuid\Uuid::fromBytes($byteString->getByteString());

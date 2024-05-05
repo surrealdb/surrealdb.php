@@ -2,8 +2,8 @@
 
 namespace Surreal\Core\Responses\Types;
 
+use Surreal\Core\Curl\HttpContentFormat;
 use Surreal\Core\Responses\ResponseInterface;
-use Surreal\Curl\HttpContentType;
 use Surreal\Exceptions\SurrealException;
 
 readonly class StringResponse implements ResponseInterface
@@ -18,7 +18,7 @@ readonly class StringResponse implements ResponseInterface
     /**
      * @throws SurrealException
      */
-    public static function from(mixed $data,HttpContentType $type, int $status): StringResponse
+    public static function from(mixed $data, HttpContentFormat $type, int $status): StringResponse
     {
         if($status !== 200) {
             $error = StringErrorResponse::tryFrom($data, $type, $status);

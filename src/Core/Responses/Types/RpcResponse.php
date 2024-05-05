@@ -4,11 +4,11 @@ namespace Surreal\Core\Responses\Types;
 
 use Exception;
 use InvalidArgumentException;
+use Surreal\Core\Curl\HttpContentFormat;
 use Surreal\Core\Responses\ErrorResponseInterface;
 use Surreal\Core\Responses\ResponseInterface;
-use Surreal\Curl\HttpContentType;
 use Surreal\Exceptions\SurrealException;
-use Surreal\Utils\ArrayHelper;
+use Surreal\Core\Utils\Helpers;
 
 readonly class RpcResponse implements ResponseInterface, ErrorResponseInterface
 {
@@ -20,7 +20,7 @@ readonly class RpcResponse implements ResponseInterface, ErrorResponseInterface
             throw new InvalidArgumentException("Invalid response data type provided");
         }
 
-        $isAssoc = ArrayHelper::isAssoc($data);
+        $isAssoc = Helpers::isAssoc($data);
 
         if ($isAssoc) {
             if (array_key_exists("result", $data)) {
@@ -36,11 +36,11 @@ readonly class RpcResponse implements ResponseInterface, ErrorResponseInterface
     /**
      * @throws Exception
      */
-    public static function from(mixed $data, HttpContentType $type, int $status): ResponseInterface
+    public static function from(mixed $data, HttpContentFormat $type, int $status): ResponseInterface
     {
         switch ($status) {
             case 200:
-                if (ArrayHelper::isAssoc($data)) {
+                if (Helpers::isAssoc($data)) {
                     if (array_key_exists("error", $data)) {
                         return RpcErrorResponse::from($data, $type, $status);
                     }
@@ -63,7 +63,7 @@ readonly class RpcResponse implements ResponseInterface, ErrorResponseInterface
     /**
      * @throws Exception
      */
-    public static function tryFrom(mixed $data, HttpContentType $type, int $status): ?ResponseInterface
+    public static function tryFrom(mixed $data, HttpContentFormat $type, int $status): ?ResponseInterface
     {
         return match (true) {
             $status === 200 => self::from($data, $type, $status),

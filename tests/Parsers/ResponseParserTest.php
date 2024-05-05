@@ -5,8 +5,8 @@ namespace parsers;
 use Beau\CborPHP\exceptions\CborException;
 use JsonException;
 use PHPUnit\Framework\TestCase;
+use Surreal\Core\Curl\HttpContentFormat;
 use Surreal\Core\Responses\ResponseParser;
-use Surreal\Curl\HttpContentType;
 
 class ResponseParserTest extends TestCase
 {
@@ -16,7 +16,7 @@ class ResponseParserTest extends TestCase
      */
     public function testStringResponse(): void
     {
-        $type = HttpContentType::UTF8;
+        $type = HttpContentFormat::UTF8;
         $body = "Hello, World!";
 
         $response = ResponseParser::parse($type, $body);

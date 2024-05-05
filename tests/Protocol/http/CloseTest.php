@@ -4,7 +4,8 @@ namespace protocol\http;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Surreal\Core\Client\SurrealHTTP;
+use Surreal\Core\Engines\HttpEngine;
+use Surreal\Surreal;
 
 class CloseTest extends TestCase
 {
@@ -13,25 +14,18 @@ class CloseTest extends TestCase
      */
     public function testClose(): void
     {
-        $db = new SurrealHTTP(
-            host: "http://localhost:8000",
-            target: ["namespace" => "test", "database" => "test"]
-        );
+        $db = new Surreal("http://localhost:8000");
+        $db->connect();
+        $db->use(["namespace" => "test", "database" => "test"]);
 
-        $db->close();
+        $status = $db->status();
+        $this->assertEquals(200, $status);
 
-        try {
-            $db->close();
-        }
-        catch (Exception $e) {
-            $this->assertEquals("The database connection is already closed.", $e->getMessage());
-            $this->assertInstanceOf(Exception::class, $e);
-        }
+        $db->disconnect();
 
         try {
-            $db->query("SELECT * FROM person");
+            $db->status();
         } catch (Exception $e) {
-            $this->assertEquals("The curl client is not initialized.", $e->getMessage());
             $this->assertInstanceOf(Exception::class, $e);
         }
     }

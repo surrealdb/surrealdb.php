@@ -1,7 +1,7 @@
 <?php
 
 
-namespace Surreal\Core\Rpc;
+namespace Surreal\Core;
 
 use Beau\CborPHP\exceptions\CborException;
 use Surreal\Cbor\CBOR;
