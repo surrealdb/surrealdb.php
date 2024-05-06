@@ -7,7 +7,7 @@ use Surreal\Core\Responses\Types\RpcErrorResponse;
 use Surreal\Core\Responses\Types\RpcResponse;
 use Surreal\Exceptions\SurrealException;
 
-class RpcResult implements ResultInterface
+final class RpcResult implements ResultInterface
 {
     /**
      * @throws SurrealException

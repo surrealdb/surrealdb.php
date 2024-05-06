@@ -7,7 +7,6 @@ use Exception;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
-use Surreal\Cbor\Types\Table;
 use Surreal\Exceptions\SurrealException;
 use Surreal\Surreal;
 
@@ -121,9 +120,8 @@ class QueryTest extends TestCase
     public function testInsert(): void
     {
         $db = $this->getDb();
-        $tb = Table::create("order");
 
-        $response = $db->insert($tb, [
+        $response = $db->insert("order", [
             ["name" => "Julian", "age" => 24],
             ["name" => "Beau", "age" => 18]
         ]);

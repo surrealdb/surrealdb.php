@@ -8,7 +8,7 @@ use Surreal\Core\Responses\Types\ImportResponse;
 use Surreal\Exceptions\SurrealException;
 use Surreal\Core\Utils\Helpers;
 
-class ImportResult implements ResultInterface
+final class ImportResult implements ResultInterface
 {
     /**
      * @throws SurrealException

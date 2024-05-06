@@ -7,7 +7,7 @@ use Surreal\Core\Responses\Types\RpcErrorResponse;
 use Surreal\Core\Responses\Types\RpcResponse;
 use Surreal\Exceptions\SurrealException;
 
-class AuthResult implements ResultInterface
+final class AuthResult implements ResultInterface
 {
     /**
      * @throws SurrealException

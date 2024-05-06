@@ -7,7 +7,7 @@ use Surreal\Core\Responses\Types\StringErrorResponse;
 use Surreal\Core\Responses\Types\StringResponse;
 use Surreal\Exceptions\SurrealException;
 
-readonly class StringResult implements ResultInterface
+final class StringResult implements ResultInterface
 {
     /**
      * @throws SurrealException

@@ -2,18 +2,18 @@
 
 namespace Surreal\Cbor\Types;
 
+use Brick\Math\BigDecimal;
 use Brick\Math\Exception\MathException;
-use Decimal;
 
 final class GeometryPoint extends AbstractGeometry
 {
     /**
-     * @var Decimal[]
+     * @var BigDecimal[]
      */
     public readonly array $point;
 
     /**
-     * @param array<int,Decimal>|GeometryPoint $point $point
+     * @param array<int,BigDecimal>|GeometryPoint $point $point
      * @throws MathException
      */
     public function __construct(array|GeometryPoint $point)
@@ -21,8 +21,8 @@ final class GeometryPoint extends AbstractGeometry
         $point = $point instanceof GeometryPoint ? $point->point : $point;
 
         $this->point = [
-            $point[0] instanceof Decimal ? $point[0] : new Decimal($point[0]),
-            $point[1] instanceof Decimal ? $point[1] : new Decimal($point[1])
+            $point[0] instanceof BigDecimal ? $point[0] : BigDecimal::of($point[0]),
+            $point[1] instanceof BigDecimal ? $point[1] : BigDecimal::of($point[1])
         ];
     }
 }

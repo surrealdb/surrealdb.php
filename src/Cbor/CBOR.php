@@ -7,8 +7,10 @@ use Beau\CborPHP\CborEncoder;
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\exceptions\CborException;
 use DateTimeImmutable;
+use DateTimeInterface;
 use Exception;
 use Ramsey\Uuid\UuidInterface;
+use Surreal\Cbor\Enums\CustomTag;
 use Surreal\Cbor\Types\DateTime;
 use Surreal\Cbor\Types\Duration;
 use Surreal\Cbor\Types\GeometryCollection;
@@ -36,26 +38,79 @@ class CBOR
     {
         return CborEncoder::encode($data, function ($key, $value) {
 
-            return match($value::class) {
+            return match ($value::class) {
 
                 // Tags from spec
-                DateTime::class => new TaggedValue(0, $value->format(\DateTimeInterface::ATOM)),
-                DateTimeImmutable::class => new TaggedValue(12, $value->format(\DateTimeInterface::ATOM)),
-                None::class => new TaggedValue(6, null),
+                DateTimeInterface::class => new TaggedValue(
+                    CustomTag::SPEC_DATETIME->value,
+                    $value->format(DateTimeInterface::ATOM)
+                ),
+
+                DateTimeImmutable::class => new TaggedValue(
+                    CustomTag::CUSTOM_DATETIME->value,
+                    $value->format(DateTimeInterface::ATOM)
+                ),
+
+                None::class => new TaggedValue(
+                    CustomTag::NONE->value,
+                    null
+                ),
 
                 // Custom classes
-                Table::class => new TaggedValue(7, $value->getTable()),
-                RecordId::class => new TaggedValue(8, (string)$value),
-                BigDecimal::class => new TaggedValue(10, $value->toFloat()),
-                UuidInterface::class => new TaggedValue(37, $value),
+                Table::class => new TaggedValue(
+                    CustomTag::TABLE->value,
+                    $value->getTable()
+                ),
 
-                GeometryPoint::class => new TaggedValue(88, $value->point),
-                GeometryLine::class => new TaggedValue(89, $value->line),
-                GeometryPolygon::class => new TaggedValue(90, $value->polygon),
-                GeometryMultiPoint::class => new TaggedValue(91, $value->points),
-                GeometryMultiLine::class => new TaggedValue(92, $value->lines),
-                GeometryMultiPolygon::class => new TaggedValue(93, $value->polygons),
-                GeometryCollection::class => new TaggedValue(94, $value->collection),
+                RecordId::class => new TaggedValue(
+                    CustomTag::RECORD_ID->value,
+                    (string)$value
+                ),
+
+                BigDecimal::class => new TaggedValue(
+                    CustomTag::STRING_DECIMAL->value,
+                    $value->toFloat()
+                ),
+
+                UuidInterface::class => new TaggedValue(
+                    CustomTag::SPEC_UUID->value,
+                    $value
+                ),
+
+                GeometryPoint::class => new TaggedValue(
+                    CustomTag::GEOMETRY_POINT->value,
+                    $value->point
+                ),
+
+                GeometryLine::class => new TaggedValue(
+                    CustomTag::GEOMETRY_LINE->value,
+                    $value->line
+                ),
+
+                GeometryPolygon::class => new TaggedValue(
+                    CustomTag::GEOMETRY_POLYGON->value,
+                    $value->polygon
+                ),
+
+                GeometryMultiPoint::class => new TaggedValue(
+                    CustomTag::GEOMETRY_MULTIPOINT->value,
+                    $value->points
+                ),
+
+                GeometryMultiLine::class => new TaggedValue(
+                    CustomTag::GEOMETRY_MULTILINE->value,
+                    $value->lines
+                ),
+
+                GeometryMultiPolygon::class => new TaggedValue(
+                    CustomTag::GEOMETRY_MULTIPOLYGON->value,
+                    $value->polygons
+                ),
+
+                GeometryCollection::class => new TaggedValue(
+                    CustomTag::GEOMETRY_COLLECTION->value,
+                    $value->collection
+                ),
 
                 default => $value
             };
@@ -72,33 +127,33 @@ class CBOR
     {
         return CborDecoder::decode($data, function ($key, $tagged) {
 
-            if(!($tagged instanceof TaggedValue)) {
+            if (!($tagged instanceof TaggedValue)) {
                 return $tagged;
             }
 
-            return match ($tagged->tag) {
-                0 => new \DateTime($tagged->value),
-                6 => new None(),
+            return match (CustomTag::tryFrom($tagged->tag)) {
+                CustomTag::SPEC_DATETIME => new \DateTime($tagged->value),
+                CustomTag::NONE => new None(),
 
-                7 => Table::create($tagged->value),
-                8 => RecordId::fromArray($tagged->value),
-                9 => Uuid::fromString($tagged->value),
+                CustomTag::TABLE => $tagged->value,
+                CustomTag::RECORD_ID => RecordId::fromArray($tagged->value),
+                CustomTag::STRING_UUID => Uuid::fromString($tagged->value),
 
-                10 => BigDecimal::of($tagged->value),
+                CustomTag::STRING_DECIMAL => BigDecimal::of($tagged->value),
 
-                12 => DateTime::fromCborCustomDate($tagged->value),
-                13 => new Duration($tagged->value),
-                14 => Duration::fromCborCustomDuration([$tagged->value[0], $tagged->value[1]]),
+                CustomTag::CUSTOM_DATETIME => DateTime::fromCborCustomDate($tagged->value),
+                CustomTag::STRING_DURATION => new Duration($tagged->value),
+                CustomTag::CUSTOM_DURATION => Duration::fromCborCustomDuration([$tagged->value[0], $tagged->value[1]]),
 
-                37 => Uuid::fromCborByteString($tagged->value),
+                CustomTag::SPEC_UUID => Uuid::fromCborByteString($tagged->value),
 
-                88 => new GeometryPoint($tagged->value),
-                89 => new GeometryLine($tagged->value),
-                90 => new GeometryPolygon($tagged->value),
-                91 => new GeometryMultiPoint($tagged->value),
-                92 => new GeometryMultiLine($tagged->value),
-                93 => new GeometryMultiPolygon($tagged->value),
-                94 => new GeometryCollection($tagged->value),
+                CustomTag::GEOMETRY_POINT => new GeometryPoint($tagged->value),
+                CustomTag::GEOMETRY_LINE => new GeometryLine($tagged->value),
+                CustomTag::GEOMETRY_POLYGON => new GeometryPolygon($tagged->value),
+                CustomTag::GEOMETRY_MULTIPOINT => new GeometryMultiPoint($tagged->value),
+                CustomTag::GEOMETRY_MULTILINE => new GeometryMultiLine($tagged->value),
+                CustomTag::GEOMETRY_MULTIPOLYGON => new GeometryMultiPolygon($tagged->value),
+                CustomTag::GEOMETRY_COLLECTION => new GeometryCollection($tagged->value),
 
                 default => throw new CborException("Unknown tag: " . $tagged->tag)
             };

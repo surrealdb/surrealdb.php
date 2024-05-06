@@ -2,17 +2,20 @@
 
 namespace protocol\websocket;
 
+use Beau\CborPHP\exceptions\CborException;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\Types\RecordId;
-use Surreal\Cbor\Types\Table;
-use Surreal\Core\Engines\WsEngine;
 use Surreal\Core\Utils\SurrealPatch;
+use Surreal\Exceptions\SurrealException;
 use Surreal\Surreal;
 use Throwable;
 
 class QueryTest extends TestCase
 {
+    /**
+     * @throws CborException|SurrealException|Exception
+     */
     private function getDb(): Surreal
     {
         $db = new Surreal("ws://localhost:8000/rpc");
@@ -147,9 +150,7 @@ class QueryTest extends TestCase
     {
         $db = $this->getDb();
 
-        $table = new Table("person");
-
-        $inserted_person = $db->insert($table, [
+        $inserted_person = $db->insert("person", [
             ["name" => "Beau", "age" => 25],
             ["name" => "Julian", "age" => 24]
         ]);

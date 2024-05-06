@@ -21,11 +21,6 @@ final class Table
         return new Table($table);
     }
 
-    public function toString(): string
-    {
-        return $this->table;
-    }
-
     public function getTable(): string
     {
         return $this->table;

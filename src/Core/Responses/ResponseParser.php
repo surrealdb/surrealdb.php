@@ -12,7 +12,7 @@ use Surreal\Core\Curl\HttpContentFormat;
 class ResponseParser
 {
     /**
-     * @throws JsonException|CborException
+     * @throws JsonException|CborException|InvalidArgumentException
      * @throws Exception
      */
     public static function parse(HttpContentFormat $type, string $body)

@@ -15,4 +15,6 @@ try {
     $db->import($setup_file, "root", "root");
 } catch (Exception $e) {
     echo $e->getMessage();
+} finally {
+    $db->disconnect();
 }

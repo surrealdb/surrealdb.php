@@ -117,12 +117,12 @@ final class Surreal
 
     /**
      * Selects a record or the whole table.
-     * @param Table|RecordId $thing
+     * @param RecordId|string $thing
      * @return mixed
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#select
      */
-    public function select(Table|RecordId $thing): mixed
+    public function select(RecordId|string $thing): mixed
     {
         $message = RpcMessage::create("select")->setParams([$thing]);
         return $this->engine->rpc($message);
@@ -130,13 +130,13 @@ final class Surreal
 
     /**
      * Creates a new record in a table.
-     * @param Table|RecordId $thing
+     * @param RecordId|string $thing
      * @param mixed $data
      * @return object|null
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#create
      */
-    public function create(Table|RecordId $thing, mixed $data): ?array
+    public function create(RecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("create")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -144,14 +144,14 @@ final class Surreal
 
     /**
      * Reads a record from a table.
-     * @param Table|RecordId $thing
+     * @param RecordId|string $thing
      * @param mixed $data
      * @return array|null
      * @throws SurrealException
      * @throws CborException
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#read
      */
-    public function update(Table|RecordId $thing, mixed $data): ?array
+    public function update(RecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("update")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -159,13 +159,13 @@ final class Surreal
 
     /**
      * Selectively updates a record inside a table with the given data.
-     * @param Table|RecordId $thing
+     * @param RecordId|string $thing
      * @param mixed $data
      * @return array|null
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#merge
      */
-    public function merge(Table|RecordId $thing, mixed $data): ?array
+    public function merge(RecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("merge")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -173,14 +173,14 @@ final class Surreal
 
     /**
      * Patches a specified column inside a record with the given value.
-     * @param RecordId|Table $thing
+     * @param RecordId|string $thing
      * @param array<array{op:string,path:string,value:mixed}> $data
      * @param bool $diff
      * @return array|null
      * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#patch
      */
-    public function patch(RecordId|Table $thing, array $data, bool $diff = false): ?array
+    public function patch(RecordId|string $thing, array $data, bool $diff = false): ?array
     {
         $message = RpcMessage::create("patch")->setParams([$thing, $data, $diff]);
         return $this->engine->rpc($message);
@@ -188,27 +188,26 @@ final class Surreal
 
     /**
      * Inserts one or multiple records into a table.
-     * @param Table|string $table
+     * @param string $table
      * @param array $data
      * @return array|null
      * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#insert
      */
-    public function insert(Table|string $table, array $data): ?array
+    public function insert(string $table, array $data): ?array
     {
-        $table = $table instanceof Table ? $table : new Table($table);
         $message = RpcMessage::create("insert")->setParams([$table, $data]);
         return $this->engine->rpc($message);
     }
 
     /**
      * Deletes a record from a table.
-     * @param Table|RecordId $thing
+     * @param RecordId|string $thing
      * @return array|null
      * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#delete
      */
-    public function delete(Table|RecordId $thing): ?array
+    public function delete(RecordId|string $thing): ?array
     {
         $message = RpcMessage::create("delete")->setParams([$thing]);
         return $this->engine->rpc($message);

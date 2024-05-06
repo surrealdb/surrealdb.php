@@ -2,8 +2,6 @@
 
 namespace Surreal\Cbor\Types;
 
-use Surreal\Cbor\Types\AbstractGeometry;
-
 final class GeometryCollection extends AbstractGeometry
 {
     public readonly array $collection;

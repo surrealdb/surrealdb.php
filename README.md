@@ -46,8 +46,7 @@ $token = $db->signin([
 ]);
 
 // Create a new person in the database with a custom id.
-$table = \Surreal\Cbor\Types\Table::create("person");
-$person = $db->create($table, [
+$person = $db->create("person", [
     "title" => "Founder & CEO",
     "name" => [
         "first" => "Tobie",
@@ -66,11 +65,11 @@ $person = $db->merge($record, ["age" => 31]);
 
 // Select all people records.
 $record = Surreal\Cbor\Types\RecordId::create("person", "john");
-$people = $db->select($table);
+$people = $db->select($table);  
 
 // Perform a custom advanced query.
 $groups = $db->query('SELECT marketing, count() FROM $tb GROUP BY marketing', [
-    "tb" => \Surreal\Cbor\Types\Table::create("person")
+    "tb" => "person"
 ]);
 
 // Close the connection between the application and the database.

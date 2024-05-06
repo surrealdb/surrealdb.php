@@ -2,7 +2,7 @@
 
 namespace Surreal\Cbor\Enums;
 
-enum MajorTag: int
+enum CustomTag: int
 {
 	// Tags from the spec
 	case SPEC_DATETIME = 0;
