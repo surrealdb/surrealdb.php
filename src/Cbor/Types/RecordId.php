@@ -3,17 +3,18 @@
 namespace Surreal\Cbor\Types;
 
 use InvalidArgumentException;
+use Surreal\Core\Utils\Helpers;
 
-final class RecordId
+final class RecordId implements \JsonSerializable
 {
-	private string $table;
-	private string $id;
+    private string $table;
+    private string|int|array $id;
 
-	public function __construct(string $table, string $id)
-	{
-		$this->table = $table;
-		$this->id = $id;
-	}
+    public function __construct(string $table, string|int|array $id)
+    {
+        $this->table = $table;
+        $this->id = $id;
+    }
 
     /**
      * Creates a new record id from a table name and an id
@@ -33,7 +34,7 @@ final class RecordId
      */
     public static function fromArray(array $record): RecordId
     {
-        if(count($record) !== 2) {
+        if (count($record) !== 2) {
             throw new InvalidArgumentException("Invalid record id");
         }
 
@@ -43,35 +44,45 @@ final class RecordId
     /**
      * @return string - table:id
      */
-	public function __toString(): string
+    public function __toString(): string
     {
-		return $this->table . ":" . $this->id;
-	}
+        $tb = Helpers::escapeIdent($this->table);
+        $id = is_string($this->id) ?
+            Helpers::escapeIdent($this->id) :
+            json_encode($this->id);
+
+        return $tb . ":" . $id;
+    }
 
     /**
      * Get the table name
      * @return string
      */
     public function getTable(): string
-	{
-		return $this->table;
-	}
+    {
+        return $this->table;
+    }
 
     /**
      * Get the record id
      * @return string
      */
-	public function getId(): string
-	{
-		return $this->id;
-	}
+    public function getId(): string
+    {
+        return $this->id;
+    }
 
     /**
      * Converts this record id to an array
      * @return array - [table, id]
      */
-	public function toArray(): array
-	{
-		return [$this->table, $this->id];
-	}
+    public function toArray(): array
+    {
+        return [$this->table, $this->id];
+    }
+
+    public function jsonSerialize(): string
+    {
+        return (string)$this;
+    }
 }
