@@ -25,4 +25,20 @@ final class GeometryPoint extends AbstractGeometry
             $point[1] instanceof BigDecimal ? $point[1] : BigDecimal::of($point[1])
         ];
     }
+
+    public function jsonSerialize(): array
+    {
+        return [
+            "type" => "Point",
+            "coordinates" => $this->getCoordinates()
+        ];
+    }
+
+    /**
+     * @return BigDecimal[]
+     */
+    public function getCoordinates(): array
+    {
+        return $this->point;
+    }
 }

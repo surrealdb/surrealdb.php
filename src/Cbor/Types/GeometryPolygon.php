@@ -24,4 +24,20 @@ final class GeometryPolygon extends AbstractGeometry
             $polygon
         );
     }
+
+    public function jsonSerialize(): array
+    {
+        return [
+            "type" => "Polygon",
+            "coordinates" => $this->getCoordinates()
+        ];
+    }
+
+    public function getCoordinates(): array
+    {
+        return array_map(
+            fn(GeometryLine $line) => $line->getCoordinates(),
+            $this->polygon
+        );
+    }
 }

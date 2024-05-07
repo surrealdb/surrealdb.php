@@ -4,7 +4,7 @@ namespace Surreal\Cbor\Types;
 
 use Brick\Math\Exception\MathException;
 
-final class GeometryLine extends AbstractGeometry
+class GeometryLine extends AbstractGeometry
 {
     /**
      * @var GeometryPoint[]
@@ -22,5 +22,21 @@ final class GeometryLine extends AbstractGeometry
             $line[0] instanceof GeometryPoint ? $line[0] : new GeometryPoint($line[0]),
             $line[1] instanceof GeometryPoint ? $line[1] : new GeometryPoint($line[1])
         ];
+    }
+
+    public function jsonSerialize(): array
+    {
+        return [
+            "type" => "LineString",
+            "coordinates" => $this->getCoordinates()
+        ];
+    }
+
+    public function getCoordinates(): array
+    {
+        return array_map(
+            fn(GeometryPoint $point) => $point->getCoordinates(),
+            $this->line
+        );
     }
 }

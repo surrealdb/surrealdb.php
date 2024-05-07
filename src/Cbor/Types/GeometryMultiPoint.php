@@ -4,7 +4,7 @@ namespace Surreal\Cbor\Types;
 
 use Brick\Math\Exception\MathException;
 
-final class GeometryMultiPoint extends AbstractGeometry
+class GeometryMultiPoint extends AbstractGeometry
 {
     /**
      * @var GeometryPoint[]
@@ -21,6 +21,22 @@ final class GeometryMultiPoint extends AbstractGeometry
         $this->points = array_map(
             fn($point) => $point instanceof GeometryPoint ? $point : new GeometryPoint($point),
             $multiPoint
+        );
+    }
+
+    public function jsonSerialize(): array
+    {
+        return [
+            "type" => "MultiPoint",
+            "coordinates" => $this->getCoordinates()
+        ];
+    }
+
+    public function getCoordinates(): mixed
+    {
+        return array_map(
+            fn(GeometryPoint $point) => $point->getCoordinates(),
+            $this->points
         );
     }
 }

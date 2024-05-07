@@ -2,7 +2,7 @@
 
 namespace Surreal\Cbor\Types;
 
-final class GeometryCollection extends AbstractGeometry
+class GeometryCollection extends AbstractGeometry
 {
     public readonly array $collection;
 
@@ -11,5 +11,21 @@ final class GeometryCollection extends AbstractGeometry
         $this->collection = $collection instanceof GeometryCollection
             ? $collection->collection
             : $collection;
+    }
+
+    public function jsonSerialize(): array
+    {
+        return [
+            "type" => "GeometryCollection",
+            "geometries" => $this->getCoordinates()
+        ];
+    }
+
+    public function getCoordinates(): mixed
+    {
+        return array_map(
+            fn(AbstractGeometry $geometry) => $geometry->jsonSerialize(),
+            $this->collection
+        );
     }
 }
