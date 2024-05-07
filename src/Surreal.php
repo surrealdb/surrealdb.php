@@ -6,7 +6,6 @@ use Beau\CborPHP\exceptions\CborException;
 use Exception;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
-use Surreal\Cbor\Types\Table;
 use Surreal\Core\AbstractEngine;
 use Surreal\Core\Engines\HttpEngine;
 use Surreal\Core\Engines\WsEngine;
@@ -21,19 +20,6 @@ final class Surreal
      * @var AbstractEngine|null
      */
     private ?AbstractEngine $engine;
-
-    /**
-     * @param string $host
-     * @throws Exception
-     */
-    public function __construct(string $host)
-    {
-        $this->engine = match (parse_url($host, PHP_URL_SCHEME)) {
-            "http", "https" => new HttpEngine($host),
-            "ws", "wss" => new WsEngine($host),
-            default => throw new Exception("Unsupported protocol"),
-        };
-    }
 
     /**
      * Use the given namespace and database for the following queries in the current open connection.
@@ -382,12 +368,24 @@ final class Surreal
 
     /**
      * Connect to the remote Surreal database. Throws an error if the connection fails.
+     * @param string $host
+     * @param array{namespace:string|null,database:string|null}|null $target
      * @return void
      * @throws Exception
      */
-    public function connect(): void
+    public function connect(string $host, ?array $target = null): void
     {
+        $this->engine = match (parse_url($host, PHP_URL_SCHEME)) {
+            "http", "https" => new HttpEngine($host),
+            "ws", "wss" => new WsEngine($host),
+            default => throw new Exception("Unsupported protocol"),
+        };
+
         $this->engine->connect();
+
+        if ($target) {
+            $this->use($target);
+        }
     }
 
     /**
