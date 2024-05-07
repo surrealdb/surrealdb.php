@@ -13,9 +13,11 @@ class ConnectionTest extends TestCase
 
     private function getDb(): Surreal
     {
-        $db = new Surreal("ws://localhost:8000/rpc");
-        $db->connect();
-        $db->use(["namespace" => "test", "database" => "test"]);
+        $db = new Surreal();
+        $db->connect("ws://localhost:8000/rpc", [
+            "namespace" => "test",
+            "database" => "test"
+        ]);
 
         $connected = $db->status() === 200;
         $this->assertTrue($connected, "The websocket is not connected");

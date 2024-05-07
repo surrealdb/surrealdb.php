@@ -4,9 +4,11 @@ require_once "vendor/autoload.php";
 
 use Surreal\Surreal;
 
-$db = new Surreal("http://localhost:8000");
-$db->connect();
-$db->use(["namespace" => "test", "database" => "test"]);
+$db = new Surreal();
+$db->connect("http://localhost:8000", [
+    "namespace" => "test",
+    "database" => "test"
+]);
 
 $setup_file_path = __DIR__ . "/assets/setup.surql";
 $setup_file = file_get_contents($setup_file_path);

@@ -10,10 +10,10 @@ class ConnectionTest extends TestCase
 {
     public function testWrongConnection(): void
     {
-        $db = new Surreal("http://localhost:8001");
+        $db = new Surreal();
 
         try {
-            $db->connect();
+            $db->connect("http://localhost:8001");
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
         }

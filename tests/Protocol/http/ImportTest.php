@@ -15,9 +15,11 @@ class ImportTest extends TestCase
      */
     public function testImport(): void
     {
-        $db = new Surreal("http://localhost:8000");
-        $db->connect();
-        $db->use(["namespace" => "test", "database" => "test"]);
+        $db = new Surreal();
+        $db->connect("http://localhost:8000", [
+            "namespace" => "test",
+            "database" => "test"
+        ]);
 
         $file = __DIR__ . "/../../assets/import.surql";
         $file = file_get_contents($file);
@@ -31,9 +33,11 @@ class ImportTest extends TestCase
 
     public function testImportWithWrongCredentials(): void
     {
-        $db = new Surreal("http://localhost:8000");
-        $db->connect();
-        $db->use(["namespace" => "test", "database" => "test"]);
+        $db = new Surreal();
+        $db->connect("http://localhost:8000", [
+            "namespace" => "test",
+            "database" => "test"
+        ]);
 
         $file = __DIR__ . "/../../assets/import.surql";
         $file = file_get_contents($file);

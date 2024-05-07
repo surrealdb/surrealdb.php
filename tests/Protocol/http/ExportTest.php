@@ -13,9 +13,11 @@ class ExportTest extends TestCase
      */
     public function testExport(): void
     {
-        $db = new Surreal("http://localhost:8000");
-        $db->connect();
-        $db->use(["namespace" => "test", "database" => "test"]);
+        $db = new Surreal();
+        $db->connect("http://localhost:8000", [
+            "namespace" => "test",
+            "database" => "test"
+        ]);
 
         $result = $db->export("root", "root");
         $this->assertIsString($result);

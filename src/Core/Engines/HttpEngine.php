@@ -380,4 +380,9 @@ class HttpEngine extends AbstractEngine
     {
         curl_setopt($this->client, CURLOPT_TIMEOUT, $seconds);
     }
+
+    public function getTimeout(): int
+    {
+        return curl_getinfo($this->client, CURLOPT_TIMEOUT);
+    }
 }

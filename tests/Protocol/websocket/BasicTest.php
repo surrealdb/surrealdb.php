@@ -6,7 +6,6 @@ use Exception;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
-use Surreal\Core\Engines\WsEngine;
 use Surreal\Surreal;
 
 class BasicTest extends TestCase
@@ -16,9 +15,11 @@ class BasicTest extends TestCase
      */
     private function getDb(): Surreal
     {
-        $db = new Surreal("ws://127.0.0.1:8000/rpc");
-        $db->connect();
-        $db->use(["namespace" => "test", "database" => "test"]);
+        $db = new Surreal();
+        $db->connect("ws://127.0.0.1:8000/rpc", [
+            "namespace" => "test",
+            "database" => "test"
+        ]);
 
         self::assertTrue($db->status() === 200);
 

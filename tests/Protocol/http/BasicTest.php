@@ -14,9 +14,11 @@ final class BasicTest extends TestCase
 
     private function getDb(): Surreal
     {
-        $db = new Surreal("http://localhost:8000");
-        $db->connect();
-        $db->use(["namespace" => "test", "database" => "test"]);
+        $db = new Surreal();
+        $db->connect("http://localhost:8000", [
+            "namespace" => "test",
+            "database" => "test"
+        ]);
 
         return $db;
     }

@@ -14,9 +14,12 @@ class CloseTest extends TestCase
      */
     public function testClose(): void
     {
-        $db = new Surreal("http://localhost:8000");
-        $db->connect();
-        $db->use(["namespace" => "test", "database" => "test"]);
+        $db = new Surreal();
+
+        $db->connect("http://localhost:8000", [
+            "namespace" => "test",
+            "database" => "test"
+        ]);
 
         $status = $db->status();
         $this->assertEquals(200, $status);
