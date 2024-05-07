@@ -22,6 +22,7 @@ use Surreal\Cbor\Types\GeometryPoint;
 use Surreal\Cbor\Types\GeometryPolygon;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
+use Surreal\Cbor\Types\StringRecordId;
 use Surreal\Cbor\Types\Table;
 use Surreal\Cbor\Types\Uuid;
 use Brick\Math\BigDecimal;
@@ -62,7 +63,7 @@ class CBOR
                     $value->getTable()
                 ),
 
-                RecordId::class => new TaggedValue(
+                StringRecordId::class, RecordId::class => new TaggedValue(
                     CustomTag::RECORD_ID->value,
                     (string)$value
                 ),
