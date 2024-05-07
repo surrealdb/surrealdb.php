@@ -34,4 +34,10 @@ abstract class AbstractEngine
      * @return void
      */
     abstract public function setTimeout(int $seconds): void;
+
+    /**
+     * Get the timeout for the requests in seconds.
+     * @return int
+     */
+    abstract public function getTimeout(): int;
 }
