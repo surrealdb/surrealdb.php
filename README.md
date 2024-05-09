@@ -23,8 +23,12 @@ To get started, you need to create a new instance of the SurrealDB HTTP or Webso
 
 ```php
 // Make a new instance of the SurrealDB class. Use the ws or wss protocol for having Websocket functionality.
-$db = new Surreal\Surreal("http://localhost:8000"); 
-$db->use(["namespace" => "test", "database" => "test"]);
+$db = new Surreal\Surreal();
+
+$db->connect("http://localhost:8000", [
+    "namespace" => "test",
+    "database" => "test"
+]);
 ```
 
 ### Basic Quering
@@ -33,11 +37,11 @@ In the PHP SDK, We have a simple API that allows you to interact with SurrealDB.
 ```php
 
 // Connect set the specified namespace and database.
-$db = new Surreal\Surreal("http://localhost:8000");
-$db->connect();
-
-// We can also specify the namespace and database after the connection.
-$db->use(["namespace" => "test", "database" => "test"]);
+$db = new Surreal\Surreal();
+$db->connect("http://localhost:8000", [
+    "namespace" => "test",
+    "database" => "test"
+]);
 
 // We want to authenticate as a root user.
 $token = $db->signin([
