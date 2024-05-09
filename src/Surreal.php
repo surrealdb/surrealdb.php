@@ -201,20 +201,21 @@ final class Surreal
 
     /**
      * Signin with a root, namespace, database or scoped user.
-     * @param array{NS:string|null,DB:string|null,SC:string|null} $data
+     * @param array{namespace:string|null,database:string|null,scope:string|null} $data
      * @return string|null
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#signin
      */
     public function signin(array $data): ?string
     {
+        $data = Helpers::processAuthVariables($data);
         $message = RpcMessage::create("signin")->setParams([$data]);
         return $this->engine->rpc($message);
     }
 
     /**
      * Signup a new scoped user.
-     * @param array{NS:string,DB:string,SC:string} $data
+     * @param array{namespace:string|null,database:string|null,scope:string|null} $data
      * @return string|null
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#signup

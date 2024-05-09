@@ -28,6 +28,28 @@ final class Helpers
         return [$target["namespace"], $target["database"]];
     }
 
+    public static function processAuthVariables(array $auth): array
+    {
+        $temp = $auth;
+
+        if(array_key_exists("namespace", $auth)) {
+            $temp["NS"] = $auth["namespace"];
+            unset($temp["namespace"]);
+        }
+
+        if(array_key_exists("database", $auth)) {
+            $temp["DB"] = $auth["database"];
+            unset($temp["database"]);
+        }
+
+        if(array_key_exists("scope", $auth)) {
+            $temp["SC"] = $auth["scope"];
+            unset($temp["scope"]);
+        }
+
+        return $temp;
+    }
+
     public static function escapeIdent(string $ident): string
     {
         $len = strlen($ident);
