@@ -83,6 +83,6 @@ final class RecordId implements \JsonSerializable
 
     public function jsonSerialize(): string
     {
-        return (string)$this;
+        return $this->__toString();
     }
 }

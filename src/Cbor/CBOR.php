@@ -6,12 +6,13 @@ use Beau\CborPHP\CborDecoder;
 use Beau\CborPHP\CborEncoder;
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\exceptions\CborException;
+use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Exception;
+use Ramsey\Uuid\Uuid;
 use Ramsey\Uuid\UuidInterface;
 use Surreal\Cbor\Enums\CustomTag;
-use Surreal\Cbor\Types\DateTime;
 use Surreal\Cbor\Types\Duration;
 use Surreal\Cbor\Types\GeometryCollection;
 use Surreal\Cbor\Types\GeometryLine;
@@ -24,7 +25,6 @@ use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
 use Surreal\Cbor\Types\StringRecordId;
 use Surreal\Cbor\Types\Table;
-use Surreal\Cbor\Types\Uuid;
 use Brick\Math\BigDecimal;
 
 class CBOR
@@ -63,9 +63,14 @@ class CBOR
                     $value->getTable()
                 ),
 
-                StringRecordId::class, RecordId::class => new TaggedValue(
+                RecordId::class => new TaggedValue(
                     CustomTag::RECORD_ID->value,
-                    (string)$value
+                    $value->toArray()
+                ),
+
+                StringRecordId::class => new TaggedValue(
+                    CustomTag::RECORD_ID->value,
+                    $value->recordId
                 ),
 
                 BigDecimal::class => new TaggedValue(
@@ -133,7 +138,7 @@ class CBOR
             }
 
             return match (CustomTag::tryFrom($tagged->tag)) {
-                CustomTag::SPEC_DATETIME => new \DateTime($tagged->value),
+                CustomTag::SPEC_DATETIME => new DateTime($tagged->value),
                 CustomTag::NONE => new None(),
 
                 CustomTag::TABLE => $tagged->value,
@@ -142,11 +147,14 @@ class CBOR
 
                 CustomTag::STRING_DECIMAL => BigDecimal::of($tagged->value),
 
-                CustomTag::CUSTOM_DATETIME => DateTime::fromCborCustomDate($tagged->value),
+                CustomTag::CUSTOM_DATETIME => (new DateTime())
+                    ->setTimestamp($tagged->value[0])
+                    ->setTime(0, 0, 0, $tagged->value[1]),
+
                 CustomTag::STRING_DURATION => new Duration($tagged->value),
                 CustomTag::CUSTOM_DURATION => Duration::fromCborCustomDuration([$tagged->value[0], $tagged->value[1]]),
 
-                CustomTag::SPEC_UUID => Uuid::fromCborByteString($tagged->value),
+                CustomTag::SPEC_UUID => Uuid::fromString($tagged->value->getByteString()),
 
                 CustomTag::GEOMETRY_POINT => new GeometryPoint($tagged->value),
                 CustomTag::GEOMETRY_LINE => new GeometryLine($tagged->value),
