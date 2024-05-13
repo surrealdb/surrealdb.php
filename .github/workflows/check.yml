@@ -1,0 +1,40 @@
+name: Check
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+
+  check_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+      # setup php version
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+
+    - name: Setup Composer
+      uses: php-actions/composer@v6
+
+    - name: SurrealDB in Github Actions
+      uses: welpie21/SurrealDB-Actions@v1.0.0
+      with:
+        surrealdb_auth: true
+
+    - name: Wait for SurrealDB to be ready
+      run: while ! curl --output /dev/null --silent --head --fail http://localhost:8000; do sleep 1 && echo -n .; done;
+
+    - name: Print SurrealDB version
+      run: curl -X GET http://localhost:8000/version
+
+    - name: Run tests
+      run: vendor/bin/phpunit -c phpunit.xml
