@@ -100,12 +100,11 @@ $record = Surreal\Cbor\Types\RecordId::create("person", "john");
 $person = $db->merge($record, ["age" => 31]);
 
 // Select all people records.
-$record = Surreal\Cbor\Types\RecordId::create("person", "john");
-$people = $db->select($table);  
+$people = $db->select("person");  
 
 // Perform a custom advanced query.
 $groups = $db->query('SELECT marketing, count() FROM $tb GROUP BY marketing', [
-    "tb" => "person"
+    "tb" => Surreal\Cbor\Types\Table::create("person")
 ]);
 
 // Close the connection between the application and the database.
