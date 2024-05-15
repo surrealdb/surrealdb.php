@@ -233,13 +233,13 @@ final class Surreal
      * @param Table|string $table
      * @param RecordId|string $to
      * @param array|null $data
-     * @return array|null
+     * @return array{id:RecordId, in:RecordId, out:RecordId}|null
      * @since SurrealDB-v1.5.0
      */
     public function relate(RecordId|string $from, Table|string $table, RecordId|string $to, ?array $data = null): ?array
     {
         $message = RpcMessage::create("relate")->setParams([$from, $table, $to, $data]);
-        return $this->engine->rpc($message);
+        return $this->engine->rpc($message)[0];
     }
 
     /**
