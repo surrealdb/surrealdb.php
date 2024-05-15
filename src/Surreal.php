@@ -6,6 +6,7 @@ use Beau\CborPHP\exceptions\CborException;
 use Exception;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
+use Surreal\Cbor\Types\Table;
 use Surreal\Core\AbstractEngine;
 use Surreal\Core\Engines\HttpEngine;
 use Surreal\Core\Engines\WsEngine;
@@ -223,6 +224,36 @@ final class Surreal
     public function signup(array $data): ?string
     {
         $message = RpcMessage::create("signup")->setParams([$data]);
+        return $this->engine->rpc($message);
+    }
+
+    /**
+     * Create a relation between two records. The data parameter is optional.
+     * @param RecordId|string $from
+     * @param Table|string $table
+     * @param RecordId|string $to
+     * @param array|null $data
+     * @return array|null
+     * @since SurrealDB-v1.5.0
+     */
+    public function relate(RecordId|string $from, Table|string $table, RecordId|string $to, ?array $data = null): ?array
+    {
+        $message = RpcMessage::create("relate")->setParams([$from, $table, $to, $data]);
+        return $this->engine->rpc($message);
+    }
+
+    /**
+     * Runs a defined SurrealQL function.
+     * @param string $function
+     * @param string $version
+     * @param mixed ...$params
+     * @return mixed
+     * @throws Exception|CborException|SurrealException;
+     * @since SurrealDB-v1.5.0
+     */
+    public function run(string $function, string $version, mixed ...$params): mixed
+    {
+        $message = RpcMessage::create("run")->setParams([$function, $version, $params]);
         return $this->engine->rpc($message);
     }
 
