@@ -170,4 +170,14 @@ class QueryTest extends TestCase
 
         $db->disconnect();
     }
+
+    public function testRun(): void
+    {
+        $db = $this->getDb();
+
+        $response = $db->run("fn::greet", "1.0.0", "Beau");
+        $this->assertEquals("Hello, Beau!", $response);
+
+        $db->disconnect();
+    }
 }

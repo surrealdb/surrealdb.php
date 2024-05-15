@@ -6,7 +6,7 @@ use Beau\CborPHP\exceptions\CborException;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\Types\RecordId;
-use Surreal\Core\Utils\SurrealPatch;
+use Surreal\Cbor\Types\Table;
 use Surreal\Exceptions\SurrealException;
 use Surreal\Surreal;
 use Throwable;
@@ -176,5 +176,49 @@ class QueryTest extends TestCase
         $db = $this->getDb();
         $persons = $db->query("SELECT * FROM person");
         $this->assertIsArray($persons, "The persons is not an array");
+    }
+
+    public function testRelate(): void
+    {
+        // CHANGE: change "from" and "to" to StringRecordId. Currently, has issues with the StringRecordId.
+
+        $db = $this->getDb();
+
+        $from = RecordId::create("relate", "testA");
+        $kind = Table::create("table");
+        $to = RecordId::create("relate", "testB");
+
+        $response = $db->relate($from, $kind, $to);
+
+        $this->assertIsArray($response);
+
+        $this->assertArrayHasKey("id", $response);
+        $this->assertArrayHasKey("in", $response);
+        $this->assertArrayHasKey("out", $response);
+
+        // test with content data
+        $data = ["a" => 1, "b" => 2];
+        $response = $db->relate($from, $kind, $to, $data);
+
+        $this->assertIsArray($response);
+
+        $this->assertArrayHasKey("id", $response);
+        $this->assertArrayHasKey("in", $response);
+        $this->assertArrayHasKey("out", $response);
+
+        $this->assertArrayHasKey("a", $response);
+        $this->assertArrayHasKey("b", $response);
+
+        $db->disconnect();
+    }
+
+    public function testRun(): void
+    {
+        $db = $this->getDb();
+
+        $response = $db->run("fn::greet", "1.0.0", "Beau");
+        $this->assertEquals("Hello, Beau!", $response);
+
+        $db->disconnect();
     }
 }
