@@ -248,10 +248,9 @@ final class Surreal
     /**
      * Runs a defined SurrealQL function.
      * @param string $function
-     * @param string $version
-     * @param mixed ...$params
+     * @param string|null $version
+     * @param array|null $params
      * @return mixed
-     * @throws Exception|CborException|SurrealException;
      * @since SurrealDB-v1.5.0
      */
     public function run(string $function, ?string $version = null, ?array $params = null): mixed
