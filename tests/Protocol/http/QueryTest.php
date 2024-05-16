@@ -177,7 +177,7 @@ class QueryTest extends TestCase
 
         $response = $db->run(
             function: "fn::greet",
-            params: "Beau"
+            params: ["Beau"]
         );
 
         $this->assertEquals("Hello, Beau!", $response);
