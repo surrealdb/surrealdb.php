@@ -251,7 +251,7 @@ final class Surreal
      * @throws Exception|CborException|SurrealException;
      * @since SurrealDB-v1.5.0
      */
-    public function run(string $function, string $version, mixed ...$params): mixed
+    public function run(string $function, ?string $version = null, ?array $params = null): mixed
     {
         $message = RpcMessage::create("run")->setParams([$function, $version, $params]);
         return $this->engine->rpc($message);

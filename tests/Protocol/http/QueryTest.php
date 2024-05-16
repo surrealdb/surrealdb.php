@@ -175,7 +175,11 @@ class QueryTest extends TestCase
     {
         $db = $this->getDb();
 
-        $response = $db->run("fn::greet", "1.0.0", "Beau");
+        $response = $db->run(
+            function: "fn::greet",
+            params: "Beau"
+        );
+
         $this->assertEquals("Hello, Beau!", $response);
 
         $db->disconnect();
