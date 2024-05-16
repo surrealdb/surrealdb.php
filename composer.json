@@ -14,9 +14,8 @@
 	"scripts": {
 		"phpstan": "vendor/bin/phpstan -c phpstan.neon",
 		"test-coverage": "./vendor/bin/phpunit -c phpunit.xml",
-		"run-surreal-1.2.2": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.2.2 start --auth --user root --pass root --allow-all --log trace ",
-		"run-surreal-1.3.1": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.3.1 start --auth --user root --pass root --allow-all --log trace ",
-		"run-surreal-1.4.x": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.4.2 start --auth --user root --pass root --allow-all --log trace "
+		"run-surreal-1.4.2": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.4.2 start --auth --user root --pass root --allow-all --log trace ",
+		"run-surreal-1.5.0": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.5.0 start --auth --user root --pass root --allow-all --log trace "
 	},
 	"authors": [
 		{
@@ -34,7 +33,8 @@
 		"php": ">=8.2",
 		"welpie21/cbor.php": "1.0.1",
 		"brick/math": "^0.11.0",
-		"khill/php-duration": "^1.1"
+		"khill/php-duration": "^1.1",
+		"composer/semver": "^3.4"
 	},
 	"require-dev": {
 		"phpunit/phpunit": "10.5.19",

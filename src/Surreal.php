@@ -3,6 +3,7 @@
 namespace Surreal;
 
 use Beau\CborPHP\exceptions\CborException;
+use Composer\Semver\Semver;
 use Exception;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
@@ -16,6 +17,8 @@ use Surreal\Exceptions\SurrealException;
 
 final class Surreal
 {
+    const SUPPORTED_SURREALDB_VERSION_RANGE = ">= 1.4.2 < 2.0.0";
+
     /**
      * @param AbstractEngine $engine
      * @var AbstractEngine|null
@@ -401,11 +404,15 @@ final class Surreal
     /**
      * Connect to the remote Surreal database. Throws an error if the connection fails.
      * @param string $host
-     * @param array{namespace:string|null,database:string|null}|null $target
+     * @param array{
+     *     namespace:string|null,
+     *     database:string|null,
+     *     versionCheck:bool|null
+     * }|null $options
      * @return void
      * @throws Exception
      */
-    public function connect(string $host, ?array $target = null): void
+    public function connect(string $host, ?array $options = null): void
     {
         $this->engine = match (parse_url($host, PHP_URL_SCHEME)) {
             "http", "https" => new HttpEngine($host),
@@ -415,8 +422,20 @@ final class Surreal
 
         $this->engine->connect();
 
-        if ($target) {
-            $this->use($target);
+        if ($options) {
+            $this->use($options);
+        }
+
+        if(!array_key_exists("versionCheck", $options) || $options["versionCheck"] !== false) {
+            $versionRange = Surreal::SUPPORTED_SURREALDB_VERSION_RANGE;
+            $version = $this->version();
+
+            // remove the prefix "surrealdb-" from the version
+            $version = str_replace("surrealdb-", "", $version);
+
+            if (!Semver::satisfies($version, $versionRange)) {
+                throw new Exception("Unsupported SurrealDB version. Supported version range: $versionRange");
+            }
         }
     }
 
