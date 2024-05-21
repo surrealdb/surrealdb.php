@@ -7,6 +7,7 @@ use Composer\Semver\Semver;
 use Exception;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
+use Surreal\Cbor\Types\StringRecordId;
 use Surreal\Cbor\Types\Table;
 use Surreal\Core\AbstractEngine;
 use Surreal\Core\Engines\HttpEngine;
@@ -112,7 +113,7 @@ final class Surreal
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#select
      */
-    public function select(RecordId|string $thing): mixed
+    public function select(RecordId|StringRecordId|string $thing): mixed
     {
         $message = RpcMessage::create("select")->setParams([$thing]);
         return $this->engine->rpc($message);
@@ -126,7 +127,7 @@ final class Surreal
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#create
      */
-    public function create(RecordId|string $thing, mixed $data): ?array
+    public function create(RecordId|StringRecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("create")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -141,7 +142,7 @@ final class Surreal
      * @throws CborException
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#read
      */
-    public function update(RecordId|string $thing, mixed $data): ?array
+    public function update(RecordId|StringRecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("update")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -155,7 +156,7 @@ final class Surreal
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#merge
      */
-    public function merge(RecordId|string $thing, mixed $data): ?array
+    public function merge(RecordId|StringRecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("merge")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -170,7 +171,7 @@ final class Surreal
      * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#patch
      */
-    public function patch(RecordId|string $thing, array $data, bool $diff = false): ?array
+    public function patch(RecordId|StringRecordId|string $thing, array $data, bool $diff = false): ?array
     {
         $message = RpcMessage::create("patch")->setParams([$thing, $data, $diff]);
         return $this->engine->rpc($message);
@@ -197,7 +198,7 @@ final class Surreal
      * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#delete
      */
-    public function delete(RecordId|string $thing): ?array
+    public function delete(RecordId|StringRecordId|string $thing): ?array
     {
         $message = RpcMessage::create("delete")->setParams([$thing]);
         return $this->engine->rpc($message);
@@ -239,7 +240,12 @@ final class Surreal
      * @return array{id:RecordId, in:RecordId, out:RecordId}|null
      * @since SurrealDB-v1.5.0
      */
-    public function relate(RecordId|string $from, Table|string $table, RecordId|string $to, ?array $data = null): ?array
+    public function relate(
+		RecordId|StringRecordId $from, 
+		Table|string $table, 
+		RecordId|StringRecordId $to, 
+		?array $data = null
+	): ?array
     {
         $message = RpcMessage::create("relate")->setParams([$from, $table, $to, $data]);
         return $this->engine->rpc($message)[0];
