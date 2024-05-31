@@ -29,4 +29,8 @@ DEFINE USER beau ON DATABASE PASSWORD "123!" ROLES EDITOR;
 CREATE user CONTENT {
     "email": "beau@user.nl",
     "pass": crypto::argon2::generate("123!")
-}
+};
+
+DEFINE FUNCTION fn::greet($name: string) {
+	RETURN "Hello, " + $name + "!";
+};
