@@ -26,7 +26,7 @@ jobs:
       uses: php-actions/composer@v6
 
     - name: SurrealDB in Github Actions
-      uses: welpie21/SurrealDB-Actions@v1.0.0
+      uses: surrealdb/setup-surreal@v1.0.0
       with:
         surrealdb_auth: true
 
