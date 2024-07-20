@@ -7,6 +7,7 @@ use Exception;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
+use Surreal\Cbor\Types\Table;
 use Surreal\Exceptions\SurrealException;
 use Surreal\Surreal;
 
@@ -132,6 +133,54 @@ class QueryTest extends TestCase
         $this->assertCount(2, $response);
         $this->assertInstanceOf(RecordId::class, $response[0]["id"]);
         $this->assertInstanceOf(RecordId::class, $response[1]["id"]);
+
+        $db->disconnect();
+    }
+
+    public function testRelate(): void
+    {
+        // CHANGE: change "from" and "to" to StringRecordId. Currently, has issues with the StringRecordId.
+
+        $db = $this->getDb();
+
+        $from = RecordId::create("relate", "testA");
+        $kind = Table::create("table");
+        $to = RecordId::create("relate", "testB");
+
+        $response = $db->relate($from, $kind, $to);
+
+        $this->assertIsArray($response);
+
+        $this->assertArrayHasKey("id", $response);
+        $this->assertArrayHasKey("in", $response);
+        $this->assertArrayHasKey("out", $response);
+
+        // test with content data
+        $data = ["a" => 1, "b" => 2];
+        $response = $db->relate($from, $kind, $to, $data);
+
+        $this->assertIsArray($response);
+
+        $this->assertArrayHasKey("id", $response);
+        $this->assertArrayHasKey("in", $response);
+        $this->assertArrayHasKey("out", $response);
+
+        $this->assertArrayHasKey("a", $response);
+        $this->assertArrayHasKey("b", $response);
+
+        $db->disconnect();
+    }
+
+    public function testRun(): void
+    {
+        $db = $this->getDb();
+
+        $response = $db->run(
+            function: "fn::greet",
+            params: ["Beau"]
+        );
+
+        $this->assertEquals("Hello, Beau!", $response);
 
         $db->disconnect();
     }

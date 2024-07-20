@@ -3,9 +3,12 @@
 namespace Surreal;
 
 use Beau\CborPHP\exceptions\CborException;
+use Composer\Semver\Semver;
 use Exception;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\RecordId;
+use Surreal\Cbor\Types\StringRecordId;
+use Surreal\Cbor\Types\Table;
 use Surreal\Core\AbstractEngine;
 use Surreal\Core\Engines\HttpEngine;
 use Surreal\Core\Engines\WsEngine;
@@ -15,6 +18,8 @@ use Surreal\Exceptions\SurrealException;
 
 final class Surreal
 {
+    const SUPPORTED_SURREALDB_VERSION_RANGE = ">= 1.4.2 < 2.0.0";
+
     /**
      * @param AbstractEngine $engine
      * @var AbstractEngine|null
@@ -108,7 +113,7 @@ final class Surreal
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#select
      */
-    public function select(RecordId|string $thing): mixed
+    public function select(RecordId|StringRecordId|string $thing): mixed
     {
         $message = RpcMessage::create("select")->setParams([$thing]);
         return $this->engine->rpc($message);
@@ -122,7 +127,7 @@ final class Surreal
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#create
      */
-    public function create(RecordId|string $thing, mixed $data): ?array
+    public function create(RecordId|StringRecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("create")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -137,7 +142,7 @@ final class Surreal
      * @throws CborException
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#read
      */
-    public function update(RecordId|string $thing, mixed $data): ?array
+    public function update(RecordId|StringRecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("update")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -151,7 +156,7 @@ final class Surreal
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#merge
      */
-    public function merge(RecordId|string $thing, mixed $data): ?array
+    public function merge(RecordId|StringRecordId|string $thing, mixed $data): ?array
     {
         $message = RpcMessage::create("merge")->setParams([$thing, $data]);
         return $this->engine->rpc($message);
@@ -166,7 +171,7 @@ final class Surreal
      * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#patch
      */
-    public function patch(RecordId|string $thing, array $data, bool $diff = false): ?array
+    public function patch(RecordId|StringRecordId|string $thing, array $data, bool $diff = false): ?array
     {
         $message = RpcMessage::create("patch")->setParams([$thing, $data, $diff]);
         return $this->engine->rpc($message);
@@ -193,7 +198,7 @@ final class Surreal
      * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#delete
      */
-    public function delete(RecordId|string $thing): ?array
+    public function delete(RecordId|StringRecordId|string $thing): ?array
     {
         $message = RpcMessage::create("delete")->setParams([$thing]);
         return $this->engine->rpc($message);
@@ -223,6 +228,40 @@ final class Surreal
     public function signup(array $data): ?string
     {
         $message = RpcMessage::create("signup")->setParams([$data]);
+        return $this->engine->rpc($message);
+    }
+
+    /**
+     * Create a relation between two records. The data parameter is optional.
+     * @param RecordId|string $from
+     * @param Table|string $table
+     * @param RecordId|string $to
+     * @param array|null $data
+     * @return array{id:RecordId, in:RecordId, out:RecordId}|null
+     * @since SurrealDB-v1.5.0
+     */
+    public function relate(
+		RecordId|StringRecordId $from, 
+		Table|string $table, 
+		RecordId|StringRecordId $to, 
+		?array $data = null
+	): ?array
+    {
+        $message = RpcMessage::create("relate")->setParams([$from, $table, $to, $data]);
+        return $this->engine->rpc($message)[0];
+    }
+
+    /**
+     * Runs a defined SurrealQL function.
+     * @param string $function
+     * @param string|null $version
+     * @param array|null $params
+     * @return mixed
+     * @since SurrealDB-v1.5.0
+     */
+    public function run(string $function, ?string $version = null, ?array $params = null): mixed
+    {
+        $message = RpcMessage::create("run")->setParams([$function, $version, $params]);
         return $this->engine->rpc($message);
     }
 
@@ -370,11 +409,15 @@ final class Surreal
     /**
      * Connect to the remote Surreal database. Throws an error if the connection fails.
      * @param string $host
-     * @param array{namespace:string|null,database:string|null}|null $target
+     * @param array{
+     *     namespace:string|null,
+     *     database:string|null,
+     *     versionCheck:bool|null
+     * }|null $options
      * @return void
      * @throws Exception
      */
-    public function connect(string $host, ?array $target = null): void
+    public function connect(string $host, ?array $options = null): void
     {
         $this->engine = match (parse_url($host, PHP_URL_SCHEME)) {
             "http", "https" => new HttpEngine($host),
@@ -384,8 +427,20 @@ final class Surreal
 
         $this->engine->connect();
 
-        if ($target) {
-            $this->use($target);
+        if ($options) {
+            $this->use($options);
+        }
+
+        if(!array_key_exists("versionCheck", $options) || $options["versionCheck"] !== false) {
+            $versionRange = Surreal::SUPPORTED_SURREALDB_VERSION_RANGE;
+            $version = $this->version();
+
+            // remove the prefix "surrealdb-" from the version
+            $version = str_replace("surrealdb-", "", $version);
+
+            if (!Semver::satisfies($version, $versionRange)) {
+                throw new Exception("Unsupported SurrealDB version. Supported version range: $versionRange");
+            }
         }
     }
 

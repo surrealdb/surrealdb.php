@@ -20,4 +20,9 @@ final readonly class StringRecordId implements \JsonSerializable
     {
         return $this->recordId;
     }
+
+    public static function create(string $recordId): StringRecordId
+    {
+        return new StringRecordId($recordId);
+    }
 }

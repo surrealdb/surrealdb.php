@@ -52,7 +52,7 @@ To get started, you need to create a new instance of the SurrealDB HTTP or WebSo
 
 ```php
 // Make a new instance of the SurrealDB class. Use the ws or wss protocol for having WebSocket functionality.
-$db = new Surreal\Surreal();
+$db = new \Surreal\Surreal();
 
 $db->connect("http://localhost:8000", [
     "namespace" => "test",
@@ -68,7 +68,7 @@ In the PHP SDK, We have a simple API that allows you to interact with SurrealDB.
 
 ```php
 // Connect set the specified namespace and database.
-$db = new Surreal\Surreal();
+$db = new \Surreal\Surreal();
 
 $db->connect("http://localhost:8000", [
     "namespace" => "test",
@@ -92,11 +92,11 @@ $person = $db->create("person", [
 ]); 
 
 // Get the person with the name "John Doe".
-$record = Surreal\Cbor\Types\RecordId::create("person", "john");
+$record = \Surreal\Cbor\Types\RecordId::create("person", "john");
 $person = $db->select($record);
 
 // Update a person record with a specific id
-$record = Surreal\Cbor\Types\RecordId::create("person", "john");
+$record = \Surreal\Cbor\Types\RecordId::create("person", "john");
 $person = $db->merge($record, ["age" => 31]);
 
 // Select all people records.
@@ -104,7 +104,7 @@ $people = $db->select("person");
 
 // Perform a custom advanced query.
 $groups = $db->query('SELECT marketing, count() FROM $tb GROUP BY marketing', [
-    "tb" => Surreal\Cbor\Types\Table::create("person")
+    "tb" => \Surreal\Cbor\Types\Table::create("person")
 ]);
 
 // Close the connection between the application and the database.

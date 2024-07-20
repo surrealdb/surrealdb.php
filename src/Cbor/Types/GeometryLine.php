@@ -7,7 +7,7 @@ use Brick\Math\Exception\MathException;
 class GeometryLine extends AbstractGeometry
 {
     /**
-     * @var GeometryPoint[]
+     * @var array{GeometryPoint, GeometryPoint}
      */
     public readonly array $line;
 
@@ -16,6 +16,7 @@ class GeometryLine extends AbstractGeometry
      */
     public function __construct(array|GeometryLine $line)
     {
+
         $line = $line instanceof GeometryLine ? $line->line : $line;
 
         $this->line = [
@@ -26,6 +27,8 @@ class GeometryLine extends AbstractGeometry
 
     public function jsonSerialize(): array
     {
+        [$x, $y] = $this->line;
+
         return [
             "type" => "LineString",
             "coordinates" => $this->getCoordinates()

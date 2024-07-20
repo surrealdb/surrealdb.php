@@ -26,9 +26,12 @@ jobs:
       uses: php-actions/composer@v6
 
     - name: SurrealDB in Github Actions
-      uses: welpie21/SurrealDB-Actions@v1.0.0
+      uses: surrealdb/setup-surreal@v1.0.2
       with:
         surrealdb_auth: true
+        surrealdb_username: 'root'
+        surrealdb_password: 'root'
+        surrealdb_additional_args: --allow-all
 
     - name: Wait for SurrealDB to be ready
       run: while ! curl --output /dev/null --silent --head --fail http://localhost:8000; do sleep 1 && echo -n .; done;
