@@ -2,9 +2,9 @@
 
 namespace Surreal\Cbor\Types;
 
-final class Table
+final readonly class Table
 {
-    private string $table;
+    public string $table;
 
     public function __construct(string $table)
     {
@@ -27,6 +27,11 @@ final class Table
     }
 
     public function __toString(): string
+    {
+        return $this->toString();
+    }
+
+    public function toString(): string
     {
         return $this->table;
     }

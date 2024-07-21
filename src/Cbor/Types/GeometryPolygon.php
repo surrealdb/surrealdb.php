@@ -10,7 +10,7 @@ final class GeometryPolygon extends AbstractGeometry
      * [line, line, ...line[]]
      * @var GeometryLine[]
      */
-    public readonly array $polygon;
+    public array $polygon;
 
     /**
      * @throws MathException
@@ -39,5 +39,32 @@ final class GeometryPolygon extends AbstractGeometry
             fn(GeometryLine $line) => $line->getCoordinates(),
             $this->polygon
         );
+    }
+
+    /**
+     * @throws MathException
+     */
+    public function clone(): self
+    {
+        return new self($this->polygon);
+    }
+
+    public function is(AbstractGeometry $geometry): bool
+    {
+        if(!($geometry instanceof GeometryPolygon)) {
+            return false;
+        }
+
+        if(count($this->polygon) !== count($geometry->polygon)) {
+            return false;
+        }
+
+        foreach($this->polygon as $index => $line) {
+            if(!$line->is($geometry->polygon[$index])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

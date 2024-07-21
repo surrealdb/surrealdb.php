@@ -10,7 +10,7 @@ class GeometryMultiLine extends AbstractGeometry
      * [GeometryLine, ...GeometryLine[]]
      * @var GeometryLine[]
      */
-    public readonly array $lines;
+    public array $lines;
 
     /**
      * @throws MathException
@@ -39,5 +39,32 @@ class GeometryMultiLine extends AbstractGeometry
             fn(GeometryLine $line) => $line->getCoordinates(),
             $this->lines
         );
+    }
+
+    /**
+     * @throws MathException
+     */
+    public function clone(): GeometryMultiLine
+    {
+        return new self($this->lines);
+    }
+
+    public function is(AbstractGeometry $geometry): bool
+    {
+        if(!($geometry instanceof GeometryMultiLine)) {
+            return false;
+        }
+
+        if(count($this->lines) !== count($geometry->lines)) {
+            return false;
+        }
+
+        foreach($this->lines as $i => $line) {
+            if(!$line->is($geometry->lines[$i])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

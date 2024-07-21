@@ -9,14 +9,13 @@ class GeometryLine extends AbstractGeometry
     /**
      * @var array{GeometryPoint, GeometryPoint}
      */
-    public readonly array $line;
+    public array $line;
 
     /**
      * @throws MathException
      */
     public function __construct(array|GeometryLine $line)
     {
-
         $line = $line instanceof GeometryLine ? $line->line : $line;
 
         $this->line = [
@@ -27,12 +26,36 @@ class GeometryLine extends AbstractGeometry
 
     public function jsonSerialize(): array
     {
-        [$x, $y] = $this->line;
-
         return [
             "type" => "LineString",
             "coordinates" => $this->getCoordinates()
         ];
+    }
+
+    public function close(): void
+    {
+        if(!$this->line[0]->is(end($this->line))) {
+            $this->line[] = $this->line[0];
+        }
+    }
+
+    public function is(AbstractGeometry $geometry): bool
+    {
+        if(!($geometry instanceof GeometryLine))  {
+            return false;
+        }
+
+        if(count($this->line) !== count($geometry->line)) {
+            return false;
+        }
+
+        foreach($this->line as $index => $point) {
+            if(!$point->is($geometry->line[$index])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function getCoordinates(): array
@@ -41,5 +64,13 @@ class GeometryLine extends AbstractGeometry
             fn(GeometryPoint $point) => $point->getCoordinates(),
             $this->line
         );
+    }
+
+    /**
+     * @throws MathException
+     */
+    public function clone(): static
+    {
+        return new static($this->line);
     }
 }

@@ -8,9 +8,9 @@ use Brick\Math\Exception\MathException;
 final class GeometryPoint extends AbstractGeometry
 {
     /**
-     * @var BigDecimal[]
+     * @var (int|float)[]
      */
-    public readonly array $point;
+    public array $point;
 
     /**
      * @param array<int,BigDecimal>|GeometryPoint $point $point
@@ -20,10 +20,24 @@ final class GeometryPoint extends AbstractGeometry
     {
         $point = $point instanceof GeometryPoint ? $point->point : $point;
 
+        if($point instanceof GeometryPoint) {
+            $this->point = $point->clone()->point;
+            return;
+        }
+
         $this->point = [
-            $point[0] instanceof BigDecimal ? $point[0] : BigDecimal::of($point[0]),
-            $point[1] instanceof BigDecimal ? $point[1] : BigDecimal::of($point[1])
+            $this->parseDecimal($point[0]),
+            $this->parseDecimal($point[1])
         ];
+    }
+
+    private function parseDecimal(int|BigDecimal $value): int|float
+    {
+        if($value instanceof BigDecimal) {
+            return $value->toFloat();
+        }
+
+        return $value;
     }
 
     public function jsonSerialize(): array
@@ -35,10 +49,27 @@ final class GeometryPoint extends AbstractGeometry
     }
 
     /**
-     * @return BigDecimal[]
+     * @return int[]
      */
     public function getCoordinates(): array
     {
         return $this->point;
+    }
+
+    /**
+     * @throws MathException
+     */
+    public function clone(): self
+    {
+        return new self($this->point);
+    }
+
+    public function is(AbstractGeometry $geometry): bool
+    {
+        if(!($geometry instanceof GeometryPoint)) {
+            return false;
+        }
+
+        return $this->point[0] === $geometry->point[0] && $this->point[1] === $geometry->point[1];
     }
 }

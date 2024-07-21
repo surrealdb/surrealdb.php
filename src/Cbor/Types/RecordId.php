@@ -46,6 +46,11 @@ final class RecordId implements \JsonSerializable
      */
     public function __toString(): string
     {
+        return $this->toString();
+    }
+
+    public function toString(): string
+    {
         $tb = Helpers::escapeIdent($this->table);
         $id = is_string($this->id) ?
             Helpers::escapeIdent($this->id) :
@@ -81,8 +86,19 @@ final class RecordId implements \JsonSerializable
         return [$this->table, $this->id];
     }
 
+    public function equals(RecordId|string $recordId): bool
+    {
+        if(is_string($recordId)) {
+            return $this->toString() === $recordId;
+        }
+
+        return
+            $this->id === $recordId->id &&
+            $this->table === $recordId->table;
+    }
+
     public function jsonSerialize(): string
     {
-        return $this->__toString();
+        return $this->toString();
     }
 }

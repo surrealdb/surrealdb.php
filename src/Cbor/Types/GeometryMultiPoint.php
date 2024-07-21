@@ -9,7 +9,7 @@ class GeometryMultiPoint extends AbstractGeometry
     /**
      * @var GeometryPoint[]
      */
-    public readonly array $points;
+    public array $points;
 
     /**
      * @throws MathException
@@ -38,5 +38,32 @@ class GeometryMultiPoint extends AbstractGeometry
             fn(GeometryPoint $point) => $point->getCoordinates(),
             $this->points
         );
+    }
+
+    /**
+     * @throws MathException
+     */
+    public function clone(): self
+    {
+        return new self($this->points);
+    }
+
+    public function is(AbstractGeometry $geometry): bool
+    {
+        if(!($geometry instanceof GeometryMultiPoint)) {
+            return false;
+        }
+
+        if(count($this->points) !== count($geometry->points)) {
+            return false;
+        }
+
+        foreach($this->points as $index => $point) {
+            if(!$point->is($geometry->points[$index])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
