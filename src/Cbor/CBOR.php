@@ -10,9 +10,8 @@ use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Exception;
-use Ramsey\Uuid\Uuid;
-use Ramsey\Uuid\UuidInterface;
 use Surreal\Cbor\Enums\CustomTag;
+use Surreal\Cbor\Types\Uuid;
 use Surreal\Cbor\Types\Duration;
 use Surreal\Cbor\Types\GeometryCollection;
 use Surreal\Cbor\Types\GeometryLine;
@@ -60,7 +59,7 @@ class CBOR
                 // Custom classes
                 Table::class => new TaggedValue(
                     CustomTag::TABLE->value,
-                    $value->getTable()
+                    $value->table
                 ),
 
                 RecordId::class => new TaggedValue(
@@ -78,7 +77,7 @@ class CBOR
                     $value->toFloat()
                 ),
 
-                UuidInterface::class => new TaggedValue(
+                Types\Uuid::class => new TaggedValue(
                     CustomTag::SPEC_UUID->value,
                     $value
                 ),
