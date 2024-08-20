@@ -38,11 +38,15 @@ final readonly class Table
 
     /**
      * Checks if this table is equal to another table
-     * @param Table $table
+     * @param Table|string $table
      * @return bool
      */
-    public function equals(Table $table): bool
+    public function equals(Table|string $table): bool
     {
-        return $this->table === $table->table;
+        if ($table instanceof Table) {
+            return $this->table === $table->table;
+        }
+
+        return $this->table === $table;
     }
 }
