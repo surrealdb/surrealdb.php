@@ -20,7 +20,7 @@ abstract class AbstractEngine
      * Closes the connection to the engine.
      * @return bool
      */
-    abstract public function disconnect(): bool;
+    abstract public function close(): bool;
 
     /**
      * Sends a rpc request.

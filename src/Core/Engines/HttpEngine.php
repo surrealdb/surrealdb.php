@@ -363,7 +363,7 @@ class HttpEngine extends AbstractEngine
      * Closes the http connection
      * @return bool
      */
-    public function disconnect(): bool
+    public function close(): bool
     {
         if ($this->client === null) {
             return false;

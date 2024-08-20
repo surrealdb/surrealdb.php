@@ -448,7 +448,7 @@ final class Surreal
      * Closes the connection.
      * @return bool
      */
-    public function disconnect(): bool
+    public function close(): bool
     {
         return $this->engine->disconnect();
     }
