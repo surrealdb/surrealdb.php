@@ -49,7 +49,7 @@ class AuthTest extends TestCase
         $this->assertIsString($token);
         $this->assertNotEmpty($token);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -66,7 +66,7 @@ class AuthTest extends TestCase
 
         $this->assertIsString($token);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -84,7 +84,7 @@ class AuthTest extends TestCase
 
         $this->assertIsString($jwt);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -104,7 +104,7 @@ class AuthTest extends TestCase
 
         $this->assertIsString($token);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -114,6 +114,6 @@ class AuthTest extends TestCase
     {
         $db = $this->getDb();
         $this->assertInstanceOf(None::class, $db->invalidate());
-        $db->disconnect();
+        $db->close();
     }
 }

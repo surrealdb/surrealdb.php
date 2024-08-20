@@ -75,7 +75,7 @@ class QueryTest extends TestCase
 
         $this->assertInstanceOf(None::class, $response);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -113,7 +113,7 @@ class QueryTest extends TestCase
         $response = $db->select($id);
         $this->assertInstanceOf(None::class, $response);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -134,7 +134,7 @@ class QueryTest extends TestCase
         $this->assertInstanceOf(RecordId::class, $response[0]["id"]);
         $this->assertInstanceOf(RecordId::class, $response[1]["id"]);
 
-        $db->disconnect();
+        $db->close();
     }
 
     public function testRelate(): void
@@ -168,7 +168,7 @@ class QueryTest extends TestCase
         $this->assertArrayHasKey("a", $response);
         $this->assertArrayHasKey("b", $response);
 
-        $db->disconnect();
+        $db->close();
     }
 
     public function testRun(): void
@@ -182,6 +182,6 @@ class QueryTest extends TestCase
 
         $this->assertEquals("Hello, Beau!", $response);
 
-        $db->disconnect();
+        $db->close();
     }
 }

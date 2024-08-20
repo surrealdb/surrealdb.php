@@ -66,7 +66,7 @@ class AuthTest extends TestCase
 
         $this->assertIsString($token, "The token is not a string");
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -95,7 +95,7 @@ class AuthTest extends TestCase
         ]);
 
         $this->assertIsString($token);
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -111,7 +111,7 @@ class AuthTest extends TestCase
         $result = $db->authenticate($token);
         $this->assertInstanceOf(None::class, $result, "The result is not null");
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -136,6 +136,6 @@ class AuthTest extends TestCase
             $this->assertInstanceOf(SurrealException::class, $exception);
         }
 
-        $db->disconnect();
+        $db->close();
     }
 }

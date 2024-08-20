@@ -81,7 +81,7 @@ class QueryTest extends TestCase
         $this->assertArrayNotHasKey("name", $deleted_person, "The deleted person's name is not empty");
         $this->assertEquals(31, $deleted_person["age"], "The deleted person's age is not 31");
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -116,7 +116,7 @@ class QueryTest extends TestCase
         $this->assertArrayHasKey("name", $deleted_person, "The deleted person's name is not empty");
         $this->assertEquals(30, $deleted_person["age"], "The deleted person's age is not 30");
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -142,7 +142,7 @@ class QueryTest extends TestCase
 
         $this->assertEquals(31, $merged_person["age"], "The merged person's age is not 31");
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -165,7 +165,7 @@ class QueryTest extends TestCase
             $this->assertArrayHasKey("age", $person, "The inserted person does not have an age");
         }
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -209,7 +209,7 @@ class QueryTest extends TestCase
         $this->assertArrayHasKey("a", $response);
         $this->assertArrayHasKey("b", $response);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -227,6 +227,6 @@ class QueryTest extends TestCase
 
         $this->assertEquals("Hello, Beau!", $response);
 
-        $db->disconnect();
+        $db->close();
     }
 }

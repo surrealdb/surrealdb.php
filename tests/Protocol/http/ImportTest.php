@@ -28,7 +28,7 @@ class ImportTest extends TestCase
 
         $this->assertIsArray($result);
 
-        $db->disconnect();
+        $db->close();
     }
 
     public function testImportWithWrongCredentials(): void
@@ -49,7 +49,7 @@ class ImportTest extends TestCase
         } catch (AuthException $e) {
             $this->assertInstanceOf(AuthException::class, $e);
         } finally {
-            $db->disconnect();
+            $db->close();
         }
     }
 }

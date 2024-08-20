@@ -35,7 +35,7 @@ class BasicTest extends TestCase
         $result = $db->use(["namespace" => "test", "database" => "test"]);
 
         $this->assertInstanceOf(None::class, $result);
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -59,7 +59,7 @@ class BasicTest extends TestCase
         $result = $db->unset("x");
         $this->assertNull($result);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**

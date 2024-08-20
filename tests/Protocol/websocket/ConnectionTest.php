@@ -38,6 +38,6 @@ class ConnectionTest extends TestCase
         $db->setTimeout(0);
         $this->assertEquals(0, $db->getTimeout(), "The timeout is not set correctly");
 
-        $db->disconnect();
+        $db->close();
     }
 }

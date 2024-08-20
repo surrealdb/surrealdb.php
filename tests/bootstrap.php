@@ -18,5 +18,5 @@ try {
 } catch (Exception $e) {
     echo $e->getMessage();
 } finally {
-    $db->disconnect();
+    $db->close();
 }

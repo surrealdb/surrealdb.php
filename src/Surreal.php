@@ -450,7 +450,7 @@ final class Surreal
      */
     public function close(): bool
     {
-        return $this->engine->disconnect();
+        return $this->engine->close();
     }
 
     /**

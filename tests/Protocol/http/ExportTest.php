@@ -22,6 +22,6 @@ class ExportTest extends TestCase
         $result = $db->export("root", "root");
         $this->assertIsString($result);
 
-        $db->disconnect();
+        $db->close();
     }
 }

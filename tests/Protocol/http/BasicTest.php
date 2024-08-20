@@ -35,7 +35,7 @@ final class BasicTest extends TestCase
         $this->assertIsInt($status);
         $this->assertEquals(200, $status);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -50,7 +50,7 @@ final class BasicTest extends TestCase
         $this->assertIsInt($health);
         $this->assertEquals(200, $health);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -65,7 +65,7 @@ final class BasicTest extends TestCase
         $this->assertIsString($version);
         $this->assertStringStartsWith("surrealdb-", $version);
 
-        $db->disconnect();
+        $db->close();
     }
 
     /**
@@ -96,6 +96,6 @@ final class BasicTest extends TestCase
 
         $this->assertInstanceOf(RecordId::class, $info["id"]);
 
-        $db->disconnect();
+        $db->close();
     }
 }

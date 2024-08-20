@@ -108,7 +108,7 @@ $groups = $db->query('SELECT marketing, count() FROM $tb GROUP BY marketing', [
 ]);
 
 // Close the connection between the application and the database.
-$db->disconnect();
+$db->close();
 ```
 
 ## Contributing

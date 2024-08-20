@@ -24,7 +24,7 @@ class CloseTest extends TestCase
         $status = $db->status();
         $this->assertEquals(200, $status);
 
-        $db->disconnect();
+        $db->close();
 
         try {
             $db->status();
