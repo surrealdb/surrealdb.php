@@ -151,7 +151,7 @@ class CBOR
                     ->setTime(0, 0, 0, $tagged->value[1]),
 
                 CustomTag::STRING_DURATION => new Duration($tagged->value),
-                CustomTag::CUSTOM_DURATION => Duration::fromCborCustomDuration([$tagged->value[0], $tagged->value[1]]),
+                CustomTag::CUSTOM_DURATION => Duration::fromCompact([$tagged->value[0], $tagged->value[1]]),
 
                 CustomTag::SPEC_UUID => Uuid::fromString($tagged->value->getByteString()),
 
