@@ -1,17 +1,14 @@
 <?php
 
-namespace Cbor;
-
 use Beau\CborPHP\exceptions\CborException;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\CBOR;
 use Surreal\Cbor\Types\RecordId;
 
-class TestCborTypeRecordId extends TestCase
+class RecordIdTest extends TestCase
 {
     const RECORD_ID = ["record", "some-record"];
-    const RECORD_CBOR_STRING = "c8727265636f72643a736f6d652d7265636f7264";
-    const RECORD_CBOR_ARRAY = "C882667265636F72646B736F6D652D7265636F7264";
+    const RECORD_CBOR_ARRAY = "c882667265636f72646b736f6d652d7265636f7264";
 
     /**
      * @throws CborException
@@ -21,7 +18,7 @@ class TestCborTypeRecordId extends TestCase
         $recordId = RecordId::create(...self::RECORD_ID);
         $result = CBOR::encode($recordId);
 
-        $this->assertEquals(self::RECORD_CBOR_STRING, bin2hex($result));
+        $this->assertEquals(self::RECORD_CBOR_ARRAY, bin2hex($result));
     }
 
     /**
@@ -33,6 +30,9 @@ class TestCborTypeRecordId extends TestCase
         $this->assertInstanceOf(RecordId::class, $result);
     }
 
+    /**
+     * @throws Exception
+     */
     public function testMethods(): void
     {
         /** @var RecordId $result */
