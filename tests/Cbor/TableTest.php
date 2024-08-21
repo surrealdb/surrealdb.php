@@ -20,5 +20,8 @@ class TableTest extends \PHPUnit\Framework\TestCase
 
         $faultyTable = Table::create("logs");
         $this->assertFalse($faultyTable->equals($table));
+
+        $this->assertEquals('"logs"', json_encode($faultyTable));
+        $this->assertEquals("logs", strval($faultyTable));
     }
 }

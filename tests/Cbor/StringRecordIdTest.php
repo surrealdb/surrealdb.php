@@ -20,7 +20,13 @@ class StringRecordIdTest extends \PHPUnit\Framework\TestCase
         $result = CBOR::encode($stringRecordId);
 
         $actual = "c8727265636f72643a736f6d652d7265636f7264";
+        $hex = bin2hex($result);
 
-        $this->assertEquals($actual, bin2hex($result));
+        $this->assertEquals($actual, $hex);
+
+        $this->assertTrue($stringRecordId->equals(StringRecordId::create(self::RECORD_ID_STRING)));
+        $this->assertEquals('"' . self::RECORD_ID_STRING . '"', json_encode($stringRecordId));
+
+        $this->assertEquals(self::RECORD_ID_STRING, strval($stringRecordId));
     }
 }
