@@ -2,7 +2,7 @@
 
 namespace Surreal\Cbor\Types;
 
-final readonly class Table
+final readonly class Table implements \JsonSerializable
 {
     public string $table;
 
@@ -48,5 +48,10 @@ final readonly class Table
         }
 
         return $this->table === $table;
+    }
+
+    public function jsonSerialize(): string
+    {
+        return $this->toString();
     }
 }
