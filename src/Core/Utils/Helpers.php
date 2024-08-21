@@ -32,17 +32,17 @@ final class Helpers
     {
         $temp = $auth;
 
-        if(array_key_exists("namespace", $auth)) {
+        if (array_key_exists("namespace", $auth)) {
             $temp["NS"] = $auth["namespace"];
             unset($temp["namespace"]);
         }
 
-        if(array_key_exists("database", $auth)) {
+        if (array_key_exists("database", $auth)) {
             $temp["DB"] = $auth["database"];
             unset($temp["database"]);
         }
 
-        if(array_key_exists("scope", $auth)) {
+        if (array_key_exists("scope", $auth)) {
             $temp["SC"] = $auth["scope"];
             unset($temp["scope"]);
         }
@@ -52,9 +52,11 @@ final class Helpers
 
     public static function escapeIdent(string $ident): string
     {
-        $len = strlen($ident);
+        if (is_numeric($ident)) {
+            return "⟨" . $ident . "⟩";
+        }
 
-        for ($i = 0; $i < $len; $i++) {
+        for ($i = 0; $i < strlen($ident); $i++) {
             $code = ord($ident[$i]);
             if (
                 !($code > 47 && $code < 58) && // numeric (0-9)
@@ -62,11 +64,15 @@ final class Helpers
                 !($code > 96 && $code < 123) && // lower alpha (a-z)
                 !($code === 95) // underscore (_)
             ) {
-                $str = str_replace("⟩", "\⟩", $ident[$i]);
-                return "⟨" . $str . "⟩";
+                return "⟨" . str_replace("⟩", "⟩", $ident) . "⟩";
             }
         }
 
         return $ident;
+    }
+
+    public static function escapeNumber(int $number): string
+    {
+        return $number <= PHP_INT_MAX ? strval($number) : "⟨" . $number . "⟩";
     }
 }
