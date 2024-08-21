@@ -3,17 +3,18 @@
 namespace Surreal\Cbor\Types;
 
 use \Ramsey\Uuid\Uuid as RamseyUuid;
+use Ramsey\Uuid\UuidInterface;
 
 final class Uuid implements \JsonSerializable
 {
-    public RamseyUuid $value;
+    public UuidInterface $value;
 
     public function __construct(RamseyUuid|array|string $value)
     {
         $this->value = match (true) {
             is_string($value) => RamseyUuid::fromString($value),
             is_array($value) => RamseyUuid::fromBytes($value),
-            default => $value,
+            default => $value
         };
     }
 
@@ -75,13 +76,9 @@ final class Uuid implements \JsonSerializable
      * @param string|Uuid $uuid
      * @return bool
      */
-    public function isUuid(string|Uuid $uuid): bool
+    public static function isUuid(string|Uuid $uuid): bool
     {
-        return match (true) {
-            $uuid instanceof Uuid => true,
-            RamseyUuid::isValid($uuid) => true,
-            default => false,
-        };
+        return RamseyUuid::isValid($uuid);
     }
 
     /**
