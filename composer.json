@@ -15,7 +15,8 @@
 		"phpstan": "vendor/bin/phpstan -c phpstan.neon",
 		"test-coverage": "./vendor/bin/phpunit -c phpunit.xml",
 		"run-surreal-1.4.2": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.4.2 start --auth --user root --pass root --allow-all --log trace ",
-		"run-surreal-1.5.0": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.5.0 start --auth --user root --pass root --allow-all --log trace "
+		"run-surreal-1.5.0": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.5.0 start --auth --user root --pass root --allow-all --log trace ",
+		"run-surreal-2.0.1": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.0.1 start --username root --pass root --allow-all --log trace"
 	},
 	"authors": [
 		{
