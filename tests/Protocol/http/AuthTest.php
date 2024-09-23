@@ -27,6 +27,9 @@ class AuthTest extends TestCase
     {
         $db = $this->getDb();
 
+        /** @var ?string $token */
+        $token = null;
+
         $token = $db->signup([
             "email" => "beau.one",
             "pass" => "beau.one",

@@ -1,9 +1,7 @@
 <?php
 
 use Beau\CborPHP\exceptions\CborException;
-use Beau\CborPHP\utils\CborByteString;
 use Surreal\Cbor\CBOR;
-use Surreal\Cbor\Types\RecordId;
 use Surreal\Cbor\Types\StringRecordId;
 
 class StringRecordIdTest extends \PHPUnit\Framework\TestCase

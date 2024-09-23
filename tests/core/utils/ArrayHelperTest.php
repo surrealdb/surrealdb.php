@@ -1,6 +1,6 @@
 <?php
 
-namespace Utils;
+namespace utils;
 
 use PHPUnit\Framework\TestCase;
 use Surreal\Core\Utils\Helpers;

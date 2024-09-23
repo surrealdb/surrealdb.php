@@ -1,6 +1,6 @@
 <?php
 
-namespace Exceptions;
+namespace exceptions;
 
 use PHPUnit\Framework\TestCase;
 
