@@ -7,9 +7,9 @@
         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
 >
   <testsuites>
-<!--    <testsuite name="protocol-http-v1">-->
-<!--      <directory>tests/v1/protocols/http</directory>-->
-<!--    </testsuite>-->
+    <testsuite name="protocol-http-v1">
+      <directory>tests/v1/protocols/http</directory>
+    </testsuite>
 <!--    <testsuite name="protocol-websocket-v1">-->
 <!--      <directory>tests/v1/protocols/websocket</directory>-->
 <!--    </testsuite>-->

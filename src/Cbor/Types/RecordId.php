@@ -3,7 +3,7 @@
 namespace Surreal\Cbor\Types;
 
 use InvalidArgumentException;
-use Surreal\Core\Utils\Helpers;
+use Surreal\Cbor\Helpers\RecordIdHelper;
 
 final class RecordId implements \JsonSerializable
 {
@@ -51,12 +51,12 @@ final class RecordId implements \JsonSerializable
 
     public function toString(): string
     {
-        $tb = Helpers::escapeIdent($this->table);
+        $tb = RecordIdHelper::escapeIdent($this->table);
 
         if(is_numeric($this->id)) {
-            $id = Helpers::escapeNumber($this->id);
+            $id = RecordIdHelper::escapeNumber($this->id);
         } else if(is_string($this->id)) {
-            $id = Helpers::escapeIdent($this->id);
+            $id = RecordIdHelper::escapeIdent($this->id);
         } else {
             $id = json_encode($this->id);
         }

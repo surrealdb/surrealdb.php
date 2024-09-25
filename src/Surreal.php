@@ -18,7 +18,13 @@ use Surreal\Exceptions\SurrealException;
 final class Surreal
 {
     const SUPPORTED_SURREALDB_VERSION_RANGE = ">= 1.4.2 || >= 2.0.0";
-    private ?Semver $version = null;
+
+    /**
+     * Current remote SurrealDB version
+     * @var string SurrealDB version
+     * @example "1.0.0 or 2.0.1"
+     */
+    private string $remoteVersion;
 
     /**
      * @param AbstractEngine $engine
@@ -207,10 +213,11 @@ final class Surreal
 
     /**
      * Signin with a root, namespace, database or scoped user.
-     * @param array{namespace:string|null,database:string|null,scope:string|null} $data
+     * @param array{namespace:string|null,database:string|null,scope:string|null,access:string|null} $data
      * @return string|null
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#signin
+     * @since SurrealDB-v1.0.0 - The access parameter was added in SurrealDB-v2.0.0
      */
     public function signin(array $data): ?string
     {
@@ -221,10 +228,11 @@ final class Surreal
 
     /**
      * Signup a new scoped user.
-     * @param array{namespace:string|null,database:string|null,scope:string|null} $data
+     * @param array{namespace:string|null,database:string|null,scope:string|null,access:string|null} $data
      * @return string|null
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#signup
+     * @since SurrealDB-v1.0.0 - The access parameter was added in SurrealDB-v2.0.0
      */
     public function signup(array $data): ?string
     {
@@ -438,9 +446,9 @@ final class Surreal
             $version = $this->version();
 
             // remove the prefix "surrealdb-" from the version
-            $version = str_replace("surrealdb-", "", $version);
+            $this->remoteVersion = $version = str_replace("surrealdb-", "", $version);
 
-            if (!Semver::satisfies($this->version, $versionRange)) {
+            if (!Semver::satisfies($version, $versionRange)) {
                 throw new Exception("Unsupported SurrealDB version. Supported version range: $versionRange");
             }
         }
