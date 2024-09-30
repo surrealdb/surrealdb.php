@@ -17,10 +17,11 @@ DEFINE TABLE user
     PERMISSIONS
         FOR select WHERE id = $auth.id;
 
-DEFINE SCOPE account SESSION 24h
+DEFINE ACCESS account ON DATABASE TYPE RECORD
     SIGNUP ( CREATE user SET email = $email, pass = crypto::argon2::generate($pass) )
-    SIGNIN ( SELECT * FROM user WHERE email = $email AND crypto::argon2::compare(pass, $pass)
-);
+    SIGNIN ( SELECT * FROM user WHERE email = $email AND crypto::argon2::compare(pass, $pass))
+    DURATION FOR TOKEN 15m, FOR SESSION 12h
+;
 
 DEFINE USER admin ON ROOT PASSWORD "123!" ROLES OWNER;
 DEFINE USER julian ON NAMESPACE PASSWORD "123!" ROLES EDITOR;

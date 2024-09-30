@@ -38,21 +38,15 @@ final class Helpers
         return [$target["namespace"], $target["database"]];
     }
 
-    /**
-     * @throws SurrealException
-     */
-    public static function processAuthVariables(
-        array  $auth,
-        string $version
-    ): array
+    public static function processAuthVariables(array $auth): array
     {
         $map = ["namespace" => "NS", "database" => "DB"];
-        $v1 = Semver::satisfies($version, ">=1.0.0 <2.0.0");
 
-        $map = match (true) {
-            $v1 => array_merge($map, ["scope" => "SC"]),
-            default => array_merge($map, ["access" => "AC"])
-        };
+        if (array_key_exists("access", $auth)) {
+            $map["access"] = "AC";
+        } else if(array_key_exists("scope", $auth)) {
+            $map["scope"] = "SC";
+        }
 
         foreach ($map as $key => $value) {
             if (array_key_exists($key, $auth)) {

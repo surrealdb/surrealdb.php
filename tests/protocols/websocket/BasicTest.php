@@ -72,9 +72,9 @@ class BasicTest extends TestCase
         $token = $db->signin([
             "email" => "beau@user.nl",
             "pass" => "123!",
-            "NS" => "test",
-            "DB" => "test",
-            "SC" => "account"
+            "namespace" => "test",
+            "database" => "test",
+            "scope" => "account"
         ]);
 
         $this->assertIsString($token);

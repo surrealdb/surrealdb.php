@@ -53,12 +53,11 @@ class RangeHelper
             return "";
         }
 
-        $value = $bound->value;
+        $value = Helpers::toSurrealQLString($bound->value);
 
-        if($bound instanceof Range) {
-            return "(" . Helpers::toSurrealQLString($value) . ")";
-        }
-
-        return RecordIdHelper::toSurrealqlString($value);
+        return match (true) {
+            $bound instanceof BoundIncluded => "(" . $value . ")",
+            default => $value,
+        };
     }
 }

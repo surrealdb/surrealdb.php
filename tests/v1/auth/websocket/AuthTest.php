@@ -1,6 +1,6 @@
 <?php
 
-namespace protocol\websocket;
+namespace v1\auth\websocket;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
@@ -14,6 +14,7 @@ class AuthTest extends TestCase
     private function getDb(): Surreal
     {
         $db = new Surreal();
+
         $db->connect("ws://127.0.0.1:8000/rpc", [
             "namespace" => "test",
             "database" => "test"
@@ -49,9 +50,9 @@ class AuthTest extends TestCase
         $token = $db->signup([
             "email" => "mario2",
             "pass" => "supermario",
-            "NS" => "test",
-            "DB" => "test",
-            "SC" => "account"
+            "namespace" => "test",
+            "database" => "test",
+            "scope" => "account"
         ]);
 
         $this->assertIsString($token, "The token is not a string");
@@ -59,9 +60,9 @@ class AuthTest extends TestCase
         $token = $db->signin([
             "email" => "mario2",
             "pass" => "supermario",
-            "NS" => "test",
-            "DB" => "test",
-            "SC" => "account"
+            "namespace" => "test",
+            "database" => "test",
+            "scope" => "account"
         ]);
 
         $this->assertIsString($token, "The token is not a string");
@@ -79,9 +80,9 @@ class AuthTest extends TestCase
         $token = $db->signup([
             "email" => "mario",
             "pass" => "supermario",
-            "NS" => "test",
-            "DB" => "test",
-            "SC" => "account"
+            "namespace" => "test",
+            "database" => "test",
+            "scope" => "account"
         ]);
 
         $this->assertIsString($token);
@@ -89,9 +90,9 @@ class AuthTest extends TestCase
         $token = $db->signin([
             "email" => "mario",
             "pass" => "supermario",
-            "NS" => "test",
-            "DB" => "test",
-            "SC" => "account"
+            "namespace" => "test",
+            "database" => "test",
+            "scope" => "account"
         ]);
 
         $this->assertIsString($token);

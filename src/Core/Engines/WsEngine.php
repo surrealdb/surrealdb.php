@@ -9,7 +9,6 @@ use Surreal\Core\Curl\HttpContentFormat;
 use Surreal\Core\Responses\Types\RpcResponse;
 use Surreal\Core\Results\RpcResult;
 use Surreal\Core\RpcMessage;
-use Surreal\Core\Utils\Subscriber;
 use WebSocket\Client as WebsocketClient;
 use WebSocket\Middleware\{CloseHandler, PingResponder};
 
@@ -17,9 +16,6 @@ class WsEngine extends AbstractEngine
 {
     private WebsocketClient $client;
     private int $incrementalId = 0;
-
-    /** @var Subscriber[] */
-    private array $subscribers = [];
 
     /**
      * @param string $host

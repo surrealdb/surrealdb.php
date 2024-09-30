@@ -1,6 +1,6 @@
 <?php
 
-namespace protocol\http;
+namespace v2\auth\http;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
@@ -12,6 +12,7 @@ class AuthTest extends TestCase
     private function getDb(): Surreal
     {
         $db = new Surreal();
+        
         $db->connect("http://localhost:8000", [
             "namespace" => "test",
             "database" => "test"
@@ -33,9 +34,9 @@ class AuthTest extends TestCase
         $token = $db->signup([
             "email" => "beau.one",
             "pass" => "beau.one",
-            "NS" => "test",
-            "DB" => "test",
-            "SC" => "account"
+            "namespace" => "test",
+            "database" => "test",
+            "scope" => "account"
         ]);
 
         $this->assertIsString($token);
@@ -44,9 +45,9 @@ class AuthTest extends TestCase
         $token = $db->signin([
             "email" => "beau.one",
             "pass" => "beau.one",
-            "NS" => "test",
-            "DB" => "test",
-            "SC" => "account"
+            "namespace" => "test",
+            "database" => "test",
+            "scope" => "account"
         ]);
 
         $this->assertIsString($token);
@@ -82,7 +83,7 @@ class AuthTest extends TestCase
         $jwt = $db->signin([
             "user" => "julian",
             "pass" => "123!",
-            "NS" => "test"
+            "namespace" => "test"
         ]);
 
         $this->assertIsString($jwt);
@@ -101,8 +102,8 @@ class AuthTest extends TestCase
         $token = $db->signin([
             "user" => "beau",
             "pass" => "123!",
-            "NS" => "test",
-            "DB" => "test"
+            "namespace" => "test",
+            "database" => "test"
         ]);
 
         $this->assertIsString($token);

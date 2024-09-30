@@ -21,10 +21,10 @@ final class Surreal
 
     /**
      * Current remote SurrealDB version
-     * @var string SurrealDB version
+     * @var ?string SurrealDB version
      * @example "1.0.0 or 2.0.1"
      */
-    private string $remoteVersion;
+    private ?string $remoteVersion = null;
 
     /**
      * @param AbstractEngine $engine
@@ -221,8 +221,10 @@ final class Surreal
      */
     public function signin(array $data): ?string
     {
-        $data = Helpers::processAuthVariables($data);
-        $message = RpcMessage::create("signin")->setParams([$data]);
+        $message = RpcMessage::create("signin")->setParams([
+            Helpers::processAuthVariables($data, $this->remoteVersion)
+        ]);
+
         return $this->engine->rpc($message);
     }
 
@@ -236,7 +238,10 @@ final class Surreal
      */
     public function signup(array $data): ?string
     {
-        $message = RpcMessage::create("signup")->setParams([$data]);
+        $message = RpcMessage::create("signup")->setParams([
+            Helpers::processAuthVariables($data, $this->remoteVersion)
+        ]);
+
         return $this->engine->rpc($message);
     }
 
@@ -257,6 +262,21 @@ final class Surreal
 	): ?array
     {
         $message = RpcMessage::create("relate")->setParams([$from, $table, $to, $data]);
+        return $this->engine->rpc($message);
+    }
+
+    /**
+     * This method inserts a new relation record into the database.
+     * @param string|Table $table
+     * @param array $data
+     * @return array{id:RecordId,in:RecordId,out:RecordId}
+     */
+    public function insertRelation(
+        string | Table $table,
+        array $data
+    ): array
+    {
+        $message = RpcMessage::create("insert_relation")->setParams([$table, $data]);
         return $this->engine->rpc($message);
     }
 
@@ -385,9 +405,9 @@ final class Surreal
 
     /**
      * Returns the status code of the current connection.
-     * @return int
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/http#status
+     * @return int - 200 or 500
      */
     public function status(): int
     {
@@ -484,11 +504,16 @@ final class Surreal
 
     /**
      * Call a SurrealDB RPC method with the given message.
-     * @param RpcMessage $message
+     * @param string $method
+     * @param array $params
      * @return mixed
      */
-    public function rpc(RpcMessage $message): mixed
+    public function rpc(
+        string $method,
+        array $params
+    ): mixed
     {
+        $message = RpcMessage::create($method)->setParams($params);
         return $this->engine->rpc($message);
     }
 }
