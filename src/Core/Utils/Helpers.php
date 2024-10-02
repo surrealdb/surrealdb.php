@@ -2,17 +2,15 @@
 
 namespace Surreal\Core\Utils;
 
-use Composer\Semver\Semver;
-use Surreal\Cbor\Types\AbstractGeometry;
+use Surreal\Cbor\Abstract\AbstractGeometry;
 use Surreal\Cbor\Types\Decimal;
 use Surreal\Cbor\Types\Duration;
 use Surreal\Cbor\Types\Future;
 use Surreal\Cbor\Types\Range;
-use Surreal\Cbor\Types\RecordId;
-use Surreal\Cbor\Types\StringRecordId;
+use Surreal\Cbor\Types\Record\RecordId;
+use Surreal\Cbor\Types\Record\StringRecordId;
 use Surreal\Cbor\Types\Table;
 use Surreal\Cbor\Types\Uuid;
-use Surreal\Exceptions\SurrealException;
 
 final class Helpers
 {

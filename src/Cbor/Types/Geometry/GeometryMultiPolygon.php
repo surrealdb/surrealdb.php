@@ -1,11 +1,13 @@
 <?php
 
-namespace Surreal\Cbor\Types;
+namespace Surreal\Cbor\Types\Geometry;
+
+use Surreal\Cbor\Abstract\AbstractGeometry;
 
 class GeometryMultiPolygon extends AbstractGeometry
 {
     /**
-     * @var array<GeometryPolygon, array<GeometryPolygon>> $polygons
+     * @var GeometryPolygon $polygons
      */
     public array $polygons;
 

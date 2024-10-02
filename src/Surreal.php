@@ -5,8 +5,8 @@ namespace Surreal;
 use Composer\Semver\Semver;
 use Exception;
 use Surreal\Cbor\Types\None;
-use Surreal\Cbor\Types\RecordId;
-use Surreal\Cbor\Types\StringRecordId;
+use Surreal\Cbor\Types\Record\RecordId;
+use Surreal\Cbor\Types\Record\StringRecordId;
 use Surreal\Cbor\Types\Table;
 use Surreal\Core\AbstractEngine;
 use Surreal\Core\Engines\HttpEngine;
@@ -239,7 +239,7 @@ final class Surreal
     public function signup(array $data): ?string
     {
         $message = RpcMessage::create("signup")->setParams([
-            Helpers::processAuthVariables($data, $this->remoteVersion)
+            Helpers::processAuthVariables($data)
         ]);
 
         return $this->engine->rpc($message);
@@ -262,7 +262,14 @@ final class Surreal
 	): ?array
     {
         $message = RpcMessage::create("relate")->setParams([$from, $table, $to, $data]);
-        return $this->engine->rpc($message);
+        $response = $this->engine->rpc($message);
+
+        // check if the response is an array and the index 0 is in the array
+        if (is_array($response) && array_key_exists(0, $response)) {
+            return $response[0];
+        }
+
+        return null;
     }
 
     /**

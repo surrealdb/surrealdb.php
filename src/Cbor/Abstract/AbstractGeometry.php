@@ -1,6 +1,6 @@
 <?php
 
-namespace Surreal\Cbor\Types;
+namespace Surreal\Cbor\Abstract;
 
 use JsonSerializable;
 

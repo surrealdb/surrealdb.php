@@ -1,8 +1,9 @@
 <?php
 
-namespace Surreal\Cbor\Types;
+namespace Surreal\Cbor\Types\Geometry;
 
 use Brick\Math\Exception\MathException;
+use Surreal\Cbor\Abstract\AbstractGeometry;
 
 final class GeometryPolygon extends AbstractGeometry
 {

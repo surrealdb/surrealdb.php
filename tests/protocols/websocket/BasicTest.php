@@ -5,7 +5,7 @@ namespace protocol\websocket;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\Types\None;
-use Surreal\Cbor\Types\RecordId;
+use Surreal\Cbor\Types\Record\RecordId;
 use Surreal\Surreal;
 
 class BasicTest extends TestCase

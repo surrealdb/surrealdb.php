@@ -1,9 +1,10 @@
 <?php
 
-namespace Surreal\Cbor\Types;
+namespace Surreal\Cbor\Types\Geometry;
 
 use Brick\Math\BigDecimal;
 use Brick\Math\Exception\MathException;
+use Surreal\Cbor\Abstract\AbstractGeometry;
 
 final class GeometryPoint extends AbstractGeometry
 {

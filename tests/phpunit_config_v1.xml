@@ -11,7 +11,7 @@
       <directory>protocols/websocket</directory>
     </testsuite>
     <testsuite name="v1">
-      <directory>v2</directory>
+      <directory>v1</directory>
     </testsuite>
   </testsuites>
   <coverage>

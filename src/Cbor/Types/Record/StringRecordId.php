@@ -1,6 +1,6 @@
 <?php
 
-namespace Surreal\Cbor\Types;
+namespace Surreal\Cbor\Types\Record;
 
 final readonly class StringRecordId implements \JsonSerializable
 {

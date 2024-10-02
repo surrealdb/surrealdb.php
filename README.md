@@ -92,11 +92,11 @@ $person = $db->create("person", [
 ]); 
 
 // Get the person with the name "John Doe".
-$record = \Surreal\Cbor\Types\RecordId::create("person", "john");
+$record = \Surreal\Cbor\Types\Record\RecordId::create("person", "john");
 $person = $db->select($record);
 
 // Update a person record with a specific id
-$record = \Surreal\Cbor\Types\RecordId::create("person", "john");
+$record = \Surreal\Cbor\Types\Record\RecordId::create("person", "john");
 $person = $db->merge($record, ["age" => 31]);
 
 // Select all people records.

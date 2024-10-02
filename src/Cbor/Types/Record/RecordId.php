@@ -1,6 +1,6 @@
 <?php
 
-namespace Surreal\Cbor\Types;
+namespace Surreal\Cbor\Types\Record;
 
 use InvalidArgumentException;
 use Surreal\Cbor\Helpers\RecordIdHelper;

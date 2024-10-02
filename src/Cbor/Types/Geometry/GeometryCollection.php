@@ -1,6 +1,8 @@
 <?php
 
-namespace Surreal\Cbor\Types;
+namespace Surreal\Cbor\Types\Geometry;
+
+use Surreal\Cbor\Abstract\AbstractGeometry;
 
 class GeometryCollection extends AbstractGeometry
 {

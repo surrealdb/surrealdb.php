@@ -273,14 +273,14 @@ class HttpEngine extends AbstractEngine
             throw new Exception("Surreal is currently unavailable.", HttpStatus::BAD_GATEWAY->value);
         }
 
-        $type = curl_getinfo($this->client, CURLINFO_CONTENT_TYPE);
-        $body = curl_multi_getcontent($this->client);
+        $contentType = curl_getinfo($this->client, CURLINFO_CONTENT_TYPE);
+        $contentTypeResult = HttpContentFormat::tryFrom($contentType) ?? HttpContentFormat::UTF8;
 
-        $type = $type ? HttpContentFormat::from($type) : HttpContentFormat::UTF8;
-        $result = ResponseParser::parse($type, $body);
+        $body = curl_multi_getcontent($this->client);
+        $result = ResponseParser::parse($contentTypeResult, $body);
 
         /** @var $response ResponseInterface */
-        return $response::from($result, $type, $status);
+        return $response::from($result, $contentTypeResult, $status);
     }
 
     /**

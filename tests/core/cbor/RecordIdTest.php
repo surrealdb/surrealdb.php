@@ -3,7 +3,7 @@
 use Beau\CborPHP\exceptions\CborException;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\CBOR;
-use Surreal\Cbor\Types\RecordId;
+use Surreal\Cbor\Types\Record\RecordId;
 
 class RecordIdTest extends TestCase
 {

@@ -6,7 +6,7 @@ use JsonSerializable;
 
 class Future implements JsonSerializable
 {
-    private string $inner;
+    public string $inner;
 
     public function __construct(string $inner)
     {

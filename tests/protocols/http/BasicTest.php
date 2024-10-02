@@ -4,8 +4,7 @@ namespace protocol\http;
 
 use Exception;
 use PHPUnit\Framework\TestCase;
-use Surreal\Cbor\Types\RecordId;
-use Surreal\Core\Engines\HttpEngine;
+use Surreal\Cbor\Types\Record\RecordId;
 use Surreal\Exceptions\SurrealException;
 use Surreal\Surreal;
 

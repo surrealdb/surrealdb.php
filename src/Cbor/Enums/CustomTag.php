@@ -19,6 +19,12 @@ enum CustomTag: int
 	case CUSTOM_DATETIME = 12;
 	case STRING_DURATION = 13;
 	case CUSTOM_DURATION = 14;
+    case FUTURE = 15;
+
+    // Ranges
+    case RANGE = 49;
+    case BOUND_INCLUDED = 50;
+    case BOUND_EXCLUDED = 51;
 
 	// Custom Geometries
 	case GEOMETRY_POINT = 88;
