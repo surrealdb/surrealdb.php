@@ -42,7 +42,7 @@ class RecordIdHelper
                 !($code > 96 && $code < 123) && // lower alpha (a-z)
                 !($code === 95) // underscore (_)
             ) {
-                return "⟨" . str_replace("⟩", "⟩", $ident) . "⟩";
+                return "⟨" . str_replace("⟩", "\\⟩", $ident) . "⟩";
             }
         }
 
