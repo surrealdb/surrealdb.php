@@ -4,16 +4,25 @@ namespace Surreal\Cbor\Types\Record;
 
 use InvalidArgumentException;
 use Surreal\Cbor\Helpers\RecordIdHelper;
+use Surreal\Cbor\Types\Table;
 
 final class RecordId implements \JsonSerializable
 {
     private string $table;
     private string|int|array $id;
 
-    public function __construct(string $table, string|int|array $id)
+    public function __construct(Table|string $table, string|int|array $id)
     {
-        $this->table = $table;
-        $this->id = $id;
+        $this->table = match (true) {
+            is_string($table) => $table,
+            $table instanceof Table => $table->toString(),
+            default => throw new InvalidArgumentException("Table part is not valid")
+        };
+
+        $this->id = match (RecordIdHelper::isValidIdPart($table)) {
+            true => $id,
+            default => throw new InvalidArgumentException("Id part is not valid")
+        };
     }
 
     /**
@@ -53,9 +62,9 @@ final class RecordId implements \JsonSerializable
     {
         $tb = RecordIdHelper::escapeIdent($this->table);
 
-        if(is_numeric($this->id)) {
+        if (is_numeric($this->id)) {
             $id = RecordIdHelper::escapeNumber($this->id);
-        } else if(is_string($this->id)) {
+        } else if (is_string($this->id)) {
             $id = RecordIdHelper::escapeIdent($this->id);
         } else {
             $id = json_encode($this->id);
@@ -93,7 +102,7 @@ final class RecordId implements \JsonSerializable
 
     public function equals(RecordId|string $recordId): bool
     {
-        if(is_string($recordId)) {
+        if (is_string($recordId)) {
             return $this->toString() === $recordId;
         }
 
