@@ -147,7 +147,7 @@ class QueryTest extends TestCase
         $kind = Table::create("table");
         $to = RecordId::create("relate", "testB");
 
-        $response = $db->relate($from, $kind, $to);
+        [$response] = $db->relate($from, $kind, $to);
 
         $this->assertIsArray($response);
 
@@ -157,7 +157,7 @@ class QueryTest extends TestCase
 
         // test with content data
         $data = ["a" => 1, "b" => 2];
-        $response = $db->relate($from, $kind, $to, $data);
+        [$response] = $db->relate($from, $kind, $to, $data);
 
         $this->assertIsArray($response);
 
