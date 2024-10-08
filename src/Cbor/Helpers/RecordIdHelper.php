@@ -59,7 +59,7 @@ class RecordIdHelper
             return RecordIdHelper::escapeNumber($value);
         }
 
-        return json_encode($value);
+        return Helpers::toSurrealQLString($value);
     }
 
     public static function escapeNumber(int $number): string

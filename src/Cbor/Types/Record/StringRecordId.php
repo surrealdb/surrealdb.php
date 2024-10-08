@@ -2,7 +2,9 @@
 
 namespace Surreal\Cbor\Types\Record;
 
-final readonly class StringRecordId implements \JsonSerializable
+use Surreal\Cbor\Interfaces\RecordInterface;
+
+final readonly class StringRecordId implements RecordInterface
 {
     public string $recordId;
 

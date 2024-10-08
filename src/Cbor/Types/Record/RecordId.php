@@ -4,9 +4,10 @@ namespace Surreal\Cbor\Types\Record;
 
 use InvalidArgumentException;
 use Surreal\Cbor\Helpers\RecordIdHelper;
+use Surreal\Cbor\Interfaces\RecordInterface;
 use Surreal\Cbor\Types\Table;
 
-final class RecordId implements \JsonSerializable
+final class RecordId implements RecordInterface
 {
     private string $table;
     private string|int|array $id;
