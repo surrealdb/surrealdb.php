@@ -44,14 +44,9 @@ class CBOR
 
             return match ($value::class) {
 
-                // Tags from spec
-                DateTimeInterface::class => new TaggedValue(
-                    CustomTag::SPEC_DATETIME->value,
-                    $value->format(DateTimeInterface::ATOM)
-                ),
-
+                DateTime::class,
                 DateTimeImmutable::class => new TaggedValue(
-                    CustomTag::CUSTOM_DATETIME->value,
+                    CustomTag::SPEC_DATETIME->value,
                     $value->format(DateTimeInterface::ATOM)
                 ),
 
