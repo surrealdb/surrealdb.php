@@ -10,7 +10,16 @@ jobs:
 
   check_and_test:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        version: [1.4.2, 1.5.4, 2.0.4]
+        include:
+          - version: 1.4.2
+            coverage: test-coverage-v1
+          - version: 1.5.4
+            coverage: test-coverage-v1
+          - version: 2.0.4
+            coverage: test-coverage-v2
     steps:
 
     - name: Checkout repository
@@ -28,16 +37,17 @@ jobs:
     - name: SurrealDB in Github Actions
       uses: surrealdb/setup-surreal@v1
       with:
+        surrealdb_version: ${{ matrix.version }}
         surrealdb_auth: true
         surrealdb_username: 'root'
         surrealdb_password: 'root'
         surrealdb_additional_args: --allow-all
 
     - name: Wait for SurrealDB to be ready
-      run: while ! curl --output /dev/null --silent --head --fail http://localhost:8000; do sleep 1 && echo -n .; done;
+      run: bash -c 'echo -n "Waiting port 8000 .."; for _ in `seq 1 40`; do echo -n .; sleep 0.25; nc -z localhost 8000 && echo " Open." && exit ; done; echo " Timeout!" >&2; exit 1'
 
     - name: Print SurrealDB version
       run: curl -X GET http://localhost:8000/version
 
     - name: Run tests
-      run: vendor/bin/phpunit -c phpunit.xml
+      run: composer ${{ matrix.coverage }}
