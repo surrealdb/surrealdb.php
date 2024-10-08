@@ -12,13 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: [1.4.2, 1.5.4, 2.0.4]
+        version: [v1.4.2, v1.5.4, v2.0.4]
         include:
-          - version: 1.4.2
+          - version: v1.4.2
             coverage: test-coverage-v1
-          - version: 1.5.4
+          - version: v1.5.4
             coverage: test-coverage-v1
-          - version: 2.0.4
+          - version: v2.0.4
             coverage: test-coverage-v2
     steps:
 
