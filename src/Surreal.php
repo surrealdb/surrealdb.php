@@ -4,6 +4,7 @@ namespace Surreal;
 
 use Composer\Semver\Semver;
 use Exception;
+use Surreal\Cbor\Interfaces\RecordInterface;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\Record\RecordId;
 use Surreal\Cbor\Types\Record\StringRecordId;
@@ -18,13 +19,6 @@ use Surreal\Exceptions\SurrealException;
 final class Surreal
 {
     const SUPPORTED_SURREALDB_VERSION_RANGE = ">= 1.4.2 || >= 2.0.0";
-
-    /**
-     * Current remote SurrealDB version
-     * @var ?string SurrealDB version
-     * @example "1.0.0 or 2.0.1"
-     */
-    private ?string $remoteVersion = null;
 
     /**
      * @param AbstractEngine $engine
@@ -222,7 +216,7 @@ final class Surreal
     public function signin(array $data): ?string
     {
         $message = RpcMessage::create("signin")->setParams([
-            Helpers::processAuthVariables($data, $this->remoteVersion)
+            Helpers::processAuthVariables($data)
         ]);
 
         return $this->engine->rpc($message);
@@ -247,29 +241,27 @@ final class Surreal
 
     /**
      * Create a relation between two records. The data parameter is optional.
-     * @param RecordId|StringRecordId $from
-     * @param Table|string $table
-     * @param RecordId|StringRecordId $to
+     * @param RecordInterface|RecordInterface[] $from
+     * @param Table|string $thing
+     * @param RecordInterface|RecordInterface[] $to
      * @param array|null $data
      * @return array{id:RecordId, in:RecordId, out:RecordId}|null
      * @since SurrealDB-v1.5.0
      */
     public function relate(
-		RecordId|StringRecordId $from, 
-		Table|string $table, 
-		RecordId|StringRecordId $to, 
+        RecordInterface|array $from,
+		Table|string $thing,
+        RecordInterface|array $to,
 		?array $data = null
 	): ?array
     {
-        $message = RpcMessage::create("relate")->setParams([$from, $table, $to, $data]);
+        $message = RpcMessage::create("relate")->setParams([$from, $thing, $to, $data]);
         $response = $this->engine->rpc($message);
 
-        // check if the response is an array and the index 0 is in the array
-        if (is_array($response) && array_key_exists(0, $response)) {
-            return $response[0];
-        }
-
-        return null;
+        return match(Helpers::isAssoc($response)) {
+            true => [$response],
+            default => $response
+        };
     }
 
     /**
@@ -473,7 +465,7 @@ final class Surreal
             $version = $this->version();
 
             // remove the prefix "surrealdb-" from the version
-            $this->remoteVersion = $version = str_replace("surrealdb-", "", $version);
+            $version = str_replace("surrealdb-", "", $version);
 
             if (!Semver::satisfies($version, $versionRange)) {
                 throw new Exception("Unsupported SurrealDB version. Supported version range: $versionRange");
