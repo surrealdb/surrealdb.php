@@ -61,33 +61,4 @@ class BasicTest extends TestCase
 
         $db->close();
     }
-
-    /**
-     * @throws Exception
-     */
-    public function testInfo(): void
-    {
-        $db = $this->getDb();
-
-        $token = $db->signin([
-            "email" => "beau@user.nl",
-            "pass" => "123!",
-            "namespace" => "test",
-            "database" => "test",
-            "scope" => "account"
-        ]);
-
-        $this->assertIsString($token);
-        $db->authenticate($token);
-
-        $info = $db->info();
-
-        $this->assertIsArray($info);
-
-        $this->assertArrayHasKey("email", $info);
-        $this->assertArrayHasKey("id", $info);
-        $this->assertArrayHasKey("pass", $info);
-
-        $this->assertInstanceOf(RecordId::class, $info["id"]);
-    }
 }

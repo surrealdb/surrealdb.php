@@ -5,6 +5,8 @@ namespace v2\auth\http;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Surreal\Cbor\Types\None;
+use Surreal\Cbor\Types\Record\RecordId;
+use Surreal\Exceptions\SurrealException;
 use Surreal\Surreal;
 
 class AuthTest extends TestCase
@@ -118,6 +120,37 @@ class AuthTest extends TestCase
     {
         $db = $this->getDb();
         $this->assertInstanceOf(None::class, $db->invalidate());
+        $db->close();
+    }
+
+    /**
+     * @throws SurrealException
+     * @throws Exception
+     */
+    public function testInfo(): void
+    {
+        $db = $this->getDb();
+
+        $jwt = $db->signin([
+            "email" => "beau@user.nl",
+            "pass" => "123!",
+            "namespace" => "test",
+            "database" => "test",
+            "scope" => "account"
+        ]);
+
+        $db->authenticate($jwt);
+
+        $info = $db->info();
+
+        $this->assertIsArray($info);
+
+        $this->assertArrayHasKey("email", $info);
+        $this->assertArrayHasKey("id", $info);
+        $this->assertArrayHasKey("pass", $info);
+
+        $this->assertInstanceOf(RecordId::class, $info["id"]);
+
         $db->close();
     }
 }
