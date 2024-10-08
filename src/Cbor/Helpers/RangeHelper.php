@@ -5,7 +5,6 @@ namespace Surreal\Cbor\Helpers;
 use Beau\CborPHP\classes\TaggedValue;
 use Surreal\Cbor\Abstract\AbstractBound;
 use Surreal\Cbor\Enums\CustomTag;
-use Surreal\Cbor\Interfaces\BoundInterface;
 use Surreal\Cbor\Types\Bound\BoundExcluded;
 use Surreal\Cbor\Types\Bound\BoundIncluded;
 use Surreal\Cbor\Types\None;
