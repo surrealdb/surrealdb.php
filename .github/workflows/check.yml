@@ -34,19 +34,13 @@ jobs:
       continue-on-error: true
 
     - name: SurrealDB in Github Actions
-      uses: surrealdb/setup-surreal@v1
+      uses: surrealdb/setup-surreal@v2
       with:
         surrealdb_version: ${{ matrix.version }}
         surrealdb_auth: true
         surrealdb_username: 'root'
         surrealdb_password: 'root'
         surrealdb_additional_args: --allow-all
-
-    - name: Wait for SurrealDB to be ready
-      run: bash -c 'echo -n "Waiting port 8000 .."; for _ in `seq 1 40`; do echo -n .; sleep 0.5; curl http://127.0.0.1:8000/health && echo " Open." && exit ; done; echo " Timeout!" >&2; exit 1'
-
-    - name: Print SurrealDB version
-      run: curl -X GET http://localhost:8000/version
 
     - name: Run tests
       run: composer ${{ matrix.coverage }}
