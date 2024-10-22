@@ -41,6 +41,7 @@ jobs:
         surrealdb_username: 'root'
         surrealdb_password: 'root'
         surrealdb_additional_args: --allow-all
+        surrealdb_strict: true
 
     - name: Run tests
       run: composer ${{ matrix.coverage }}
