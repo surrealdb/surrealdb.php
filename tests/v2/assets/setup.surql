@@ -22,6 +22,12 @@ DEFINE TABLE likes
 DEFINE TABLE test
     PERMISSIONS FULL;
 
+DEFINE TABLE insert_relation
+    PERMISSIONS FULL;
+
+DEFINE TABLE upsert
+    PERMISSIONS FULL;
+
 DEFINE TABLE user
     PERMISSIONS
         FOR select WHERE id = $auth.id;
