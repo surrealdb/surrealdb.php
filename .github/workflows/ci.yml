@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+
+  check_and_test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: [v1.5.5, v2.0.4]
+        include:
+          - version: v1.5.5
+            coverage: test-coverage-v1
+          - version: v2.0.4
+            coverage: test-coverage-v2
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+      # setup php version
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+
+    - name: Setup Composer
+      uses: php-actions/composer@v6
+      continue-on-error: true
+
+    - name: SurrealDB in Github Actions
+      uses: surrealdb/setup-surreal@v2
+      with:
+        surrealdb_version: ${{ matrix.version }}
+        surrealdb_auth: true
+        surrealdb_username: 'root'
+        surrealdb_password: 'root'
+        surrealdb_additional_args: --allow-all
+        surrealdb_strict: true
+
+    - name: Run tests
+      run: composer ${{ matrix.coverage }}

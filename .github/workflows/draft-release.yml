@@ -1,0 +1,52 @@
+name: Draft Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      TAG_VERSION:
+        description: 'Tag version'
+        required: true
+      RELEASE_MESSAGE:
+        description: 'Release message'
+        required: false
+
+jobs:
+
+  ci:
+    name: CI Job
+    uses: ./.github/workflows/ci.yml
+
+  check_and_test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: [v1.5.5, v2.0.4]
+        include:
+          - version: v1.5.5
+            coverage: test-coverage-v1
+          - version: v2.0.4
+            coverage: test-coverage-v2
+    steps:
+
+      # setup php version
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+
+    - name: Setup Composer
+      uses: php-actions/composer@v6
+      continue-on-error: true
+
+    - name: SurrealDB in Github Actions
+      uses: surrealdb/setup-surreal@v2
+      with:
+        surrealdb_version: ${{ matrix.version }}
+        surrealdb_auth: true
+        surrealdb_username: 'root'
+        surrealdb_password: 'root'
+        surrealdb_additional_args: --allow-all
+        surrealdb_strict: true
+
+    - name: Run tests
+      run: composer ${{ matrix.coverage }}

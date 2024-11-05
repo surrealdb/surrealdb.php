@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" displayDetailsOnTestsThatTriggerWarnings="true" colors="true" bootstrap="v1/bootstrap.php" stopOnFailure="false" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd">
+  <testsuites>
+    <testsuite name="core">
+      <directory>core</directory>
+    </testsuite>
+    <testsuite name="protocol-http">
+      <directory>protocols/http</directory>
+    </testsuite>
+    <testsuite name="protocol-websocket">
+      <directory>protocols/websocket</directory>
+    </testsuite>
+    <testsuite name="v1">
+      <directory>v1</directory>
+    </testsuite>
+  </testsuites>
+  <coverage>
+    <report>
+      <html outputDirectory="../coverage/v1"/>
+    </report>
+  </coverage>
+  <source>
+    <include>
+      <directory suffix=".php">../src</directory>
+    </include>
+  </source>
+</phpunit>

@@ -6,26 +6,29 @@ use Beau\CborPHP\CborDecoder;
 use Beau\CborPHP\CborEncoder;
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\exceptions\CborException;
+use Brick\Math\BigDecimal;
 use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Exception;
-use Ramsey\Uuid\Uuid;
-use Ramsey\Uuid\UuidInterface;
 use Surreal\Cbor\Enums\CustomTag;
+use Surreal\Cbor\Helpers\RangeHelper;
 use Surreal\Cbor\Types\Duration;
-use Surreal\Cbor\Types\GeometryCollection;
-use Surreal\Cbor\Types\GeometryLine;
-use Surreal\Cbor\Types\GeometryMultiLine;
-use Surreal\Cbor\Types\GeometryMultiPoint;
-use Surreal\Cbor\Types\GeometryMultiPolygon;
-use Surreal\Cbor\Types\GeometryPoint;
-use Surreal\Cbor\Types\GeometryPolygon;
+use Surreal\Cbor\Types\Future;
+use Surreal\Cbor\Types\Geometry\GeometryCollection;
+use Surreal\Cbor\Types\Geometry\GeometryLine;
+use Surreal\Cbor\Types\Geometry\GeometryMultiLine;
+use Surreal\Cbor\Types\Geometry\GeometryMultiPoint;
+use Surreal\Cbor\Types\Geometry\GeometryMultiPolygon;
+use Surreal\Cbor\Types\Geometry\GeometryPoint;
+use Surreal\Cbor\Types\Geometry\GeometryPolygon;
 use Surreal\Cbor\Types\None;
-use Surreal\Cbor\Types\RecordId;
-use Surreal\Cbor\Types\StringRecordId;
+use Surreal\Cbor\Types\Range;
+use Surreal\Cbor\Types\Record\RecordId;
+use Surreal\Cbor\Types\Record\RecordIdRange;
+use Surreal\Cbor\Types\Record\StringRecordId;
 use Surreal\Cbor\Types\Table;
-use Brick\Math\BigDecimal;
+use Surreal\Cbor\Types\Uuid;
 
 class CBOR
 {
@@ -41,14 +44,9 @@ class CBOR
 
             return match ($value::class) {
 
-                // Tags from spec
-                DateTimeInterface::class => new TaggedValue(
-                    CustomTag::SPEC_DATETIME->value,
-                    $value->format(DateTimeInterface::ATOM)
-                ),
-
+                DateTime::class,
                 DateTimeImmutable::class => new TaggedValue(
-                    CustomTag::CUSTOM_DATETIME->value,
+                    CustomTag::SPEC_DATETIME->value,
                     $value->format(DateTimeInterface::ATOM)
                 ),
 
@@ -60,7 +58,7 @@ class CBOR
                 // Custom classes
                 Table::class => new TaggedValue(
                     CustomTag::TABLE->value,
-                    $value->getTable()
+                    $value->table
                 ),
 
                 RecordId::class => new TaggedValue(
@@ -78,7 +76,7 @@ class CBOR
                     $value->toFloat()
                 ),
 
-                UuidInterface::class => new TaggedValue(
+                Types\Uuid::class => new TaggedValue(
                     CustomTag::SPEC_UUID->value,
                     $value
                 ),
@@ -118,6 +116,16 @@ class CBOR
                     $value->collection
                 ),
 
+                Future::class => new TaggedValue(
+                    CustomTag::FUTURE->value,
+                    $value->inner
+                ),
+
+                RecordIdRange::class => new TaggedValue(
+                    CustomTag::RECORD_ID->value,
+                    RangeHelper::rangeToCbor([$value->begin, $value->end])
+                ),
+
                 default => $value
             };
         });
@@ -141,10 +149,17 @@ class CBOR
                 CustomTag::SPEC_DATETIME => new DateTime($tagged->value),
                 CustomTag::NONE => new None(),
 
-                CustomTag::TABLE => $tagged->value,
-                CustomTag::RECORD_ID => RecordId::fromArray($tagged->value),
-                CustomTag::STRING_UUID => Uuid::fromString($tagged->value),
+                CustomTag::TABLE => new Table($tagged->value),
 
+                CustomTag::RECORD_ID => $tagged->value[1] instanceof Range ?
+                    new RecordIdRange(
+                        $tagged->value[0],
+                        $tagged->value[1]->begin,
+                        $tagged->value[1]->end
+                    ) :
+                    RecordId::fromArray($tagged->value),
+
+                CustomTag::STRING_UUID => Uuid::fromString($tagged->value),
                 CustomTag::STRING_DECIMAL => BigDecimal::of($tagged->value),
 
                 CustomTag::CUSTOM_DATETIME => (new DateTime())
@@ -152,7 +167,7 @@ class CBOR
                     ->setTime(0, 0, 0, $tagged->value[1]),
 
                 CustomTag::STRING_DURATION => new Duration($tagged->value),
-                CustomTag::CUSTOM_DURATION => Duration::fromCborCustomDuration([$tagged->value[0], $tagged->value[1]]),
+                CustomTag::CUSTOM_DURATION => Duration::fromCompact([$tagged->value[0], $tagged->value[1]]),
 
                 CustomTag::SPEC_UUID => Uuid::fromString($tagged->value->getByteString()),
 
@@ -163,6 +178,9 @@ class CBOR
                 CustomTag::GEOMETRY_MULTILINE => new GeometryMultiLine($tagged->value),
                 CustomTag::GEOMETRY_MULTIPOLYGON => new GeometryMultiPolygon($tagged->value),
                 CustomTag::GEOMETRY_COLLECTION => new GeometryCollection($tagged->value),
+
+                CustomTag::RANGE => new Range(...RangeHelper::cborToRange($tagged->value)),
+                CustomTag::FUTURE => new Future($tagged->value),
 
                 default => throw new CborException("Unknown tag: " . $tagged->tag)
             };

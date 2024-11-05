@@ -2,12 +2,12 @@
 
 namespace Surreal;
 
-use Beau\CborPHP\exceptions\CborException;
 use Composer\Semver\Semver;
 use Exception;
+use Surreal\Cbor\Interfaces\RecordInterface;
 use Surreal\Cbor\Types\None;
-use Surreal\Cbor\Types\RecordId;
-use Surreal\Cbor\Types\StringRecordId;
+use Surreal\Cbor\Types\Record\RecordId;
+use Surreal\Cbor\Types\Record\StringRecordId;
 use Surreal\Cbor\Types\Table;
 use Surreal\Core\AbstractEngine;
 use Surreal\Core\Engines\HttpEngine;
@@ -18,7 +18,7 @@ use Surreal\Exceptions\SurrealException;
 
 final class Surreal
 {
-    const SUPPORTED_SURREALDB_VERSION_RANGE = ">= 1.4.2 < 2.0.0";
+    const SUPPORTED_SURREALDB_VERSION_RANGE = ">= 1.4.2 || >= 2.0.0";
 
     /**
      * @param AbstractEngine $engine
@@ -44,8 +44,6 @@ final class Surreal
      * @param string $name
      * @param mixed $value
      * @return null
-     * @throws CborException
-     * @throws SurrealException
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#let
      */
     public function let(string $name, mixed $value): null
@@ -58,8 +56,6 @@ final class Surreal
      * Unset a parameter from the current session.
      * @param string $name
      * @return null
-     * @throws CborException
-     * @throws SurrealException
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#unset
      */
     public function unset(string $name): null
@@ -71,7 +67,7 @@ final class Surreal
     /**
      * Returns auth information of the current session
      * @returns array
-     * @throws Exception|SurrealException
+     * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#info
      */
     public function info(): None|array
@@ -97,7 +93,7 @@ final class Surreal
      * @param string $query
      * @param array $params
      * @return array|null
-     * @throws CborException|Exception
+     * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#query
      */
     public function query(string $query, array $params = []): ?array
@@ -108,9 +104,8 @@ final class Surreal
 
     /**
      * Selects a record or the whole table.
-     * @param RecordId|string $thing
+     * @param RecordId|StringRecordId|string $thing
      * @return mixed
-     * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#select
      */
     public function select(RecordId|StringRecordId|string $thing): mixed
@@ -121,10 +116,9 @@ final class Surreal
 
     /**
      * Creates a new record in a table.
-     * @param RecordId|string $thing
+     * @param RecordId|StringRecordId|string $thing
      * @param mixed $data
      * @return object|null
-     * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#create
      */
     public function create(RecordId|StringRecordId|string $thing, mixed $data): ?array
@@ -134,12 +128,10 @@ final class Surreal
     }
 
     /**
-     * Reads a record from a table.
-     * @param RecordId|string $thing
+     * Updates an existing record in a table.
+     * @param RecordId|StringRecordId|string $thing
      * @param mixed $data
      * @return array|null
-     * @throws SurrealException
-     * @throws CborException
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#read
      */
     public function update(RecordId|StringRecordId|string $thing, mixed $data): ?array
@@ -149,11 +141,22 @@ final class Surreal
     }
 
     /**
-     * Selectively updates a record inside a table with the given data.
-     * @param RecordId|string $thing
+     * Creates or updates a record in a table.
+     * @param RecordId|StringRecordId|string $thing
      * @param mixed $data
      * @return array|null
-     * @throws Exception
+     */
+    public function upsert(RecordId|StringRecordId|string $thing, mixed $data): ?array
+    {
+        $message = RpcMessage::create("upsert")->setParams([$thing, $data]);
+        return $this->engine->rpc($message);
+    }
+
+    /**
+     * Selectively updates a record inside a table with the given data.
+     * @param RecordId|StringRecordId|string $thing
+     * @param mixed $data
+     * @return array|null
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#merge
      */
     public function merge(RecordId|StringRecordId|string $thing, mixed $data): ?array
@@ -164,11 +167,10 @@ final class Surreal
 
     /**
      * Patches a specified column inside a record with the given value.
-     * @param RecordId|string $thing
+     * @param RecordId|StringRecordId|string $thing
      * @param array<array{op:string,path:string,value:mixed}> $data
      * @param bool $diff
      * @return array|null
-     * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#patch
      */
     public function patch(RecordId|StringRecordId|string $thing, array $data, bool $diff = false): ?array
@@ -182,7 +184,7 @@ final class Surreal
      * @param string $table
      * @param array $data
      * @return array|null
-     * @throws CborException|SurrealException|Exception
+     * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#insert
      */
     public function insert(string $table, array $data): ?array
@@ -193,9 +195,8 @@ final class Surreal
 
     /**
      * Deletes a record from a table.
-     * @param RecordId|string $thing
+     * @param RecordId|StringRecordId|string $thing
      * @return array|null
-     * @throws CborException|SurrealException|Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#delete
      */
     public function delete(RecordId|StringRecordId|string $thing): ?array
@@ -206,49 +207,76 @@ final class Surreal
 
     /**
      * Signin with a root, namespace, database or scoped user.
-     * @param array{namespace:string|null,database:string|null,scope:string|null} $data
+     * @param array{namespace:string|null,database:string|null,scope:string|null,access:string|null} $data
      * @return string|null
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#signin
+     * @since SurrealDB-v1.0.0 - The access parameter was added in SurrealDB-v2.0.0
      */
     public function signin(array $data): ?string
     {
-        $data = Helpers::processAuthVariables($data);
-        $message = RpcMessage::create("signin")->setParams([$data]);
+        $message = RpcMessage::create("signin")->setParams([
+            Helpers::processAuthVariables($data)
+        ]);
+
         return $this->engine->rpc($message);
     }
 
     /**
      * Signup a new scoped user.
-     * @param array{namespace:string|null,database:string|null,scope:string|null} $data
+     * @param array{namespace:string|null,database:string|null,scope:string|null,access:string|null} $data
      * @return string|null
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#signup
+     * @since SurrealDB-v1.0.0 - The access parameter was added in SurrealDB-v2.0.0
      */
     public function signup(array $data): ?string
     {
-        $message = RpcMessage::create("signup")->setParams([$data]);
+        $message = RpcMessage::create("signup")->setParams([
+            Helpers::processAuthVariables($data)
+        ]);
+
         return $this->engine->rpc($message);
     }
 
     /**
      * Create a relation between two records. The data parameter is optional.
-     * @param RecordId|string $from
-     * @param Table|string $table
-     * @param RecordId|string $to
+     * @param RecordInterface|RecordInterface[] $from
+     * @param Table|string $thing
+     * @param RecordInterface|RecordInterface[] $to
      * @param array|null $data
      * @return array{id:RecordId, in:RecordId, out:RecordId}|null
      * @since SurrealDB-v1.5.0
      */
     public function relate(
-		RecordId|StringRecordId $from, 
-		Table|string $table, 
-		RecordId|StringRecordId $to, 
+        RecordInterface|array $from,
+		Table|string $thing,
+        RecordInterface|array $to,
 		?array $data = null
 	): ?array
     {
-        $message = RpcMessage::create("relate")->setParams([$from, $table, $to, $data]);
-        return $this->engine->rpc($message)[0];
+        $message = RpcMessage::create("relate")->setParams([$from, $thing, $to, $data]);
+        $response = $this->engine->rpc($message);
+
+        return match(Helpers::isAssoc($response)) {
+            true => [$response],
+            default => $response
+        };
+    }
+
+    /**
+     * This method inserts a new relation record into the database.
+     * @param string|Table $table
+     * @param array $data
+     * @return array{id:RecordId,in:RecordId,out:RecordId}
+     */
+    public function insertRelation(
+        string | Table $table,
+        array $data
+    ): array
+    {
+        $message = RpcMessage::create("insert_relation")->setParams([$table, $data]);
+        return $this->engine->rpc($message);
     }
 
     /**
@@ -261,7 +289,12 @@ final class Surreal
      */
     public function run(string $function, ?string $version = null, ?array $params = null): mixed
     {
-        $message = RpcMessage::create("run")->setParams([$function, $version, $params]);
+        $message = RpcMessage::create("run")->setParams([
+            $function,
+            $version,
+            $params
+        ]);
+
         return $this->engine->rpc($message);
     }
 
@@ -269,8 +302,6 @@ final class Surreal
      * Authenticate the current session with a token.
      * @param string|null $token
      * @return string|None
-     * @throws CborException
-     * @throws SurrealException
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#authenticate
      */
     public function authenticate(?string $token): string|None
@@ -282,8 +313,6 @@ final class Surreal
     /**
      * This method will invalidate the user's session for the current connection
      * @return None
-     * @throws CborException
-     * @throws SurrealException
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#invalidate
      */
     public function invalidate(): None
@@ -375,9 +404,9 @@ final class Surreal
 
     /**
      * Returns the status code of the current connection.
-     * @return int
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/http#status
+     * @return int - 200 or 500
      */
     public function status(): int
     {
@@ -448,9 +477,9 @@ final class Surreal
      * Closes the connection.
      * @return bool
      */
-    public function disconnect(): bool
+    public function close(): bool
     {
-        return $this->engine->disconnect();
+        return $this->engine->close();
     }
 
     /**
@@ -470,5 +499,20 @@ final class Surreal
     public function getTimeout(): int
     {
         return $this->engine->getTimeout();
+    }
+
+    /**
+     * Call a SurrealDB RPC method with the given message.
+     * @param string $method
+     * @param array $params
+     * @return mixed
+     */
+    public function rpc(
+        string $method,
+        array $params
+    ): mixed
+    {
+        $message = RpcMessage::create($method)->setParams($params);
+        return $this->engine->rpc($message);
     }
 }

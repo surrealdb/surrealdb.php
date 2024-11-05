@@ -2,9 +2,9 @@
 
 namespace Surreal\Cbor\Types;
 
-final class Table
+final readonly class Table implements \JsonSerializable
 {
-    private string $table;
+    public string $table;
 
     public function __construct(string $table)
     {
@@ -28,16 +28,30 @@ final class Table
 
     public function __toString(): string
     {
+        return $this->toString();
+    }
+
+    public function toString(): string
+    {
         return $this->table;
     }
 
     /**
      * Checks if this table is equal to another table
-     * @param Table $table
+     * @param Table|string $table
      * @return bool
      */
-    public function equals(Table $table): bool
+    public function equals(Table|string $table): bool
     {
-        return $this->table === $table->table;
+        if ($table instanceof Table) {
+            return $this->table === $table->table;
+        }
+
+        return $this->table === $table;
+    }
+
+    public function jsonSerialize(): string
+    {
+        return $this->toString();
     }
 }

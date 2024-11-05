@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use JsonException;
 use Surreal\Cbor\CBOR;
 use Surreal\Core\Curl\HttpContentFormat;
+use Surreal\Exceptions\SurrealException;
 
 class ResponseParser
 {
@@ -15,13 +16,13 @@ class ResponseParser
      * @throws JsonException|CborException|InvalidArgumentException
      * @throws Exception
      */
-    public static function parse(HttpContentFormat $type, string $body)
+    public static function parse(?HttpContentFormat $type, string $body)
     {
         return match ($type) {
             HttpContentFormat::JSON => json_decode($body, true, 512, JSON_THROW_ON_ERROR),
             HttpContentFormat::SURREAL, HttpContentFormat::CBOR => CBOR::decode($body),
             HttpContentFormat::UTF8 => $body,
-            default => throw new InvalidArgumentException('Unsupported content type')
+            default => throw new SurrealException('Unsupported content type')
         };
     }
 }

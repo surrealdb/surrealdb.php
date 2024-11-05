@@ -55,7 +55,7 @@ class WsEngine extends AbstractEngine
      * Closes the websocket connection
      * @return bool
      */
-    public function disconnect(): bool
+    public function close(): bool
     {
         return $this->client->close()->getCloseStatus() === 1000;
     }
