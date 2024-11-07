@@ -10,43 +10,29 @@ on:
         description: 'Release message'
         required: false
 
+env:
+  TAG_VERSION: ${{ github.event.inputs.TAG_VERSION }}
+permissions: 
+  contents: write
+
 jobs:
 
   ci:
     name: CI Job
     uses: ./.github/workflows/ci.yml
-
-  check_and_test:
+    
+  update_tag:
+    name: Update Tag Job
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        version: [v1.5.5, v2.0.4]
-        include:
-          - version: v1.5.5
-            coverage: test-coverage-v1
-          - version: v2.0.4
-            coverage: test-coverage-v2
+    needs: [ci]
+    permissions: 
+      contents: write
     steps:
-
-      # setup php version
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.2'
-
-    - name: Setup Composer
-      uses: php-actions/composer@v6
-      continue-on-error: true
-
-    - name: SurrealDB in Github Actions
-      uses: surrealdb/setup-surreal@v2
-      with:
-        surrealdb_version: ${{ matrix.version }}
-        surrealdb_auth: true
-        surrealdb_username: 'root'
-        surrealdb_password: 'root'
-        surrealdb_additional_args: --allow-all
-        surrealdb_strict: true
-
-    - name: Run tests
-      run: composer ${{ matrix.coverage }}
+      - name: Create a release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ env.TAG_VERSION }}
+          name: Release ${{ github.event.inputs.TAG_VERSION }}
+          draft: true
+          body: ${{ github.event.inputs.RELEASE_MESSAGE }}
+          generateReleaseNotes: true
