@@ -94,7 +94,7 @@ trait SurrealTrait
      * @param string $value
      * @return null
      */
-    public function let(string $param, string $value): null
+    public function let(string $param, mixed $value): null
     {
         $this->params[$param] = $value;
         return null;
