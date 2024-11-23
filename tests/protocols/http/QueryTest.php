@@ -5,6 +5,7 @@ namespace protocol\http;
 use Beau\CborPHP\exceptions\CborException;
 use Exception;
 use PHPUnit\Framework\TestCase;
+use Surreal\Cbor\Types\Future;
 use Surreal\Cbor\Types\None;
 use Surreal\Cbor\Types\Record\RecordId;
 use Surreal\Cbor\Types\Table;
@@ -181,6 +182,33 @@ class QueryTest extends TestCase
         );
 
         $this->assertEquals("Hello, Beau!", $response);
+
+        $db->close();
+    }
+
+    public function testFutureQuery(): void
+    {
+        $db = $this->getDb();
+
+        $future = new Future("duration::years(time::now() - birthday) >= 18");
+        $db->let("canDrive", $future);
+
+        $response = $db->query('
+            CREATE future_test
+            SET
+                birthday = <datetime> "2000-06-22",
+                can_drive = $canDrive
+        ');
+
+        $this->assertIsArray($response);
+
+        [$data] = $response;
+
+        $this->assertArrayHasKey("result", $data);
+        $this->assertArrayHasKey("time", $data);
+        $this->assertArrayHasKey("status", $data);
+
+        $this->assertEquals("OK", $data["status"]);
 
         $db->close();
     }
