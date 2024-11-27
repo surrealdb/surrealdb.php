@@ -6,11 +6,16 @@ use Surreal\Cbor\Interfaces\RecordInterface;
 
 final readonly class StringRecordId implements RecordInterface
 {
+    /** @var string $recordId */
     public string $recordId;
 
-    public function __construct(string $recordId)
+    public function __construct(string|StringRecordId|RecordId $recordId)
     {
-        $this->recordId = $recordId;
+        $this->recordId = match(true) {
+            $recordId instanceof StringRecordId => $recordId->toString(),
+            $recordId instanceof RecordId => $recordId->toString(),
+            default => $recordId
+        };
     }
 
     public function __toString(): string
@@ -30,7 +35,7 @@ final readonly class StringRecordId implements RecordInterface
 
     public function equals(StringRecordId $recordId): bool
     {
-        return $this->recordId === $recordId->recordId;
+        return $this->recordId === $recordId->toString();
     }
 
     public static function create(string $recordId): StringRecordId
