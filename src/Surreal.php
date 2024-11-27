@@ -96,10 +96,24 @@ final class Surreal
      * @throws Exception
      * @see https://surrealdb.com/docs/surrealdb/integration/rpc#query
      */
-    public function query(string $query, array $params = []): ?array
+    public function queryRaw(string $query, array $params = []): ?array
     {
         $message = RpcMessage::create("query")->setParams([$query, $params]);
         return $this->engine->rpc($message);
+    }
+
+    /**
+     * Query a raw SurrealQL query
+     * @param string $query
+     * @param array $params
+     * @return array|null
+     * @throws Exception
+     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#query
+     */
+    public function query(string $query, array $params = []): ?array
+    {
+        $data = $this->queryRaw($query, $params);
+        return is_array($data) ? array_map(fn($item) => $item["result"], $data) : null;
     }
 
     /**
