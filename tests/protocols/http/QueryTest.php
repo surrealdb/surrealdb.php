@@ -61,8 +61,50 @@ class QueryTest extends TestCase
         $this->assertArrayHasKey("name", $response);
         $this->assertArrayHasKey("age", $response);
 
-        $response = $db->query("SELECT * FROM person WHERE age >= 18");
+        [$responseA, $responseB] = $db->query("SELECT * FROM person WHERE age >= 18; SELECT * FROM person WHERE age = 24");
         $this->assertIsArray($response);
+        $this->assertCount(2, $responseA);
+
+        foreach ($responseA as $record) {
+            $this->assertArrayHasKey("name", $record);
+            $this->assertArrayHasKey("age", $record);
+            $this->assertTrue($record["age"] >= 18);
+        }
+
+        foreach ($responseB as $record) {
+            $this->assertArrayHasKey("name", $record);
+            $this->assertArrayHasKey("age", $record);
+            $this->assertEquals(24, $record["age"]);
+        }
+
+        $response = $db->queryRaw("SELECT * FROM person WHERE age >= 18");
+        $this->assertIsArray($response);
+        $this->assertCount(1, $response);
+        $this->assertCount(2, $response[0]["result"]);
+
+        foreach ($response[0]["result"] as $record) {
+            $this->assertArrayHasKey("name", $record);
+            $this->assertArrayHasKey("age", $record);
+            $this->assertTrue($record["age"] >= 18);
+        }
+
+        $response = $db->queryRaw("SELECT * FROM person WHERE age >= 18; SELECT * FROM person WHERE age = 24");
+        $this->assertIsArray($response);
+
+        // First query
+        $this->assertCount(2, $response);
+        $this->assertCount(2, $response[0]["result"]);
+
+        // Second query
+        $this->assertCount(1, $response[1]["result"]);
+
+        // First query
+        $this->assertArrayHasKey("name", $response[0]["result"][0]);
+        $this->assertArrayHasKey("age", $response[0]["result"][0]);
+
+        // Second query
+        $this->assertArrayHasKey("name", $response[1]["result"][0]);
+        $this->assertArrayHasKey("age", $response[1]["result"][0]);
 
         $id = RecordId::create("person", "beau");
         $response = $db->delete($id);
