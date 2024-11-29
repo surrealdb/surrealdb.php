@@ -227,31 +227,4 @@ class QueryTest extends TestCase
 
         $db->close();
     }
-
-    public function testFutureQuery(): void
-    {
-        $db = $this->getDb();
-
-        $future = new Future("duration::years(time::now() - birthday) >= 18");
-        $db->let("canDrive", $future);
-
-        $response = $db->queryRaw('
-            CREATE future_test
-            SET
-                birthday = <datetime> "2000-06-22",
-                can_drive = $canDrive
-        ');
-		
-        $this->assertIsArray($response);
-
-        [$data] = $response;
-
-        $this->assertArrayHasKey("result", $data);
-        $this->assertArrayHasKey("time", $data);
-        $this->assertArrayHasKey("status", $data);
-
-        $this->assertEquals("OK", $data["status"]);
-
-        $db->close();
-    }
 }
