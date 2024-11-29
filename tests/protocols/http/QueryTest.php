@@ -241,8 +241,6 @@ class QueryTest extends TestCase
                 birthday = <datetime> "2000-06-22",
                 can_drive = $canDrive
         ');
-
-		var_dump($response);
 		
         $this->assertIsArray($response);
 
