@@ -22,6 +22,9 @@ DEFINE TABLE likes
 DEFINE TABLE test
     PERMISSIONS FULL;
 
+DEFINE TABLE future_test
+	PERMISSIONS FULL;
+
 DEFINE TABLE user
     PERMISSIONS
         FOR select WHERE id = $auth.id;
