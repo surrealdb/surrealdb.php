@@ -252,6 +252,8 @@ class QueryTest extends TestCase
 
         $this->assertEquals("OK", $data["status"]);
 
+		var_dump($data);
+
         $db->close();
     }
 }
