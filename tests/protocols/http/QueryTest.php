@@ -242,6 +242,8 @@ class QueryTest extends TestCase
                 can_drive = $canDrive
         ');
 
+		var_dump($response);
+		
         $this->assertIsArray($response);
 
         [$data] = $response;
@@ -251,8 +253,6 @@ class QueryTest extends TestCase
         $this->assertArrayHasKey("status", $data);
 
         $this->assertEquals("OK", $data["status"]);
-
-		var_dump($data);
 
         $db->close();
     }
