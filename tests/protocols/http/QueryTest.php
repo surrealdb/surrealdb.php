@@ -235,7 +235,7 @@ class QueryTest extends TestCase
         $future = new Future("duration::years(time::now() - birthday) >= 18");
         $db->let("canDrive", $future);
 
-        $response = $db->query('
+        $response = $db->queryRaw('
             CREATE future_test
             SET
                 birthday = <datetime> "2000-06-22",
