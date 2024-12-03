@@ -25,6 +25,6 @@ class Future implements JsonSerializable
 
     public function toString(): string
     {
-        return "<future> { $this->inner }";
+        return "<future> $this->inner";
     }
 }
