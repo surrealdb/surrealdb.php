@@ -28,6 +28,9 @@ DEFINE TABLE insert_relation
 DEFINE TABLE upsert
     PERMISSIONS FULL;
 
+DEFINE TABLE future_test
+	PERMISSIONS FULL;
+
 DEFINE TABLE user
     PERMISSIONS
         FOR select WHERE id = $auth.id;
