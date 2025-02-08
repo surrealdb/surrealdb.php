@@ -49,7 +49,7 @@
 	},
 	"config": {
 		"allow-plugins": {
-			"phpstan/extension-installer": true
+			"phpstan/extension-installer": false
 		}
 	},
 	"extra": {
