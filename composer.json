@@ -53,11 +53,6 @@
 		}
 	},
 	"extra": {
-		"phpstan": {
-			"includes": [
-				"extension.neon"
-			]
-		},
 		"phpstan/extension-installer": {
 			"ignore": [
 				"phpstan/phpstan-phpunit"
