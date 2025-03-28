@@ -14,12 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: [v1.5.5, v2.0.4]
+        version: [v1.5.5, v2.2.1]
+        php_version: ['8.2.27', '8.3', '8.4']
         include:
           - version: v1.5.5
             coverage: test-coverage-v1
-          - version: v2.0.4
+          - version: v2.2.1
             coverage: test-coverage-v2
+
     steps:
 
     - name: Checkout repository
@@ -29,13 +31,13 @@ jobs:
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
-        php-version: '8.2'
+        php-version: ${{ matrix.php_version }}
 
     - name: Setup Composer
       uses: php-actions/composer@v6
       continue-on-error: true
       with:
-        php_version: '8.2'
+        php_version: ${{ matrix.php_version }}
 
     - name: SurrealDB in Github Actions
       uses: surrealdb/setup-surreal@v2
