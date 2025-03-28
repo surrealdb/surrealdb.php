@@ -17,7 +17,9 @@
 		"test-coverage-v2": "./vendor/bin/phpunit -c tests/phpunit_config_v2.xml",
 		"run-surreal-1.4.2": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.4.2 start --auth --user root --pass root --allow-all --strict --log trace ",
 		"run-surreal-1.5.4": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.5.4 start --auth --user root --pass root --allow-all --strict --log trace ",
-		"run-surreal-2.0.4": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.0.4 start --username root --pass root --allow-all --strict --log trace"
+		"run-surreal-2.0.4": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.0.4 start --username root --pass root --allow-all --strict --log trace",
+		"run-surreal-2.1.4": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.1.0 start --username root --pass root --allow-all --strict --log trace",
+		"run-surreal-2.2.1": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.2.1 start --username root --pass root --allow-all --strict --log trace"
 	},
 	"authors": [
 		{
@@ -31,10 +33,10 @@
 	"require": {
 		"ext-curl": "*",
 		"ramsey/uuid": "4.7.6",
-		"phrity/websocket": "3.2.0",
+		"phrity/websocket": "3.2.6",
 		"php": ">=8.2",
 		"welpie21/cbor.php": "1.0.1",
-		"brick/math": "0.12.1",
+		"brick/math": "0.12.3",
 		"khill/php-duration": "1.1.0",
 		"composer/semver": "3.4.3"
 	},
