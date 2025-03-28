@@ -9,6 +9,7 @@ class RecordIdTest extends TestCase
 {
     const RECORD_ID = ["record", "some-record"];
     const RECORD_CBOR_ARRAY = "c882667265636f72646b736f6d652d7265636f7264";
+    const RECORD_EMPTY_IDENT = "c882667265636f726460";
 
     /**
      * @throws CborException
@@ -63,5 +64,26 @@ class RecordIdTest extends TestCase
         /** @var RecordId $result */
         $result = CBOR::decode(hex2bin("c882667265636f7264a2616101616202"));
         $this->assertEquals(["a" => 1, "b" => 2], $result->getId());
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testEmptyIdent(): void
+    {
+        /** @var RecordId $result */
+        $result = CBOR::decode(hex2bin(self::RECORD_EMPTY_IDENT));
+        $this->assertInstanceOf(RecordId::class, $result);
+
+        $this->assertEquals("record", $result->getTable());
+        $this->assertEquals("", $result->getId());
+
+        $newResult = CBOR::decode(hex2bin(self::RECORD_EMPTY_IDENT));
+        $this->assertTrue($result->equals($newResult));
+        $this->assertTrue($result->equals("record:⟨⟩"));
+
+        $this->assertEquals('"record:\u27e8\u27e9"', json_encode($result));
+        $this->assertEquals("record:⟨⟩", $result->toString());
+        $this->assertEquals("record:⟨⟩", strval($result));
     }
 }
