@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         version: [v1.5.5, v2.2.1]
-        php_version: ['8.2', '8.3', '8.4']
+        php_version: ['8.2.27', '8.3', '8.4']
         include:
           - version: v1.5.5
             coverage: test-coverage-v1
