@@ -41,13 +41,13 @@
 		"composer/semver": "3.4.3"
 	},
 	"require-dev": {
-		"phpunit/phpunit": "10.5.19",
+		"phpunit/phpunit": "10.5.45",
 		"phpstan/phpstan": "1.10.67",
 		"phpstan/phpstan-beberlei-assert": "1.1.2",
 		"phpstan/extension-installer": "1.3.1",
-		"nikic/php-parser": "v4.19.1",
-		"vimeo/psalm": "5.23.1",
-		"phpunit/php-code-coverage": "10.1.14"
+		"nikic/php-parser": "v5.4.0",
+		"vimeo/psalm": "6.9.6",
+		"phpunit/php-code-coverage": "10.1.16"
 	},
 	"config": {
 		"allow-plugins": {
