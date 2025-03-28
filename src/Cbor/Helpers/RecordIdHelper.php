@@ -34,6 +34,10 @@ class RecordIdHelper
             return "⟨" . $ident . "⟩";
         }
 
+        if($ident === "") {
+            return "⟨⟩";
+        }
+
         for ($i = 0; $i < strlen($ident); $i++) {
             $code = ord($ident[$i]);
             if (
