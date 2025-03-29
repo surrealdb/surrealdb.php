@@ -1,5 +1,8 @@
 name: Draft Release
 
+permissions: 
+  contents: write
+
 on:
   workflow_dispatch:
     inputs:
@@ -12,8 +15,6 @@ on:
 
 env:
   TAG_VERSION: ${{ github.event.inputs.TAG_VERSION }}
-permissions: 
-  contents: write
 
 jobs:
 
