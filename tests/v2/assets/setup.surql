@@ -59,5 +59,5 @@ DEFINE FUNCTION fn::greet($name: string) {
 
 DELETE dates:1;
 CREATE dates:1 CONTENT {
-    timestamp: time::now()
+    timestamp: d'2025-03-31T08:10:38.821Z'
 };
