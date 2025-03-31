@@ -36,20 +36,14 @@ use Surreal\Cbor\Types\Uuid;
 function cborCustomDateToDate(array $date): DateTime {
     [$seconds, $nanoseconds] = $date;
 
-    // Convert nanoseconds to microseconds (PHP's maximum precision)
-    $microseconds = intval($nanoseconds / 1000);
+    $usec = str_pad(
+        ($nanoseconds / 1000),
+        6,
+        '0',
+        STR_PAD_LEFT
+    );
 
-    // Create DateTime directly with microseconds using DateTimeImmutable and format
-    $formatted = date('Y-m-d H:i:s', $seconds) . '.' . sprintf('%06d', $microseconds);
-
-    // Create DateTime object from formatted string
-    $date = DateTime::createFromFormat('Y-m-d H:i:s.u', $formatted);
-
-    if($date === false) {
-        throw new Exception("Failed to create DateTime from CBOR custom date format");
-    }
-
-    return $date;
+    return DateTime::createFromFormat('U.u', "$seconds.$usec");
 }
 
 class CBOR
