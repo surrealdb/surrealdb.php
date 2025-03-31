@@ -9,6 +9,9 @@ jobs:
   ci:
     name: CI Job
     uses: ./.github/workflows/ci.yml
+    permissions: 
+      contents: read
+      pull-requests: read
 
   update_tag:
     name: Update Tag Job
