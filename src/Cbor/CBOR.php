@@ -7,6 +7,7 @@ use Beau\CborPHP\CborEncoder;
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\exceptions\CborException;
 use Brick\Math\BigDecimal;
+use DateInterval;
 use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -29,6 +30,28 @@ use Surreal\Cbor\Types\Record\RecordIdRange;
 use Surreal\Cbor\Types\Record\StringRecordId;
 use Surreal\Cbor\Types\Table;
 use Surreal\Cbor\Types\Uuid;
+
+/**
+ * @throws Exception
+ */
+function cborCustomDateToDate(array $date): DateTime {
+    [$seconds, $nanoseconds] = $date;
+
+    // Convert nanoseconds to microseconds (PHP's maximum precision)
+    $microseconds = intval($nanoseconds / 1000);
+
+    // Create DateTime directly with microseconds using DateTimeImmutable and format
+    $formatted = date('Y-m-d H:i:s', $seconds) . '.' . sprintf('%06d', $microseconds);
+
+    // Create DateTime object from formatted string
+    $date = DateTime::createFromFormat('Y-m-d H:i:s.u', $formatted);
+
+    if($date === false) {
+        throw new Exception("Failed to create DateTime from CBOR custom date format");
+    }
+
+    return $date;
+}
 
 class CBOR
 {
@@ -162,9 +185,7 @@ class CBOR
                 CustomTag::STRING_UUID => Uuid::fromString($tagged->value),
                 CustomTag::STRING_DECIMAL => BigDecimal::of($tagged->value),
 
-                CustomTag::CUSTOM_DATETIME => (new DateTime())
-                    ->setTimestamp($tagged->value[0])
-                    ->setTime(0, 0, 0, $tagged->value[1]),
+                CustomTag::CUSTOM_DATETIME => cborCustomDateToDate($tagged->value),
 
                 CustomTag::STRING_DURATION => new Duration($tagged->value),
                 CustomTag::CUSTOM_DURATION => Duration::fromCompact([$tagged->value[0], $tagged->value[1]]),

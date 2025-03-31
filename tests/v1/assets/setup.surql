@@ -25,6 +25,9 @@ DEFINE TABLE test
 DEFINE TABLE future_test
 	PERMISSIONS FULL;
 
+DEFINE TABLE dates
+    PERMISSIONS FULL;
+
 DEFINE TABLE user
     PERMISSIONS
         FOR select WHERE id = $auth.id;
@@ -45,4 +48,9 @@ CREATE user CONTENT {
 
 DEFINE FUNCTION fn::greet($name: string) {
 	RETURN "Hello, " + $name + "!";
+};
+
+DELETE dates:1;
+CREATE dates:1 CONTENT {
+    timestamp: d'2025-03-31T08:10:38.821Z'
 };
