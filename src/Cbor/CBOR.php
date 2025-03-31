@@ -7,6 +7,7 @@ use Beau\CborPHP\CborEncoder;
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\exceptions\CborException;
 use Brick\Math\BigDecimal;
+use DateInterval;
 use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -36,14 +37,20 @@ use Surreal\Cbor\Types\Uuid;
 function cborCustomDateToDate(array $date): DateTime {
     [$seconds, $nanoseconds] = $date;
 
-    $usec = str_pad(
-        ($nanoseconds / 1000),
-        6,
-        '0',
-        STR_PAD_LEFT
-    );
+    // Convert nanoseconds to microseconds (PHP's maximum precision)
+    $microseconds = intval($nanoseconds / 1000);
 
-    return DateTime::createFromFormat('U.u', "$seconds.$usec");
+    // Create DateTime directly with microseconds using DateTimeImmutable and format
+    $formatted = date('Y-m-d H:i:s', $seconds) . '.' . sprintf('%06d', $microseconds);
+
+    // Create DateTime object from formatted string
+    $date = DateTime::createFromFormat('Y-m-d H:i:s.u', $formatted);
+
+    if($date === false) {
+        throw new Exception("Failed to create DateTime from CBOR custom date format");
+    }
+
+    return $date;
 }
 
 class CBOR
