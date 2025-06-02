@@ -20,6 +20,7 @@ enum CustomTag: int
 	case STRING_DURATION = 13;
 	case CUSTOM_DURATION = 14;
     case FUTURE = 15;
+    case SIMPLE_NONE = 23;
 
     // Ranges
     case RANGE = 49;

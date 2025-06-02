@@ -170,7 +170,7 @@ class CBOR
 
             return match (CustomTag::tryFrom($tagged->tag)) {
                 CustomTag::SPEC_DATETIME => new DateTime($tagged->value),
-                CustomTag::NONE => new None(),
+                CustomTag::NONE, CustomTag::SIMPLE_NONE => new None(),
 
                 CustomTag::TABLE => new Table($tagged->value),
 
