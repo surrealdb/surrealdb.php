@@ -37,11 +37,8 @@ jobs:
       with:
         php-version: ${{ matrix.php_version }}
 
-    - name: Setup Composer
-      uses: php-actions/composer@v6
-      continue-on-error: true
-      with:
-        php_version: ${{ matrix.php_version }}
+    - name: Install dependencies
+      run: composer install --no-interaction --prefer-dist
 
     - name: SurrealDB in Github Actions
       uses: surrealdb/setup-surreal@v2
