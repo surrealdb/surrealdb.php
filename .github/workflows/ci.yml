@@ -38,7 +38,7 @@ jobs:
         php-version: ${{ matrix.php_version }}
 
     - name: Install dependencies
-      run: composer install --no-interaction --prefer-dist
+      run: composer update --no-interaction --prefer-dist
 
     - name: SurrealDB in Github Actions
       uses: surrealdb/setup-surreal@v2
