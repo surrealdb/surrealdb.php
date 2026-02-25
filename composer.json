@@ -15,11 +15,15 @@
 		"phpstan": "vendor/bin/phpstan -c phpstan.neon",
 		"test-coverage-v1": "./vendor/bin/phpunit -c tests/phpunit_config_v1.xml",
 		"test-coverage-v2": "./vendor/bin/phpunit -c tests/phpunit_config_v2.xml",
-		"run-surreal-1.4.2": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.4.2 start --auth --user root --pass root --allow-all --strict --log trace ",
-		"run-surreal-1.5.4": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.5.4 start --auth --user root --pass root --allow-all --strict --log trace ",
+		"run-surreal-1.5.6": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v1.5.6 start --auth --user root --pass root --allow-all --strict --log trace ",
 		"run-surreal-2.0.4": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.0.4 start --username root --pass root --allow-all --strict --log trace",
 		"run-surreal-2.1.4": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.1.0 start --username root --pass root --allow-all --strict --log trace",
-		"run-surreal-2.2.1": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.2.1 start --username root --pass root --allow-all --strict --log trace"
+		"run-surreal-2.2.8": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.2.8 start --username root --pass root --allow-all --strict --log trace",
+		"run-surreal-2.3.10": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.3.10 start --username root --pass root --allow-all --strict --log trace",
+		"run-surreal-2.4.0": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.4.0 start --username root --pass root --allow-all --strict --log trace",
+		"run-surreal-2.5.0": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.5.0 start --username root --pass root --allow-all --strict --log trace",
+		"run-surreal-2.6.2": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v2.6.1 start --username root --pass root --allow-all --strict --log trace",
+		"run-surreal-3.0.1": "docker run --rm --pull always -p 8000:8000 surrealdb/surrealdb:v3.0.1 start --username root --pass root --allow-all --strict --log trace"
 	},
 	"authors": [
 		{
@@ -35,13 +39,13 @@
 		"ramsey/uuid": "4.7.6",
 		"phrity/websocket": "3.2.6",
 		"php": ">=8.2",
-		"welpie21/cbor.php": "1.0.1",
+		"welpie21/cbor.php": "2.1.0",
 		"brick/math": "0.12.3",
 		"khill/php-duration": "1.1.0",
 		"composer/semver": "3.4.3"
 	},
 	"require-dev": {
-		"phpunit/phpunit": "10.5.45",
+		"phpunit/phpunit": "10.5.63",
 		"phpstan/phpstan": "1.10.67",
 		"phpstan/phpstan-beberlei-assert": "1.1.2",
 		"phpstan/extension-installer": "1.3.1",
