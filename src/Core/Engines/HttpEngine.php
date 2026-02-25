@@ -322,10 +322,12 @@ class HttpEngine extends AbstractEngine
             $this->unset($message->params[0]);
             return null;
         } else if ($message->method === "query") {
-            $message->setParams([
-                $message->params[0],
-                [...$this->params, ...$message->params[1]]
-            ]);
+            $mergedParams = [...$this->params, ...($message->params[1] ?? [])];
+            $message->setParams(
+                empty($mergedParams)
+                    ? [$message->params[0]]
+                    : [$message->params[0], $mergedParams]
+            );
         }
 
         $response = $this->execute(
