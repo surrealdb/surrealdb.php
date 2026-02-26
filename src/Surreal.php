@@ -98,7 +98,8 @@ final class Surreal
      */
     public function queryRaw(string $query, array $params = []): ?array
     {
-        $message = RpcMessage::create("query")->setParams([$query, $params]);
+        $msgParams = empty($params) ? [$query] : [$query, $params];
+        $message = RpcMessage::create("query")->setParams($msgParams);
         return $this->engine->rpc($message);
     }
 
