@@ -65,4 +65,6 @@ jobs:
         surrealdb_strict: true
 
     - name: Run tests
+      env:
+        SURREALDB_REQUIRE_LOCAL: '1'
       run: composer test
