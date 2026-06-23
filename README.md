@@ -114,13 +114,18 @@ $db->close();
 ## Contributing
 
 ### Requirements
-- PHP 8.1 or higher
+- PHP 8.4 or higher
 - Composer
-- SurrealDB 1.4.0 or higher
+- SurrealDB 2.6.2 or higher
+
+### Run static analysis
+```bash
+composer analyse
+```
 
 ### Run tests
 ```bash
-./vendor/bin/phpunit -c phpunit.xml
+composer test
 ```
 
 ### Directory Structure
