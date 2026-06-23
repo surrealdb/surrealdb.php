@@ -13,6 +13,9 @@ on:
 env:
   TAG_VERSION: ${{ github.event.inputs.TAG_VERSION }}
 
+permissions:  # added using https://github.com/step-security/secure-repo
+  contents: read
+
 jobs:
 
   ci:
@@ -29,8 +32,13 @@ jobs:
     permissions: 
       contents: write
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
       - name: Create a release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
         with:
           tag: ${{ env.TAG_VERSION }}
           name: Release ${{ github.event.inputs.TAG_VERSION }}
