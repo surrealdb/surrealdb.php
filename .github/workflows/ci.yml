@@ -31,7 +31,7 @@ jobs:
       uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
       with:
         php-version: '8.4'
-        extensions: openswoole
+        extensions: openswoole-26.2.0
 
     - name: Install dependencies
       run: composer install --no-interaction --prefer-dist
@@ -61,7 +61,7 @@ jobs:
       uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
       with:
         php-version: ${{ matrix.php_version }}
-        extensions: openswoole
+        extensions: openswoole-26.2.0
 
     - name: Install dependencies
       run: composer install --no-interaction --prefer-dist
