@@ -64,7 +64,14 @@ abstract class AbstractRpcEngine implements EngineInterface
 
     public function health(): void
     {
-        $this->dispatch(new RpcRequest('health'));
+        $state = $this->requireState();
+
+        $this->http()->request(
+            $state->endpoint->httpUriWithPath($state->endpoint->basePath() . '/health'),
+            'GET',
+            null,
+            $this->httpHeaders($state->rootSession, accept: 'application/json'),
+        );
     }
 
     public function version(): VersionInfo
@@ -165,7 +172,8 @@ abstract class AbstractRpcEngine implements EngineInterface
 
     public function query(BoundQuery $query, ?string $session, ?string $txn = null): iterable
     {
-        $responses = $this->dispatch(new RpcRequest('query', [$query->query, $query->bindings], $session, $txn));
+        $bindings = $query->bindings !== [] ? $query->bindings : new \stdClass();
+        $responses = $this->dispatch(new RpcRequest('query', [$query->query, $bindings], $session, $txn));
 
         if (!is_array($responses)) {
             return;
