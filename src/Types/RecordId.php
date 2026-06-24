@@ -2,8 +2,6 @@
 
 namespace SurrealDB\SDK\Types;
 
-use SurrealDB\SDK\Exceptions\InvalidValueException;
-
 /**
  * A fully-qualified SurrealDB record identifier (e.g. `person:tobie`).
  *
@@ -50,33 +48,6 @@ final class RecordId extends Value
     public static function from(string $table, string|int|array|object $id): self
     {
         return new self($table, $id);
-    }
-
-    /**
-     * Parse a `table:id` string into a {@see RecordId}.
-     *
-     * Splits on the first `:`, unwraps backtick- or angle-bracket-escaped
-     * identifiers, and coerces a bare integer id to `int` to match SurrealDB's
-     * record-id semantics. This is the inverse of {@see self::$escaped} and is
-     * used to normalise the plain string ids returned over the JSON wire
-     * protocol back into typed record ids.
-     *
-     * @return self<string>
-     */
-    public static function parse(string $thing): self
-    {
-        $position = strpos($thing, ':');
-
-        if ($position === false || $position === 0) {
-            throw new InvalidValueException(
-                sprintf('"%s" is not a valid record id; expected "table:id".', $thing),
-            );
-        }
-
-        return new self(
-            self::unwrapIdent(substr($thing, 0, $position)),
-            self::parseId(substr($thing, $position + 1)),
-        );
     }
 
     /**
@@ -143,37 +114,5 @@ final class RecordId extends Value
         }
 
         return '`' . str_replace('`', '\\`', $id) . '`';
-    }
-
-    /**
-     * Strip backtick or angle-bracket (`⟨ ⟩`) escaping from an identifier.
-     */
-    private static function unwrapIdent(string $ident): string
-    {
-        if (strlen($ident) >= 2 && str_starts_with($ident, '`') && str_ends_with($ident, '`')) {
-            return str_replace('\\`', '`', substr($ident, 1, -1));
-        }
-
-        if (str_starts_with($ident, '⟨') && str_ends_with($ident, '⟩')) {
-            return substr($ident, strlen('⟨'), -strlen('⟩'));
-        }
-
-        return $ident;
-    }
-
-    /**
-     * Parse the id portion of a record id string into its typed PHP value.
-     */
-    private static function parseId(string $id): string|int
-    {
-        if (str_starts_with($id, '`') || str_starts_with($id, '⟨')) {
-            return self::unwrapIdent($id);
-        }
-
-        if (preg_match('/^\d+$/', $id) === 1) {
-            return (int) $id;
-        }
-
-        return $id;
     }
 }

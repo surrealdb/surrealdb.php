@@ -35,37 +35,6 @@ final class RecordIdTest extends TestCase
         $this->assertSame('person:tobie', $record->escape());
     }
 
-    public function testParseSplitsTableAndId(): void
-    {
-        $record = RecordId::parse('person:tobie');
-
-        $this->assertSame('person', $record->table);
-        $this->assertSame('tobie', $record->id);
-    }
-
-    public function testParseCoercesNumericId(): void
-    {
-        $record = RecordId::parse('person:123');
-
-        $this->assertSame('person', $record->table);
-        $this->assertSame(123, $record->id);
-    }
-
-    public function testParseUnwrapsEscapedParts(): void
-    {
-        $record = RecordId::parse('`my table`:`tobie smith`');
-
-        $this->assertSame('my table', $record->table);
-        $this->assertSame('tobie smith', $record->id);
-    }
-
-    public function testParseRejectsStringWithoutSeparator(): void
-    {
-        $this->expectException(\SurrealDB\SDK\Exceptions\InvalidValueException::class);
-
-        RecordId::parse('person');
-    }
-
     public function testUuidId(): void
     {
         $uuid = Uuid::fromString('09748193-048a-4bfb-b825-8528cf74fdc1');

@@ -5,7 +5,7 @@ namespace SurrealDB\SDK\Types;
 /**
  * A SurrealQL record id held in its raw, unparsed string form (e.g.
  * `person:tobie`). Useful when the id should be passed through verbatim rather
- * than parsed into a {@see RecordId}.
+ * than represented as separate table and id parts in a {@see RecordId}.
  */
 final class StringRecordId extends Value
 {
