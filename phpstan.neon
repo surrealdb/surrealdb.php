@@ -1,0 +1,12 @@
+includes:
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+    phpVersion: 80400
+    bootstrapFiles:
+        - vendor/autoload.php
+    treatPhpDocTypesAsCertain: true
+    reportUnmatchedIgnoredErrors: true

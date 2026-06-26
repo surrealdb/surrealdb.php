@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:  # added using https://github.com/step-security/secure-repo
+  contents: read
+
 jobs:
 
   ci:
@@ -20,8 +23,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
       - name: Update the ${{ github.event.release.tag_name }} tag
-        uses: actions/publish-action@v0.3.0
+        uses: actions/publish-action@f784495ce78a41bac4ed7e34a73f0034015764bb # v0.3.0
         with:
           source-tag: ${{ github.event.release.tag_name }}
 
@@ -32,6 +40,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
       - name: Update package
         run: |
           curl -X POST \

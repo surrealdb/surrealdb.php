@@ -1,13 +1,8 @@
 <?php
 
-namespace Surreal\Exceptions;
+namespace SurrealDB\SDK\Exceptions;
 
-use Exception;
-
-class SurrealException extends Exception
-{
-	public function __construct(string $message, int $code = 500, Exception $previous = null)
-	{
-		parent::__construct("SurrealException: " . $message, $code, $previous);
-	}
-}
+/**
+ * The base class for every exception thrown by the SurrealDB SDK.
+ */
+class SurrealException extends \RuntimeException {}

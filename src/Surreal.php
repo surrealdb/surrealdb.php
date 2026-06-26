@@ -1,533 +1,401 @@
 <?php
 
-namespace Surreal;
+namespace SurrealDB\SDK;
 
-use Composer\Semver\Semver;
-use Exception;
-use Surreal\Cbor\Interfaces\RecordInterface;
-use Surreal\Cbor\Types\None;
-use Surreal\Cbor\Types\Record\RecordId;
-use Surreal\Cbor\Types\Record\StringRecordId;
-use Surreal\Cbor\Types\Table;
-use Surreal\Core\AbstractEngine;
-use Surreal\Core\Engines\HttpEngine;
-use Surreal\Core\Engines\WsEngine;
-use Surreal\Core\RpcMessage;
-use Surreal\Core\Utils\Helpers;
-use Surreal\Exceptions\SurrealException;
+use Psr\Log\NullLogger;
+use SurrealDB\SDK\Auth\Credentials;
+use SurrealDB\SDK\Auth\Token;
+use SurrealDB\SDK\Auth\Tokens;
+use SurrealDB\SDK\Codec\Codec;
+use SurrealDB\SDK\Codec\CborDeserializer;
+use SurrealDB\SDK\Codec\CborSerializer;
+use SurrealDB\SDK\Codec\JsonDeserializer;
+use SurrealDB\SDK\Codec\JsonSerializer;
+use SurrealDB\SDK\Connection\ConnectionController;
+use SurrealDB\SDK\Connection\ConnectionStatus;
+use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Connection\DriverContext;
+use SurrealDB\SDK\Connection\DriverOptions;
+use SurrealDB\SDK\Connection\Endpoint;
+use SurrealDB\SDK\Contracts\QueryExecutor;
+use SurrealDB\SDK\Enum\CodecEnum;
+use SurrealDB\SDK\Events\EventDispatcher;
+use SurrealDB\SDK\Exceptions\ConfigurationException;
+use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
+use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
+use SurrealDB\SDK\Live\LiveMessage;
+use SurrealDB\SDK\Protocol\Feature;
+use SurrealDB\SDK\Protocol\NamespaceDatabase;
+use SurrealDB\SDK\Query\AuthQuery;
+use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\SDK\Query\CreateQuery;
+use SurrealDB\SDK\Query\DeleteQuery;
+use SurrealDB\SDK\Query\InsertQuery;
+use SurrealDB\SDK\Query\RelateQuery;
+use SurrealDB\SDK\Query\RunQuery;
+use SurrealDB\SDK\Query\SelectQuery;
+use SurrealDB\SDK\Query\UpdateQuery;
+use SurrealDB\SDK\Query\UpsertQuery;
+use SurrealDB\SDK\Scheduler\SyncScheduler;
+use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\SDK\Types\Table;
 
-final class Surreal
+/**
+ * The primary entry point: connect to SurrealDB, manage the session, and run
+ * queries. Connection orchestration is delegated to the {@see ConnectionController};
+ * the fluent query builders (companion plan) execute through the
+ * {@see QueryExecutor} contract this class implements.
+ */
+final class Surreal implements QueryExecutor
 {
-    const SUPPORTED_SURREALDB_VERSION_RANGE = ">= 1.4.2 || >= 2.0.0";
+	private readonly ConnectionController $connection;
 
-    /**
-     * @param AbstractEngine $engine
-     * @var AbstractEngine|null
-     */
-    private ?AbstractEngine $engine;
+	public function __construct(?DriverOptions $options = null)
+	{
+		$this->connection = new ConnectionController(
+			self::buildContext($options ?? new DriverOptions()),
+		);
+	}
 
-    /**
-     * Use the given namespace and database for the following queries in the current open connection.
-     * @param array{namespace:string|null,database:string|null} $target
-     * @return None
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#use
-     */
-    public function use(array $target): None
+	// =================================================================== //
+	//  Connection                                                         //
+	// =================================================================== //
+
+	public function connect(
+		string|Endpoint $url,
+		?ConnectOptions $options = null,
+	): void {
+		$endpoint = $url instanceof Endpoint ? $url : Endpoint::parse($url);
+
+		$this->connection->connect($endpoint, $options ?? new ConnectOptions());
+	}
+
+	public function close(): void
+	{
+		$this->connection->disconnect();
+	}
+
+	public function status(): ConnectionStatus
+	{
+		return $this->connection->status();
+	}
+
+	public function isConnected(): bool
+	{
+		return $this->connection->status() === ConnectionStatus::Connected;
+	}
+
+	public function health(): void
+	{
+		$this->connection->health();
+	}
+
+	public function version(): string
+	{
+		return $this->connection->version()->version;
+	}
+
+	public function isFeatureSupported(Feature $feature): bool
+	{
+		try {
+			$this->connection->assertFeature($feature);
+
+			return true;
+		} catch (UnsupportedFeatureException | UnavailableFeatureException) {
+			return false;
+		}
+	}
+
+	/**
+	 * Subscribe to a high-level connection event: `connecting`, `connected`,
+	 * `reconnecting`, `disconnected`, `error`, `auth`, or `using`.
+	 *
+	 * @return \Closure the unsubscribe callback
+	 */
+	public function subscribe(string $event, callable $listener): \Closure
+	{
+		return $this->connection->subscribe($event, $listener);
+	}
+
+	// =================================================================== //
+	//  Session                                                            //
+	// =================================================================== //
+
+	public function use(?string $namespace, ?string $database = null): void
+	{
+		$this->connection->use(new NamespaceDatabase($namespace, $database));
+	}
+
+	public function let(string $name, mixed $value): void
+	{
+		$this->connection->set($name, $value);
+	}
+
+	public function unset(string $name): void
+	{
+		$this->connection->unset($name);
+	}
+
+	// =================================================================== //
+	//  Authentication                                                     //
+	// =================================================================== //
+
+	/**
+	 * @param Credentials|array<string,mixed> $auth
+	 */
+	public function signin(Credentials|array $auth): Tokens
+	{
+		return $this->connection->signin(
+			$auth instanceof Credentials ? $auth->toArray() : $auth,
+		);
+	}
+
+	/**
+	 * @param Credentials|array<string,mixed> $auth
+	 */
+	public function signup(Credentials|array $auth): Tokens
+	{
+		return $this->connection->signup(
+			$auth instanceof Credentials ? $auth->toArray() : $auth,
+		);
+	}
+
+	public function authenticate(Token|string $token): void
+	{
+		$this->connection->authenticate((string) $token);
+	}
+
+	public function invalidate(): void
+	{
+		$this->connection->invalidate();
+	}
+
+	// =================================================================== //
+	//  Queries                                                            //
+	// =================================================================== //
+
+	/**
+	 * Execute a bound query, returning one result per statement.
+	 *
+	 * @return list<mixed>
+	 */
+    public function query(BoundQuery $query): array
+	{
+		$results = [];
+
+		foreach ($this->connection->query($query) as $chunk) {
+			$results[] = $chunk->resultOrThrow();
+		}
+
+		return $results;
+	}
+
+	/**
+	 * Execute raw SurrealQL with optional bindings.
+	 *
+	 * @param array<string,mixed> $bindings
+     *
+     * @return list<mixed>
+	 */
+    public function run(string $surql, array $bindings = []): array
+	{
+		return $this->query(new BoundQuery($surql, $bindings));
+	}
+
+	// =================================================================== //
+	//  Fluent statement builders                                          //
+	// =================================================================== //
+
+	/**
+	 * Begin a `SELECT` against a table, record, or raw target.
+     *
+     * @param RecordId<string>|Table<string>|string $what
+     *
+     * @return SelectQuery<mixed>
+	 */
+	public function select(RecordId|Table|string $what): SelectQuery
+	{
+		return new SelectQuery($this, $what);
+	}
+
+	/**
+	 * Begin a `CREATE` for a table or record.
+     *
+     * @param RecordId<string>|Table<string>|string $what
+     *
+     * @return CreateQuery<mixed>
+	 */
+	public function create(RecordId|Table|string $what): CreateQuery
+	{
+		return new CreateQuery($this, $what);
+	}
+
+	/**
+	 * Begin an `UPDATE` for a table or record.
+     *
+     * @param RecordId<string>|Table<string>|string $what
+     *
+     * @return UpdateQuery<mixed>
+	 */
+	public function update(RecordId|Table|string $what): UpdateQuery
+	{
+		return new UpdateQuery($this, $what);
+	}
+
+	/**
+	 * Begin an `UPSERT` for a table or record.
+     *
+     * @param RecordId<string>|Table<string>|string $what
+     *
+     * @return UpsertQuery<mixed>
+	 */
+	public function upsert(RecordId|Table|string $what): UpsertQuery
+	{
+		return new UpsertQuery($this, $what);
+	}
+
+	/**
+	 * Begin a `DELETE` for a table or record (defaults to `RETURN BEFORE`).
+     *
+     * @param RecordId<string>|Table<string>|string $what
+     *
+     * @return DeleteQuery<mixed>
+	 */
+	public function delete(RecordId|Table|string $what): DeleteQuery
+	{
+		return new DeleteQuery($this, $what);
+	}
+
+	/**
+	 * Begin an `INSERT`. Pass records directly, or a target table plus records.
+	 *
+     * @param Table<string>|array<string,mixed>|list<array<string,mixed>>|object $tableOrData a target table, or the record(s) to insert
+     * @param array<string,mixed>|list<array<string,mixed>>|object|null $data
+     *
+     * @return InsertQuery<mixed>
+	 */
+	public function insert(
+		array|object $tableOrData,
+		array|object|null $data = null,
+	): InsertQuery {
+		if ($tableOrData instanceof Table) {
+			return new InsertQuery($this, $tableOrData, $data ?? []);
+		}
+
+		return new InsertQuery($this, null, $tableOrData);
+	}
+
+	/**
+	 * Begin a `RELATE`, creating one or many graph edges.
+	 *
+     * @param RecordId<string>|list<RecordId<string>> $from
+     * @param RecordId<string>|Table<string> $edge
+     * @param RecordId<string>|list<RecordId<string>> $to
+	 * @param array<string,mixed>|object|null $data
+     *
+     * @return RelateQuery<mixed>
+	 */
+	public function relate(
+		RecordId|array $from,
+		RecordId|Table $edge,
+		RecordId|array $to,
+		array|object|null $data = null,
+	): RelateQuery {
+		$relate = new RelateQuery($this, $from, $edge, $to);
+
+		if ($data !== null) {
+			$relate->content($data);
+		}
+
+		return $relate;
+	}
+
+	/**
+	 * Invoke a SurrealQL/SurrealML function (`fn::*`, `ml::*`, built-ins).
+	 *
+	 * Named `call()` because {@see self::run()} already executes raw SurrealQL.
+	 *
+	 * @param list<mixed> $args
+     *
+     * @return RunQuery<mixed>
+	 */
+	public function call(
+		string $name,
+		?string $version = null,
+		array $args = [],
+	): RunQuery {
+		return new RunQuery($this, $name, $version, $args);
+	}
+
+	/**
+	 * Select the currently-authenticated record (`SELECT * FROM ONLY $auth`).
+     *
+     * @return AuthQuery<mixed>
+	 */
+	public function auth(): AuthQuery
+	{
+		return new AuthQuery($this);
+	}
+
+	/**
+	 * Subscribe to a live query by its id.
+	 *
+     * @return iterable<LiveMessage<mixed>>
+	 */
+	public function live(string $queryUuid): iterable
+	{
+		return $this->connection->liveQuery($queryUuid);
+	}
+
+	/**
+	 * Access the underlying controller for advanced operations (sessions,
+	 * transactions, import/export).
+	 */
+	public function connection(): ConnectionController
+	{
+		return $this->connection;
+	}
+
+	private static function buildContext(DriverOptions $options): DriverContext
+	{
+		$counter = 0;
+        $codec = self::resolveCodec($options);
+
+		return new DriverContext(
+			options: $options,
+			codec: $codec,
+			format: $options->format,
+			events: $options->events ?? new EventDispatcher(),
+			logger: $options->logger ?? new NullLogger(),
+			scheduler: $options->scheduler ?? new SyncScheduler(),
+			uniqueId: static fn(): string => (string) ++$counter,
+		);
+	}
+
+    private static function resolveCodec(DriverOptions $options): Codec
     {
-        $message = RpcMessage::create("use")->setParams(Helpers::parseTarget($target));
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Append a new parameter to the current session.
-     * @param string $name
-     * @param mixed $value
-     * @return null
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#let
-     */
-    public function let(string $name, mixed $value): null
-    {
-        $message = RpcMessage::create("let")->setParams([$name, $value]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Unset a parameter from the current session.
-     * @param string $name
-     * @return null
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#unset
-     */
-    public function unset(string $name): null
-    {
-        $message = RpcMessage::create("unset")->setParams([$name]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Returns auth information of the current session
-     * @returns array
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#info
-     */
-    public function info(): None|array
-    {
-        $message = RpcMessage::create("info");
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Returns the version of the remote surreal database.
-     * @return string
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#version
-     */
-    public function version(): string
-    {
-        $message = RpcMessage::create("version");
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Query a raw SurrealQL query
-     * @param string $query
-     * @param array $params
-     * @return array|null
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#query
-     */
-    public function queryRaw(string $query, array $params = []): ?array
-    {
-        $msgParams = empty($params) ? [$query] : [$query, $params];
-        $message = RpcMessage::create("query")->setParams($msgParams);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Query a raw SurrealQL query
-     * @param string $query
-     * @param array $params
-     * @return array|null
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#query
-     */
-    public function query(string $query, array $params = []): ?array
-    {
-        $data = $this->queryRaw($query, $params);
-        return is_array($data) ? array_map(fn($item) => $item["result"], $data) : null;
-    }
-
-    /**
-     * Selects a record or the whole table.
-     * @param RecordId|StringRecordId|string $thing
-     * @return mixed
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#select
-     */
-    public function select(RecordId|StringRecordId|string $thing): mixed
-    {
-        $message = RpcMessage::create("select")->setParams([$thing]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Creates a new record in a table.
-     * @param RecordId|StringRecordId|string $thing
-     * @param mixed $data
-     * @return object|null
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#create
-     */
-    public function create(RecordId|StringRecordId|string $thing, mixed $data): ?array
-    {
-        $message = RpcMessage::create("create")->setParams([$thing, $data]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Updates an existing record in a table.
-     * @param RecordId|StringRecordId|string $thing
-     * @param mixed $data
-     * @return array|null
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#read
-     */
-    public function update(RecordId|StringRecordId|string $thing, mixed $data): ?array
-    {
-        $message = RpcMessage::create("update")->setParams([$thing, $data]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Creates or updates a record in a table.
-     * @param RecordId|StringRecordId|string $thing
-     * @param mixed $data
-     * @return array|null
-     */
-    public function upsert(RecordId|StringRecordId|string $thing, mixed $data): ?array
-    {
-        $message = RpcMessage::create("upsert")->setParams([$thing, $data]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Selectively updates a record inside a table with the given data.
-     * @param RecordId|StringRecordId|string $thing
-     * @param mixed $data
-     * @return array|null
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#merge
-     */
-    public function merge(RecordId|StringRecordId|string $thing, mixed $data): ?array
-    {
-        $message = RpcMessage::create("merge")->setParams([$thing, $data]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Patches a specified column inside a record with the given value.
-     * @param RecordId|StringRecordId|string $thing
-     * @param array<array{op:string,path:string,value:mixed}> $data
-     * @param bool $diff
-     * @return array|null
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#patch
-     */
-    public function patch(RecordId|StringRecordId|string $thing, array $data, bool $diff = false): ?array
-    {
-        $message = RpcMessage::create("patch")->setParams([$thing, $data, $diff]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Inserts one or multiple records into a table.
-     * @param string $table
-     * @param array $data
-     * @return array|null
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#insert
-     */
-    public function insert(string $table, array $data): ?array
-    {
-        $message = RpcMessage::create("insert")->setParams([$table, $data]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Deletes a record from a table.
-     * @param RecordId|StringRecordId|string $thing
-     * @return array|null
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#delete
-     */
-    public function delete(RecordId|StringRecordId|string $thing): ?array
-    {
-        $message = RpcMessage::create("delete")->setParams([$thing]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Signin with a root, namespace, database or scoped user.
-     * @param array{namespace:string|null,database:string|null,scope:string|null,access:string|null} $data
-     * @return string|null
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#signin
-     * @since SurrealDB-v1.0.0 - The access parameter was added in SurrealDB-v2.0.0
-     */
-    public function signin(array $data): ?string
-    {
-        $message = RpcMessage::create("signin")->setParams([
-            Helpers::processAuthVariables($data)
-        ]);
-
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Signup a new scoped user.
-     * @param array{namespace:string|null,database:string|null,scope:string|null,access:string|null} $data
-     * @return string|null
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#signup
-     * @since SurrealDB-v1.0.0 - The access parameter was added in SurrealDB-v2.0.0
-     */
-    public function signup(array $data): ?string
-    {
-        $message = RpcMessage::create("signup")->setParams([
-            Helpers::processAuthVariables($data)
-        ]);
-
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Create a relation between two records. The data parameter is optional.
-     * @param RecordInterface|RecordInterface[] $from
-     * @param Table|string $thing
-     * @param RecordInterface|RecordInterface[] $to
-     * @param array|null $data
-     * @return array{id:RecordId, in:RecordId, out:RecordId}|null
-     * @since SurrealDB-v1.5.0
-     */
-    public function relate(
-        RecordInterface|array $from,
-		Table|string $thing,
-        RecordInterface|array $to,
-		?array $data = null
-	): ?array
-    {
-        $message = RpcMessage::create("relate")->setParams([$from, $thing, $to, $data]);
-        $response = $this->engine->rpc($message);
-
-        return match(Helpers::isAssoc($response)) {
-            true => [$response],
-            default => $response
-        };
-    }
-
-    /**
-     * This method inserts a new relation record into the database.
-     * @param string|Table $table
-     * @param array $data
-     * @return array{id:RecordId,in:RecordId,out:RecordId}
-     */
-    public function insertRelation(
-        string | Table $table,
-        array $data
-    ): array
-    {
-        $message = RpcMessage::create("insert_relation")->setParams([$table, $data]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Runs a defined SurrealQL function.
-     * @param string $function
-     * @param string|null $version
-     * @param array|null $params
-     * @return mixed
-     * @since SurrealDB-v1.5.0
-     */
-    public function run(string $function, ?string $version = null, ?array $params = null): mixed
-    {
-        $message = RpcMessage::create("run")->setParams([
-            $function,
-            $version,
-            $params
-        ]);
-
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Authenticate the current session with a token.
-     * @param string|null $token
-     * @return string|None
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#authenticate
-     */
-    public function authenticate(?string $token): string|None
-    {
-        $message = RpcMessage::create("authenticate")->setParams([$token]);
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * This method will invalidate the user's session for the current connection
-     * @return None
-     * @see https://surrealdb.com/docs/surrealdb/integration/rpc#invalidate
-     */
-    public function invalidate(): None
-    {
-        $message = RpcMessage::create("invalidate");
-        return $this->engine->rpc($message);
-    }
-
-    /**
-     * Makes the current session invalid
-     * This method is only supported for HTTP connections.
-     * @param string $content - content inside a .surql file.
-     * @param string $username
-     * @param string $password
-     * @return array|null - Array of SingleRecordResponse
-     * @throws SurrealException|Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/http#import
-     */
-    public function import(string $content, string $username, string $password): ?array
-    {
-        if ($this->engine instanceof HttpEngine) {
-            return $this->engine->import($content, $username, $password);
-        }
-
-        throw new Exception("Import is only supported for HTTP connections.");
-    }
-
-    /**
-     * Returns an exported content of the current selected database as string.
-     * This method is only supported for HTTP connections.
-     * @param string $username
-     * @param string $password
-     * @return string - exported content
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/http#export
-     */
-    public function export(string $username, string $password): string
-    {
-        if ($this->engine instanceof HttpEngine) {
-            return $this->engine->export($username, $password);
-        }
-
-        throw new Exception("Export is only supported for HTTP connections.");
-    }
-
-    /**
-     * Import a machine learning model into the database. When username and password aren't provided.
-     * It uses the token from the current session. This method is only supported for HTTP connections.
-     * @param string $content - content inside a .surml file.
-     * @param string|null $username
-     * @param string|null $password
-     * @return mixed
-     * @throws SurrealException|Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/http#ml-import
-     */
-    public function importML(string $content, ?string $username = null, ?string $password = null): mixed
-    {
-        if ($this->engine instanceof HttpEngine) {
-            return $this->engine->importML($content, $username, $password);
-        }
-
-        throw new Exception("ML Import is only supported for HTTP connections.");
-    }
-
-    /**
-     * Export a machine learning model from the database.
-     * This method is only supported for HTTP connections.
-     * @param string $name
-     * @param string $version
-     * @param string|null $username
-     * @param string|null $password
-     * @return string
-     * @throws SurrealException|Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/http#ml-export
-     */
-    public function exportML(
-        string  $name,
-        string  $version,
-        ?string $username = null,
-        ?string $password = null
-    ): string
-    {
-        if ($this->engine instanceof HttpEngine) {
-            return $this->engine->exportML($name, $version, $username, $password);
-        }
-
-        throw new Exception("ML Export is only supported for HTTP connections.");
-    }
-
-    /**
-     * Returns the status code of the current connection.
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/http#status
-     * @return int - 200 or 500
-     */
-    public function status(): int
-    {
-        if ($this->engine instanceof HttpEngine) {
-            return $this->engine->status();
-        } else if ($this->engine instanceof WsEngine) {
-            return $this->engine->isConnected() ? 200 : 500;
-        }
-
-        return 500;
-    }
-
-    /**
-     * This HTTP RESTfull endpoint checks whether the database server and storage engine are running.
-     * The endpoint returns a 200 status code on success and a 500 status code on failure.
-     * @return int - status code
-     * @throws Exception
-     * @see https://surrealdb.com/docs/surrealdb/integration/http#health
-     */
-    public function health(): int
-    {
-        if ($this->engine instanceof HttpEngine) {
-            return $this->engine->health();
-        }
-
-        throw new Exception("Health check is only supported for HTTP connections.");
-    }
-
-    /**
-     * Connect to the remote Surreal database. Throws an error if the connection fails.
-     * @param string $host
-     * @param array{
-     *     namespace:string|null,
-     *     database:string|null,
-     *     versionCheck:bool|null
-     * }|null $options
-     * @return void
-     * @throws Exception
-     */
-    public function connect(string $host, ?array $options = null): void
-    {
-        $this->engine = match (parse_url($host, PHP_URL_SCHEME)) {
-            "http", "https" => new HttpEngine($host),
-            "ws", "wss" => new WsEngine($host),
-            default => throw new Exception("Unsupported protocol"),
+        $codec = $options->codec ?? match ($options->format) {
+            CodecEnum::CBOR => Codec::cbor(),
+            CodecEnum::JSON => Codec::json(),
+            default => Codec::json(),
         };
 
-        $this->engine->connect();
-
-        if ($options) {
-            $this->use($options);
+        if ($options->format === CodecEnum::CBOR
+            && ($codec->serializer instanceof JsonSerializer || $codec->deserializer instanceof JsonDeserializer)) {
+            throw new ConfigurationException(
+                'Configuration',
+                'DriverOptions format CBOR requires a CBOR serializer and deserializer.',
+            );
         }
 
-        if(!array_key_exists("versionCheck", $options) || $options["versionCheck"] !== false) {
-            $versionRange = Surreal::SUPPORTED_SURREALDB_VERSION_RANGE;
-            $version = $this->version();
-
-            // remove the prefix "surrealdb-" from the version
-            $version = str_replace("surrealdb-", "", $version);
-
-            if (!Semver::satisfies($version, $versionRange)) {
-                throw new Exception("Unsupported SurrealDB version. Supported version range: $versionRange");
-            }
+        if ($options->format === CodecEnum::JSON
+            && ($codec->serializer instanceof CborSerializer || $codec->deserializer instanceof CborDeserializer)) {
+            throw new ConfigurationException(
+                'Configuration',
+                'DriverOptions format JSON cannot use a CBOR serializer or deserializer.',
+            );
         }
-    }
 
-    /**
-     * Closes the connection.
-     * @return bool
-     */
-    public function close(): bool
-    {
-        return $this->engine->close();
-    }
-
-    /**
-     * Set the timeout for the requests in seconds.
-     * @param int $seconds
-     * @return void
-     */
-    public function setTimeout(int $seconds): void
-    {
-        $this->engine->setTimeout($seconds);
-    }
-
-    /**
-     * Retrieve the current timeout for the requests in seconds.
-     * @return int - seconds
-     */
-    public function getTimeout(): int
-    {
-        return $this->engine->getTimeout();
-    }
-
-    /**
-     * Call a SurrealDB RPC method with the given message.
-     * @param string $method
-     * @param array $params
-     * @return mixed
-     */
-    public function rpc(
-        string $method,
-        array $params
-    ): mixed
-    {
-        $message = RpcMessage::create($method)->setParams($params);
-        return $this->engine->rpc($message);
+        return $codec;
     }
 }
