@@ -111,6 +111,54 @@ $groups = $db->query('SELECT marketing, count() FROM $tb GROUP BY marketing', [
 $db->close();
 ```
 
+## Observability
+
+The SDK emits OpenTelemetry traces and metrics for every RPC. Enable it per runtime through the `Runtime` presets, which pick the export strategy that fits each environment:
+
+- **PHP-FPM / CLI** (`Runtime::sync`): spans are buffered in a batch processor and flushed once the request finishes (after `fastcgi_finish_request()` under FPM), so export never adds to user-visible latency.
+- **OpenSwoole / FrankenPHP (Amp)** (`Runtime::swoole` / `Runtime::amp`): each span is exported directly with no batching, over a non-blocking transport (Swoole runtime hooks, or the Amp PSR-18 client).
+
+```php
+use SurrealDB\SDK\Runtime\Runtime;
+use SurrealDB\SDK\Surreal;
+use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
+
+$observability = new ObservabilityOptions(
+    endpoint: "http://localhost:4318", // OTLP collector
+    serviceName: "my-app",
+);
+
+// PHP-FPM / CLI: batch in memory, flush after the request.
+$db = new Surreal(Runtime::sync(observability: $observability));
+
+// OpenSwoole / FrankenPHP: direct, non-blocking export.
+$db = new Surreal(Runtime::swoole(observability: $observability));
+$db = new Surreal(Runtime::amp(observability: $observability));
+```
+
+Requires `open-telemetry/sdk` and `open-telemetry/exporter-otlp` (plus `amphp/http-client-psr7` for the Amp runtime).
+
+### Flushing after the response in a framework
+
+When the framework owns the response lifecycle (e.g. Laravel), build the providers yourself and flush in a terminable hook rather than relying on the shutdown handler:
+
+```php
+use SurrealDB\SDK\Connection\DriverOptions;
+use SurrealDB\SDK\Surreal;
+use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
+use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelObservability;
+
+$telemetry = OtelObservability::batched(new ObservabilityOptions(serviceName: "my-app"));
+
+$db = new Surreal(new DriverOptions(
+    tracer: $telemetry->tracer(),
+    meter: $telemetry->meter(),
+));
+
+// Laravel: flush after the response has been sent to the client.
+app()->terminating(static fn () => $telemetry->forceFlush());
+```
+
 ## Contributing
 
 ### Requirements
