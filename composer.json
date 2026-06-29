@@ -24,9 +24,12 @@
     },
     "require-dev": {
         "amphp/http-client": "^5.3",
+        "amphp/http-client-psr7": "^1.1",
         "amphp/websocket-client": "^2.0",
+        "friendsofphp/php-cs-fixer": "^3.95",
         "guzzlehttp/guzzle": "^7.11",
         "open-telemetry/api": "^1.9",
+        "open-telemetry/exporter-otlp": "^1.3",
         "open-telemetry/sdk": "^1.14",
         "openswoole/core": "^26.2",
         "php-http/discovery": "^1.20",
@@ -42,7 +45,10 @@
         "revolt/event-loop": "Fiber-based event loop powering the Amp runtime (e.g. FrankenPHP worker mode)",
         "amphp/websocket-client": "Async WebSocket transport for the Amp/Revolt runtime",
         "amphp/http-client": "Non-blocking HTTP transport for the Amp/Revolt runtime",
-        "open-telemetry/api": "Emit OpenTelemetry traces and metrics via the bundled SurrealDB\\SDK\\Telemetry\\OpenTelemetry adapter"
+        "amphp/http-client-psr7": "Non-blocking PSR-18 client for OTLP export on the Amp/Revolt runtime (Runtime::amp with ObservabilityOptions)",
+        "open-telemetry/api": "Emit OpenTelemetry traces and metrics via the bundled SurrealDB\\SDK\\Telemetry\\OpenTelemetry adapter",
+        "open-telemetry/sdk": "Configure OpenTelemetry providers via the runtime-aware observability presets (Runtime::sync/swoole/amp with ObservabilityOptions)",
+        "open-telemetry/exporter-otlp": "OTLP exporter used by the runtime-aware observability presets to ship traces and metrics"
     },
     "autoload": {
         "psr-4": {
@@ -59,13 +65,17 @@
     "config": {
         "sort-packages": true,
         "allow-plugins": {
-            "php-http/discovery": true
+            "php-http/discovery": true,
+            "tbachert/spi": true
         }
     },
     "scripts": {
         "analyse": "vendor/bin/phpstan analyse --memory-limit=512M",
+        "cs": "vendor/bin/php-cs-fixer fix --dry-run --diff",
+        "cs:fix": "vendor/bin/php-cs-fixer fix",
         "check": [
             "@analyse",
+            "@cs",
             "@test"
         ],
         "test": "vendor/bin/phpunit --testsuite default",
@@ -75,7 +85,9 @@
     },
     "scripts-descriptions": {
         "analyse": "Run PHPStan static analysis on the source tree.",
-        "check": "Run static analysis and the default PHPUnit suite.",
+        "cs": "Check code style without writing changes (php-cs-fixer dry-run + diff).",
+        "cs:fix": "Apply code-style fixes, incl. `use function` imports for compiler-optimized native calls.",
+        "check": "Run static analysis, code-style checks, and the default PHPUnit suite.",
         "test": "Run the full suite on the default synchronous PHP-FPM/CLI driver (sync scheduler).",
         "test:openswoole": "Run the OpenSwoole coroutine runtime suite (requires the openswoole extension).",
         "test:frankenphp": "Run the FrankenPHP / Amp (Revolt) runtime suite (requires revolt/event-loop).",
