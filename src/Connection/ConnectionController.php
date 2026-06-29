@@ -6,8 +6,11 @@ use SurrealDB\SDK\Auth\Credentials;
 use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Auth\Tokens;
 use SurrealDB\SDK\Contracts\AuthProviderInterface;
+use SurrealDB\SDK\Contracts\Counter;
 use SurrealDB\SDK\Contracts\EngineInterface;
 use SurrealDB\SDK\Engines\EngineRegistry;
+use SurrealDB\SDK\Enum\SpanKind;
+use SurrealDB\SDK\Enum\SpanStatus;
 use SurrealDB\SDK\Events\AuthChanged;
 use SurrealDB\SDK\Events\Connected;
 use SurrealDB\SDK\Events\Connecting;
@@ -47,6 +50,7 @@ final class ConnectionController
 {
     private readonly Publisher $events;
     private readonly EngineRegistry $registry;
+    private readonly Counter $connections;
 
     private ?ConnectionState $state = null;
     private ?EngineInterface $engine = null;
@@ -67,6 +71,11 @@ final class ConnectionController
     ) {
         $this->events = new Publisher();
         $this->registry = $registry ?? new EngineRegistry($context->options->engines ?? []);
+        $this->connections = $context->meter->counter(
+            'db.client.connection.count',
+            '{connection}',
+            'Number of SurrealDB connection attempts.',
+        );
     }
 
     public function subscribe(string $event, callable $listener): \Closure
@@ -127,9 +136,29 @@ final class ConnectionController
         $this->events->publish('connecting');
         $this->context->events->dispatch(new Connecting());
 
-        $engine->open($this->state);
+        // Trace connection establishment. With the OpenTelemetry adapter this
+        // span is the active context, so the session-restore RPCs issued during
+        // `open()` nest underneath it.
+        $span = $this->context->tracer->startSpan(
+            'surrealdb.connect',
+            SpanKind::Client,
+            $this->connectionAttributes($endpoint),
+        );
+        $outcome = 'ok';
 
-        $this->ready();
+        try {
+            $engine->open($this->state);
+            $this->ready();
+            $span->setStatus(SpanStatus::Ok);
+        } catch (\Throwable $error) {
+            $outcome = 'error';
+            $span->recordException($error)->setStatus(SpanStatus::Error, $error->getMessage());
+
+            throw $error;
+        } finally {
+            $this->connections->add(1, ['db.system.name' => 'surrealdb', 'outcome' => $outcome]);
+            $span->end();
+        }
     }
 
     public function disconnect(): void
@@ -412,6 +441,10 @@ final class ConnectionController
 
     private function onReconnecting(): void
     {
+        // Reconnects span asynchronous engine callbacks, so they are surfaced as
+        // a counter increment rather than a span (which would activate a scope
+        // in one callback and close it in another).
+        $this->connections->add(1, ['db.system.name' => 'surrealdb', 'outcome' => 'reconnect']);
         $this->status = ConnectionStatus::Reconnecting;
         $this->events->publish('reconnecting');
         $this->context->events->dispatch(new Reconnecting());
@@ -607,6 +640,24 @@ final class ConnectionController
         }
 
         $this->applyAuthentication($session->id);
+    }
+
+    /**
+     * @return array<non-empty-string, scalar|array<scalar>|null>
+     */
+    private function connectionAttributes(Endpoint $endpoint): array
+    {
+        $attributes = [
+            'db.system.name' => 'surrealdb',
+            'server.address' => $endpoint->host,
+            'network.transport' => $endpoint->scheme,
+        ];
+
+        if ($endpoint->port !== null) {
+            $attributes['server.port'] = $endpoint->port;
+        }
+
+        return $attributes;
     }
 
     private function requireEngine(): EngineInterface

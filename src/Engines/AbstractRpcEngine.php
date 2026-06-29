@@ -13,6 +13,7 @@ use SurrealDB\SDK\Events\RpcResponseReceived;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Middleware\LoggingMiddleware;
 use SurrealDB\SDK\Middleware\MiddlewarePipeline;
+use SurrealDB\SDK\Middleware\TelemetryMiddleware;
 use SurrealDB\SDK\Protocol\NamespaceDatabase;
 use SurrealDB\SDK\Protocol\QueryChunk;
 use SurrealDB\SDK\Protocol\VersionInfo;
@@ -20,6 +21,8 @@ use SurrealDB\SDK\Query\BoundQuery;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Support\Publisher;
+use SurrealDB\SDK\Telemetry\NullMeter;
+use SurrealDB\SDK\Telemetry\NullTracer;
 use SurrealDB\SDK\Transport\HttpClientResolver;
 use SurrealDB\SDK\Transport\SurrealHttp;
 
@@ -300,6 +303,11 @@ abstract class AbstractRpcEngine implements EngineInterface
         // Auto-enable the debugger when a real logger is configured.
         if (!$this->context->logger instanceof NullLogger) {
             $pipeline->push(new LoggingMiddleware($this->context->logger));
+        }
+
+        // Auto-enable telemetry when a real tracer or meter is configured.
+        if (!$this->context->tracer instanceof NullTracer || !$this->context->meter instanceof NullMeter) {
+            $pipeline->push(new TelemetryMiddleware($this->context->tracer, $this->context->meter));
         }
 
         foreach ($this->context->options->middleware as $middleware) {

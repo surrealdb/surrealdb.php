@@ -26,6 +26,8 @@
         "amphp/http-client": "^5.3",
         "amphp/websocket-client": "^2.0",
         "guzzlehttp/guzzle": "^7.11",
+        "open-telemetry/api": "^1.9",
+        "open-telemetry/sdk": "^1.14",
         "openswoole/core": "^26.2",
         "php-http/discovery": "^1.20",
         "phpstan/phpstan": "^2.2",
@@ -39,7 +41,8 @@
         "openswoole/core": "Run the SDK on OpenSwoole coroutines (native async WebSocket client and non-blocking HTTP via runtime hooks)",
         "revolt/event-loop": "Fiber-based event loop powering the Amp runtime (e.g. FrankenPHP worker mode)",
         "amphp/websocket-client": "Async WebSocket transport for the Amp/Revolt runtime",
-        "amphp/http-client": "Non-blocking HTTP transport for the Amp/Revolt runtime"
+        "amphp/http-client": "Non-blocking HTTP transport for the Amp/Revolt runtime",
+        "open-telemetry/api": "Emit OpenTelemetry traces and metrics via the bundled SurrealDB\\SDK\\Telemetry\\OpenTelemetry adapter"
     },
     "autoload": {
         "psr-4": {

@@ -37,6 +37,8 @@ use SurrealDB\SDK\Query\SelectQuery;
 use SurrealDB\SDK\Query\UpdateQuery;
 use SurrealDB\SDK\Query\UpsertQuery;
 use SurrealDB\SDK\Scheduler\SyncScheduler;
+use SurrealDB\SDK\Telemetry\NullMeter;
+use SurrealDB\SDK\Telemetry\NullTracer;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
 
@@ -369,6 +371,8 @@ final class Surreal implements QueryExecutor
 			logger: $options->logger ?? new NullLogger(),
 			scheduler: $options->scheduler ?? new SyncScheduler(),
 			uniqueId: static fn(): string => (string) ++$counter,
+			tracer: $options->tracer ?? new NullTracer(),
+			meter: $options->meter ?? new NullMeter(),
 		);
 	}
 
