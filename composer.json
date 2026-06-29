@@ -3,7 +3,7 @@
     "description": "The official SurrealDB SDK for PHP.",
     "type": "library",
     "license": "Apache-2.0",
-	"version": "2.0.0-alpha.1",
+	"version": "2.0.0-alpha.2",
     "keywords": [
         "surrealdb",
         "database",
