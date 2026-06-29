@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function strlen;
+
 /**
  * A SurrealQL `bytes` value wrapping a raw binary string.
  *

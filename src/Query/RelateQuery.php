@@ -11,6 +11,7 @@ use SurrealDB\SDK\Query\Concerns\HasTimeout;
 use SurrealDB\SDK\Query\Concerns\HasVersion;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use function is_array;
 
 /**
  * Fluent `RELATE` builder, creating graph edges between records. Pass arrays of

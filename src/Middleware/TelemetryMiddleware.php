@@ -11,6 +11,7 @@ use SurrealDB\SDK\Enum\SpanKind;
 use SurrealDB\SDK\Enum\SpanStatus;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
+use function is_string;
 
 /**
  * Emits a trace span plus duration/count metrics for every RPC. Like

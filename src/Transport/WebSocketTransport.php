@@ -10,6 +10,7 @@ use SurrealDB\SDK\Enum\CodecEnum;
 use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
+use function is_array;
 
 /**
  * The default duplex transport: wraps a {@see WebSocketClientInterface} and

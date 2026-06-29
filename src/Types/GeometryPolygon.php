@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function count;
+
 /**
  * A GeoJSON `Polygon` geometry: one or more linear rings.
  */

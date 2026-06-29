@@ -35,6 +35,7 @@ use SurrealDB\SDK\Support\Jwt;
 use SurrealDB\SDK\Support\Publisher;
 use SurrealDB\SDK\Support\Version;
 use Symfony\Component\Uid\Uuid;
+use function is_string;
 
 /**
  * Orchestrates a connection: engine selection, connection/session state,

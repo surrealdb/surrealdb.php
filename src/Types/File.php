@@ -2,6 +2,9 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function ord;
+use function strlen;
+
 /**
  * A SurrealQL `file` value: a reference to a file stored in a bucket (e.g.
  * `bucket:/path/to/file`). Mirrors the JS SDK's `FileRef`.

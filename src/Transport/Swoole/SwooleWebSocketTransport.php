@@ -12,6 +12,7 @@ use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
+use function is_array;
 
 /**
  * A duplex WebSocket transport using OpenSwoole's native coroutine HTTP client.

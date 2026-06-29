@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function count;
+
 /**
  * A GeoJSON `LineString` geometry: an ordered list of two or more points.
  */

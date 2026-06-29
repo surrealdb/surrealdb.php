@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK\Types;
 
 use SurrealDB\SDK\Exceptions\InvalidValueException;
+use function strlen;
 
 /**
  * A SurrealQL `duration` value with nanosecond precision.

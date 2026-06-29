@@ -2,6 +2,10 @@
 
 namespace SurrealDB\SDK\Support;
 
+use function count;
+use function is_array;
+use function strlen;
+
 /** Minimal, signature-less JWT payload reader used for token expiry scheduling. */
 final class Jwt
 {

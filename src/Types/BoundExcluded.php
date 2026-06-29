@@ -9,7 +9,7 @@ use JsonSerializable;
  *
  * @template T
  */
-final class BoundExcluded implements JsonSerializable
+final class BoundExcluded implements \JsonSerializable
 {
     /** @var T */
     public mixed $value;

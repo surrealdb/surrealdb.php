@@ -3,6 +3,8 @@
 namespace SurrealDB\SDK\Protocol;
 
 use SurrealDB\SDK\Exceptions\ServerException;
+use function is_array;
+use function is_string;
 
 /**
  * A single statement result yielded from a `query` call. Mirrors the JS

@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK\Connection;
 
 use SurrealDB\SDK\Exceptions\SurrealException;
+use function in_array;
 
 /**
  * A parsed, normalized SurrealDB endpoint. Remote schemes get a `/rpc` suffix

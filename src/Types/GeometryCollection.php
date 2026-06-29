@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function count;
+
 /**
  * A GeoJSON `GeometryCollection`: a heterogeneous collection of geometries.
  */

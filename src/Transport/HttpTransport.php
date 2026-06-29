@@ -9,6 +9,7 @@ use SurrealDB\SDK\Contracts\TransportInterface;
 use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
+use function is_array;
 
 /**
  * The default request/response transport: each call is an individual PSR-18

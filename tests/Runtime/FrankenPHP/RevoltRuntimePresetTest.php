@@ -6,6 +6,9 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Runtime\Runtime;
 use SurrealDB\SDK\Scheduler\Amp\RevoltScheduler;
+use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
+use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelMeter;
+use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelTracer;
 
 /**
  * Verifies the Amp / FrankenPHP runtime preset wires the Revolt scheduler and
@@ -33,5 +36,18 @@ final class RevoltRuntimePresetTest extends TestCase
         $this->assertSame($base, $options);
         $this->assertSame(5, $options->pingInterval);
         $this->assertInstanceOf(RevoltScheduler::class, $options->scheduler);
+    }
+
+    public function testPresetWiresNonBlockingObservabilityWhenConfigured(): void
+    {
+        if (!class_exists(\OpenTelemetry\Contrib\Otlp\SpanExporter::class)
+            || !class_exists(\Amp\Http\Client\Psr7\PsrHttpClient::class)) {
+            $this->markTestSkipped('The OTLP exporter and amphp/http-client-psr7 are required.');
+        }
+
+        $options = Runtime::amp(observability: new ObservabilityOptions());
+
+        $this->assertInstanceOf(OtelTracer::class, $options->tracer);
+        $this->assertInstanceOf(OtelMeter::class, $options->meter);
     }
 }

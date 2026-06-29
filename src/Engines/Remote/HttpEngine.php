@@ -12,6 +12,8 @@ use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Transport\HttpTransport;
+use function in_array;
+use function is_array;
 
 /**
  * An engine that issues each RPC as an individual HTTP request. Stateful

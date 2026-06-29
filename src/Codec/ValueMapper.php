@@ -20,6 +20,9 @@ use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
 use SurrealDB\SDK\Types\Uuid;
 use SurrealDB\SDK\Types\Value;
+use function array_key_exists;
+use function is_array;
+use function is_string;
 
 /**
  * Translates between SurrealDB's SQON-J tagged JSON form (e.g.

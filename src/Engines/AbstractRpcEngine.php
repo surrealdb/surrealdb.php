@@ -25,6 +25,8 @@ use SurrealDB\SDK\Telemetry\NullMeter;
 use SurrealDB\SDK\Telemetry\NullTracer;
 use SurrealDB\SDK\Transport\HttpClientResolver;
 use SurrealDB\SDK\Transport\SurrealHttp;
+use function is_array;
+use function is_string;
 
 /**
  * Implements the SurrealDB protocol by translating every operation into a
