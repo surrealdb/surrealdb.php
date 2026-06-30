@@ -4,8 +4,8 @@ namespace SurrealDB\SDK\Enum;
 
 enum CodecEnum: string
 {
-    case CBOR = "cbor"; // main codec for surrealdb which we want to use it for now
-    case JSON = "json"; // zero-dependency default shipped with the SDK
+    case CBOR = "cbor"; // default codec; SurrealDB's primary wire format
+    case JSON = "json"; // zero-dependency fallback shipped with the SDK
     case GRPC = "grpc"; // supported in surrealdb, we can ignore it for now
     case SQON = "sqon"; // not supported yet / nor a package that is available yet
 

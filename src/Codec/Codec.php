@@ -4,9 +4,6 @@ namespace SurrealDB\SDK\Codec;
 
 final readonly class Codec
 {
-	const DEFAULT_SERIALIZER = "cbor";
-	const DEFAULT_DESERIALIZER = "cbor";
-
 	public function __construct(
 		public SerializerInterface $serializer,
 		public DeserializerInterface $deserializer,

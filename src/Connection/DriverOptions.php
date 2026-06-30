@@ -37,7 +37,7 @@ final class DriverOptions
      */
     public function __construct(
         public ?Codec $codec = null,
-        public CodecEnum $format = CodecEnum::JSON,
+        public CodecEnum $format = CodecEnum::CBOR,
         public ?EventDispatcherInterface $events = null,
         public ?LoggerInterface $logger = null,
         public ?Tracer $tracer = null,
