@@ -28,8 +28,8 @@ final class FakeDuplexTransport implements DuplexTransportInterface
     public function __construct(
         \Closure $responder,
         private readonly Codec $codec = new Codec(
-            new \SurrealDB\SDK\Codec\JsonSerializer(),
-            new \SurrealDB\SDK\Codec\JsonDeserializer(),
+            new \SurrealDB\SDK\Codec\CborSerializer(),
+            new \SurrealDB\SDK\Codec\CborDeserializer(),
         ),
     ) {
         $this->responder = $responder;
