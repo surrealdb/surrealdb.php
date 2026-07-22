@@ -5,8 +5,12 @@ namespace SurrealDB\SDK\Connection;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use SurrealDB\SDK\Codec\Codec;
+use SurrealDB\SDK\Contracts\Meter;
 use SurrealDB\SDK\Contracts\Scheduler;
+use SurrealDB\SDK\Contracts\Tracer;
 use SurrealDB\SDK\Enum\CodecEnum;
+use SurrealDB\SDK\Telemetry\NullMeter;
+use SurrealDB\SDK\Telemetry\NullTracer;
 
 /**
  * The resolved dependency bundle passed to every engine, transport, and
@@ -23,6 +27,8 @@ final readonly class DriverContext
         public LoggerInterface $logger,
         public Scheduler $scheduler,
         public \Closure $uniqueId,
+        public Tracer $tracer = new NullTracer(),
+        public Meter $meter = new NullMeter(),
     ) {}
 
     public function uniqueId(): string

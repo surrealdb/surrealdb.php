@@ -6,6 +6,7 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
 use SurrealDB\SDK\Exceptions\InvalidValueException;
+use function sprintf;
 
 /**
  * A SurrealQL `datetime` value with nanosecond precision.
@@ -42,7 +43,7 @@ final class DateTime extends Value
     /**
      * Construct from a native datetime (microsecond precision).
      */
-    public static function fromDateTime(DateTimeInterface $dateTime): self
+    public static function fromDateTime(\DateTimeInterface $dateTime): self
     {
         $microseconds = (int) $dateTime->format('u');
 
@@ -95,14 +96,14 @@ final class DateTime extends Value
      * A native {@see DateTimeImmutable} (microsecond precision; nanoseconds are
      * truncated).
      */
-    public function toDateTimeImmutable(): DateTimeImmutable
+    public function toDateTimeImmutable(): \DateTimeImmutable
     {
         $microseconds = intdiv($this->nanoseconds, 1_000);
 
-        return DateTimeImmutable::createFromFormat(
+        return \DateTimeImmutable::createFromFormat(
             'U u',
             sprintf('%d %06d', $this->seconds, $microseconds),
-            new DateTimeZone('UTC'),
+            new \DateTimeZone('UTC'),
         ) ?: throw new InvalidValueException('Unable to build a DateTimeImmutable from the stored timestamp.');
     }
 
@@ -156,14 +157,14 @@ final class DateTime extends Value
             $timezone = $matches[4] ?? '';
             $base = $matches[1] . 'T' . $matches[2] . $timezone;
 
-            $dateTime = new DateTimeImmutable($base, new DateTimeZone('UTC'));
+            $dateTime = new \DateTimeImmutable($base, new \DateTimeZone('UTC'));
             $nanoseconds = $fraction === '' ? 0 : (int) str_pad($fraction, 9, '0');
 
             return [$dateTime->getTimestamp(), $nanoseconds];
         }
 
         try {
-            $dateTime = new DateTimeImmutable($input);
+            $dateTime = new \DateTimeImmutable($input);
         } catch (\Exception $exception) {
             throw new InvalidValueException("Invalid datetime string: {$input}", previous: $exception);
         }

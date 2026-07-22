@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function count;
+
 /**
  * A SurrealQL `set` value: an array whose items are deduplicated.
  *

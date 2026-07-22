@@ -3,6 +3,8 @@
 namespace SurrealDB\SDK\Rpc;
 
 use SurrealDB\SDK\Exceptions\ServerException;
+use function is_array;
+use function is_string;
 
 /**
  * An immutable RPC response. Either carries a `result` or an `error`, matching

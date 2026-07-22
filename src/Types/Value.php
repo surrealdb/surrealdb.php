@@ -4,6 +4,11 @@ namespace SurrealDB\SDK\Types;
 
 use JsonSerializable;
 use SurrealDB\SDK\Contracts\SurrealType;
+use function is_array;
+use function is_bool;
+use function is_float;
+use function is_int;
+use function is_string;
 
 /**
  * Base class for the SurrealQL value types (the PHP counterpart of the JS SDK's
@@ -19,7 +24,7 @@ use SurrealDB\SDK\Contracts\SurrealType;
  *    available over the JSON wire protocol, and is what bound parameters emit
  *    through `json_encode`.
  */
-abstract class Value implements SurrealType, JsonSerializable, \Stringable
+abstract class Value implements SurrealType, \JsonSerializable, \Stringable
 {
     /**
      * Structurally compare this value with another.
@@ -69,7 +74,7 @@ abstract class Value implements SurrealType, JsonSerializable, \Stringable
             return '{ ' . implode(', ', $parts) . ' }';
         }
 
-        if ($value instanceof JsonSerializable) {
+        if ($value instanceof \JsonSerializable) {
             return self::toSurql($value->jsonSerialize());
         }
 

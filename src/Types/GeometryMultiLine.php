@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function count;
+
 /**
  * A GeoJSON `MultiLineString` geometry: a collection of lines.
  */

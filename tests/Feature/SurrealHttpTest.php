@@ -9,6 +9,9 @@ use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\Tests\Fakes\FakeTransport;
+use SurrealDB\Tests\Fakes\RecordingMeter;
+use SurrealDB\Tests\Fakes\RecordingSpan;
+use SurrealDB\Tests\Fakes\RecordingTracer;
 
 final class SurrealHttpTest extends TestCase
 {
@@ -55,5 +58,32 @@ final class SurrealHttpTest extends TestCase
 
         $this->assertNotNull($queryRequest);
         $this->assertSame(['name' => 'Tobie'], $queryRequest->params[1]);
+    }
+
+    public function testTelemetryIsEmittedForConnectionAndQueries(): void
+    {
+        $transport = $this->makeTransport();
+        $tracer = new RecordingTracer();
+        $meter = new RecordingMeter();
+        $db = new Surreal(new DriverOptions(
+            tracer: $tracer,
+            meter: $meter,
+            httpTransportFactory: fn (): FakeTransport => $transport,
+        ));
+
+        $db->connect('http://localhost:8000/rpc', new ConnectOptions(namespace: 'test', database: 'test'));
+        $db->run('SELECT 42');
+
+        $spanNames = array_map(static fn (RecordingSpan $span): string => $span->name, $tracer->spans);
+        $this->assertContains('surrealdb.connect', $spanNames, 'the connection should be traced');
+        $this->assertContains('surrealdb.version', $spanNames, 'restore-time RPCs should be traced');
+        $this->assertContains('surrealdb.query', $spanNames, 'queries should be traced');
+
+        $connections = $meter->counters['db.client.connection.count']->measurements;
+        $this->assertNotSame([], $connections);
+        $this->assertSame('ok', $connections[0]['attributes']['outcome']);
+
+        $this->assertArrayHasKey('db.client.operation.duration', $meter->histograms);
+        $this->assertArrayHasKey('db.client.operation.count', $meter->counters);
     }
 }

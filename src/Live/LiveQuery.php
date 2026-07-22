@@ -10,9 +10,9 @@ use Traversable;
  * call {@see close()} to release the underlying subscription.
  *
  * @template TRecord
- * @implements IteratorAggregate<int,LiveMessage<TRecord>>
+ * @implements \IteratorAggregate<int,LiveMessage<TRecord>>
  */
-final class LiveQuery implements IteratorAggregate
+final class LiveQuery implements \IteratorAggregate
 {
     /**
      * @param iterable<LiveMessage<TRecord>> $messages
@@ -23,9 +23,9 @@ final class LiveQuery implements IteratorAggregate
     ) {}
 
     /**
-     * @return Traversable<int,LiveMessage<TRecord>>
+     * @return \Traversable<int,LiveMessage<TRecord>>
      */
-    public function getIterator(): Traversable
+    public function getIterator(): \Traversable
     {
         yield from $this->messages;
     }

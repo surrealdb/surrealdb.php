@@ -17,6 +17,8 @@ use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Transport\StreamWebSocketClient;
 use SurrealDB\SDK\Transport\WebSocketTransport;
+use function is_array;
+use function is_string;
 
 /**
  * An engine that maintains a persistent WebSocket connection.

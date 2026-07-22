@@ -30,6 +30,10 @@ use SurrealDB\SDK\Types\Set;
 use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
 use SurrealDB\SDK\Types\Uuid;
+use function is_array;
+use function is_string;
+use function sprintf;
+use function strlen;
 
 final class CborValueMapper
 {
@@ -98,7 +102,7 @@ final class CborValueMapper
 				CborTag::GEOMETRY_COLLECTION,
 			),
 			is_array($data) => self::encodeArray($data),
-			$data instanceof JsonSerializable => self::encode(
+			$data instanceof \JsonSerializable => self::encode(
 				$data->jsonSerialize(),
 			),
 			$data instanceof \stdClass => self::encode(get_object_vars($data)),

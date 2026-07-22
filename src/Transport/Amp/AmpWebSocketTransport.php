@@ -14,6 +14,7 @@ use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 
 use function Amp\Websocket\Client\connect;
+use function is_array;
 
 /**
  * A duplex WebSocket transport using amphp/websocket-client (Amp v3 / Revolt).

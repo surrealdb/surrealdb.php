@@ -4,6 +4,7 @@ namespace SurrealDB\SDK\Scheduler\Swoole;
 
 use OpenSwoole\Coroutine\Channel;
 use SurrealDB\SDK\Contracts\Deferred;
+use function is_array;
 
 /**
  * A coroutine-backed {@see Deferred}. `await()` pops a single-slot channel,

@@ -2,6 +2,10 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function is_array;
+use function is_int;
+use function is_object;
+
 /**
  * A fully-qualified SurrealDB record identifier (e.g. `person:tobie`).
  *

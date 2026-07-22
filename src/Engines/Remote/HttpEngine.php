@@ -12,6 +12,8 @@ use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Transport\HttpTransport;
+use function in_array;
+use function is_array;
 
 /**
  * An engine that issues each RPC as an individual HTTP request. Stateful
@@ -98,7 +100,7 @@ final class HttpEngine extends AbstractRpcEngine
             $params = $request->params;
             $bindings = is_array($params[1] ?? null) ? $params[1] : [];
             $mergedBindings = [...$session->variables, ...$bindings];
-            $params[1] = $mergedBindings !== [] ? $mergedBindings : new \stdClass();
+            $params[1] = $mergedBindings !== [] ? $mergedBindings : null;
             $request = $request->withParams($params);
         }
 

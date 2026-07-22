@@ -4,6 +4,11 @@ namespace SurrealDB\SDK\Transport;
 
 use SurrealDB\SDK\Contracts\WebSocketClientInterface;
 use SurrealDB\SDK\Exceptions\SurrealException;
+use function chr;
+use function is_resource;
+use function ord;
+use function sprintf;
+use function strlen;
 
 /**
  * A compact, dependency-free synchronous WebSocket client (RFC 6455) built on

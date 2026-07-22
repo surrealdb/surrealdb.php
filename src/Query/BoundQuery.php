@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK\Query;
 
 use SurrealDB\SDK\Exceptions\ExpressionException;
+use function array_key_exists;
 
 /**
  * A parameter-bound SurrealQL fragment: the query text plus the values bound to

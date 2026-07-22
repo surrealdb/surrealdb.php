@@ -7,6 +7,7 @@ use SurrealDB\SDK\Contracts\SurrealType;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use function is_array;
 
 /**
  * Base class for the fluent statement builders.

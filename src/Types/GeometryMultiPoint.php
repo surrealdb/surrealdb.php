@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Types;
 
+use function count;
+
 /**
  * A GeoJSON `MultiPoint` geometry: a collection of points.
  */

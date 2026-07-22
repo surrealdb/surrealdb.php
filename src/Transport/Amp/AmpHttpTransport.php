@@ -12,6 +12,7 @@ use SurrealDB\SDK\Exceptions\HttpConnectionException;
 use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
+use function is_array;
 
 /**
  * A non-blocking HTTP transport using amphp/http-client, suited to the Amp /

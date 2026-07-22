@@ -4,6 +4,7 @@ namespace SurrealDB\SDK\Types;
 
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
+use function is_float;
 
 /**
  * A SurrealQL `decimal` value: an arbitrary-precision decimal number backed by
