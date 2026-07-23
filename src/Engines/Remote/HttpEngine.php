@@ -100,7 +100,7 @@ final class HttpEngine extends AbstractRpcEngine
             $params = $request->params;
             $bindings = is_array($params[1] ?? null) ? $params[1] : [];
             $mergedBindings = [...$session->variables, ...$bindings];
-            $params[1] = $mergedBindings !== [] ? $mergedBindings : new \stdClass();
+            $params[1] = $mergedBindings !== [] ? $mergedBindings : null;
             $request = $request->withParams($params);
         }
 

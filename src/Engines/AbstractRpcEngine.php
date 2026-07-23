@@ -177,7 +177,7 @@ abstract class AbstractRpcEngine implements EngineInterface
 
     public function query(BoundQuery $query, ?string $session, ?string $txn = null): iterable
     {
-        $bindings = $query->bindings !== [] ? $query->bindings : new \stdClass();
+        $bindings = $query->bindings !== [] ? $query->bindings : null;
         $responses = $this->dispatch(new RpcRequest('query', [$query->query, $bindings], $session, $txn));
 
         if (!is_array($responses)) {
@@ -205,7 +205,7 @@ abstract class AbstractRpcEngine implements EngineInterface
     {
         $state = $this->requireState();
         $url = $state->endpoint->httpUriWithPath($state->endpoint->basePath() . '/export');
-        $body = $this->context->codec->serialize($options !== [] ? $options : new \stdClass());
+        $body = $this->context->codec->serialize($options !== [] ? $options : null);
 
         $response = $this->http()->request($url, 'POST', $body, $this->httpHeaders(
             $state->rootSession,

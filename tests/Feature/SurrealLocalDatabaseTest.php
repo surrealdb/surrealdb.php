@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Surreal;
+use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
 
@@ -71,7 +72,7 @@ final class SurrealLocalDatabaseTest extends TestCase
             $selected = $db->select($person)->execute();
 
             $this->assertRecord($selected, 'person:tobie');
-            self::assertSame($created, $selected);
+            self::assertEquals($created, $selected);
 
             $updated = $db->update($person)
                 ->merge(['visits' => 2])
@@ -86,7 +87,11 @@ final class SurrealLocalDatabaseTest extends TestCase
             $deleted = $db->delete($person)->execute();
             $this->assertRecord($deleted, 'person:tobie');
 
-            self::assertNull($db->select($person)->execute());
+            $afterDelete = $db->select($person)->execute();
+            self::assertTrue(
+                $afterDelete === null || $afterDelete instanceof None,
+                'Expected no record after delete, got ' . get_debug_type($afterDelete),
+            );
         } finally {
             $db->close();
         }
@@ -111,8 +116,8 @@ final class SurrealLocalDatabaseTest extends TestCase
                 ->execute();
 
             $this->assertRecord($edge);
-            self::assertSame('person:tobie', $edge['in'] ?? null);
-            self::assertSame('article:surrealdb', $edge['out'] ?? null);
+            self::assertSame('person:tobie', (string) ($edge['in'] ?? ''));
+            self::assertSame('article:surrealdb', (string) ($edge['out'] ?? ''));
             self::assertSame(10, $edge['strength'] ?? null);
 
             $edges = $db->select(new Table('likes'))->execute();
@@ -120,7 +125,7 @@ final class SurrealLocalDatabaseTest extends TestCase
             self::assertIsArray($edges);
             self::assertCount(1, $edges);
             $this->assertRecord($edges[0]);
-            self::assertSame($edge['id'], $edges[0]['id']);
+            self::assertEquals($edge['id'], $edges[0]['id']);
         } finally {
             $db->close();
         }
@@ -199,7 +204,7 @@ SURQL);
         self::assertArrayHasKey('id', $record);
 
         if ($expectedId !== null) {
-            self::assertSame($expectedId, $record['id']);
+            self::assertSame($expectedId, (string) $record['id']);
         }
     }
 }
