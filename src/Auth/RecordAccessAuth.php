@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
 /** Record access (scope) credentials with arbitrary signin variables. */
 final readonly class RecordAccessAuth implements Credentials

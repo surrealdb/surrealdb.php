@@ -3,7 +3,7 @@
 namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\Types\Uuid;
 
 final class UuidTest extends TestCase
 {

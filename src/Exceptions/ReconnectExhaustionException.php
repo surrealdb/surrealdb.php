@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when reconnect attempts have been exhausted. */
 final class ReconnectExhaustionException extends SurrealException

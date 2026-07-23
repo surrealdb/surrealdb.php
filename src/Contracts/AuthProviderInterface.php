@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
-use SurrealDB\SDK\Auth\Credentials;
-use SurrealDB\SDK\Auth\Token;
+use SurrealDB\Auth\Credentials;
+use SurrealDB\Auth\Token;
 
 /**
  * Supplies authentication details for a session on (re)connect. Unlike an

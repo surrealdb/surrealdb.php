@@ -8,9 +8,9 @@ use OpenTelemetry\SDK\Metrics\MetricExporter\InMemoryExporter as InMemoryMetricE
 use OpenTelemetry\SDK\Trace\SpanExporter\InMemoryExporter as InMemorySpanExporter;
 use OpenTelemetry\SDK\Trace\TracerProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelObservability;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Telemetry\OpenTelemetry\ObservabilityOptions;
+use SurrealDB\Telemetry\OpenTelemetry\OtelObservability;
 
 /**
  * The behavioural contract of the two export strategies: the batched (FPM/CLI)

@@ -1,13 +1,13 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\OpenTelemetry;
+namespace SurrealDB\Telemetry\OpenTelemetry;
 
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Metrics\MeterInterface;
-use SurrealDB\SDK\Contracts\Counter;
-use SurrealDB\SDK\Contracts\Histogram;
-use SurrealDB\SDK\Contracts\Meter;
-use SurrealDB\SDK\Exceptions\ConfigurationException;
+use SurrealDB\Contracts\Counter;
+use SurrealDB\Contracts\Histogram;
+use SurrealDB\Contracts\Meter;
+use SurrealDB\Exceptions\ConfigurationException;
 
 /**
  * Bridges the SDK {@see Meter} seam onto an OpenTelemetry meter.

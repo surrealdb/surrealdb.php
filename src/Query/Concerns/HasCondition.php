@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Query\Concerns;
+namespace SurrealDB\Query\Concerns;
 
-use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\Query\BoundQuery;
 
 /**
  * Adds a `WHERE <condition>` modifier.

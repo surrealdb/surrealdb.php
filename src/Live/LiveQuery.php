@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Live;
+namespace SurrealDB\Live;
 
 use IteratorAggregate;
 use Traversable;

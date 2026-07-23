@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
-use SurrealDB\SDK\Auth\Credentials;
-use SurrealDB\SDK\Auth\Token;
-use SurrealDB\SDK\Contracts\AuthProviderInterface;
-use SurrealDB\SDK\Contracts\ReconnectStrategyInterface;
+use SurrealDB\Auth\Credentials;
+use SurrealDB\Auth\Token;
+use SurrealDB\Contracts\AuthProviderInterface;
+use SurrealDB\Contracts\ReconnectStrategyInterface;
 
 /** Options customizing a specific connection. */
 final class ConnectOptions

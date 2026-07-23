@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when a referenced session does not exist on the connection. */
 final class InvalidSessionException extends SurrealException

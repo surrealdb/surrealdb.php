@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Scheduler;
+namespace SurrealDB\Scheduler;
 
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Exceptions\CallTerminatedException;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Exceptions\CallTerminatedException;
 
 /**
  * The synchronous {@see Deferred}: while awaiting, it repeatedly invokes the

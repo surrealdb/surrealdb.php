@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Enum;
+namespace SurrealDB\Enum;
 
 enum CodecEnum: string
 {

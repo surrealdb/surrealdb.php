@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Server error: permission denied, method not allowed, function/scripting blocked. */
 final class NotAllowedException extends ServerException {}

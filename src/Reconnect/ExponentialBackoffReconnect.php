@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Reconnect;
+namespace SurrealDB\Reconnect;
 
-use SurrealDB\SDK\Contracts\ReconnectStrategyInterface;
+use SurrealDB\Contracts\ReconnectStrategyInterface;
 
 /**
  * Exponential backoff with jitter. Port of the JS `ReconnectContext`: the

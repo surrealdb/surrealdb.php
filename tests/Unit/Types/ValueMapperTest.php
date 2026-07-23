@@ -4,24 +4,24 @@ namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Codec\ValueMapper;
-use SurrealDB\SDK\Types\BoundExcluded;
-use SurrealDB\SDK\Types\BoundIncluded;
-use SurrealDB\SDK\Types\Bytes;
-use SurrealDB\SDK\Types\DateTime;
-use SurrealDB\SDK\Types\Decimal;
-use SurrealDB\SDK\Types\Duration;
-use SurrealDB\SDK\Types\File;
-use SurrealDB\SDK\Types\GeometryPoint;
-use SurrealDB\SDK\Types\None;
-use SurrealDB\SDK\Types\Range;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\Set;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
-use SurrealDB\SDK\Types\Uuid;
-use SurrealDB\SDK\Types\Value;
+use SurrealDB\Codec\ValueMapper;
+use SurrealDB\Types\BoundExcluded;
+use SurrealDB\Types\BoundIncluded;
+use SurrealDB\Types\Bytes;
+use SurrealDB\Types\DateTime;
+use SurrealDB\Types\Decimal;
+use SurrealDB\Types\Duration;
+use SurrealDB\Types\File;
+use SurrealDB\Types\GeometryPoint;
+use SurrealDB\Types\None;
+use SurrealDB\Types\Range;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\Set;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
+use SurrealDB\Types\Uuid;
+use SurrealDB\Types\Value;
 
 final class ValueMapperTest extends TestCase
 {

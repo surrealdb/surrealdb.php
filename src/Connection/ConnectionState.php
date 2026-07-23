@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
-use SurrealDB\SDK\Contracts\ReconnectStrategyInterface;
+use SurrealDB\Contracts\ReconnectStrategyInterface;
 
 /**
  * The live state of a connection: endpoint, reconnect strategy, the root

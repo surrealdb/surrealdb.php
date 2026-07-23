@@ -1,14 +1,17 @@
 <?php
 
-namespace SurrealDB\SDK\Transport;
+namespace SurrealDB\Transport;
 
-use SurrealDB\SDK\Connection\ConnectionState;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\SessionState;
-use SurrealDB\SDK\Contracts\TransportInterface;
-use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Connection\ConnectionState;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\SessionState;
+use SurrealDB\Contracts\HttpConnectionInterface;
+use SurrealDB\Contracts\TransportInterface;
+use SurrealDB\Exceptions\UnexpectedServerResponseException;
+use SurrealDB\Http\HttpConnection;
+use SurrealDB\Http\PsrHttpClientProvider;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 use function is_array;
 
 /**
@@ -19,7 +22,7 @@ use function is_array;
  */
 final class HttpTransport implements TransportInterface
 {
-    private readonly SurrealHttp $http;
+    private readonly HttpConnectionInterface $http;
 
     private bool $open = false;
 
@@ -27,7 +30,11 @@ final class HttpTransport implements TransportInterface
         private readonly DriverContext $context,
         private readonly ConnectionState $state,
     ) {
-        $this->http = new SurrealHttp(new HttpClientResolver($context));
+        $this->http = new HttpConnection(new PsrHttpClientProvider(
+            $context->options->httpClient,
+            $context->options->requestFactory,
+            $context->options->streamFactory,
+        ));
     }
 
     public function open(): void

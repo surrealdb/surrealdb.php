@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Query\Concerns;
+namespace SurrealDB\Query\Concerns;
 
-use SurrealDB\SDK\Exceptions\ExpressionException;
-use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\Exceptions\ExpressionException;
+use SurrealDB\Query\BoundQuery;
 
 /**
  * Adds a `TIMEOUT <duration>` modifier. Duration literals are emitted inline

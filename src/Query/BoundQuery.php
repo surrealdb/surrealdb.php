@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Exceptions\ExpressionException;
+use SurrealDB\Exceptions\ExpressionException;
 use function array_key_exists;
 
 /**

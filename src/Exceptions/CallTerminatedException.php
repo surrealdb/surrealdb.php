@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when a pending call is terminated because the connection was closed. */
 final class CallTerminatedException extends SurrealException

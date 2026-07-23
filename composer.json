@@ -46,13 +46,13 @@
         "amphp/websocket-client": "Async WebSocket transport for the Amp/Revolt runtime",
         "amphp/http-client": "Non-blocking HTTP transport for the Amp/Revolt runtime",
         "amphp/http-client-psr7": "Non-blocking PSR-18 client for OTLP export on the Amp/Revolt runtime (Runtime::amp with ObservabilityOptions)",
-        "open-telemetry/api": "Emit OpenTelemetry traces and metrics via the bundled SurrealDB\\SDK\\Telemetry\\OpenTelemetry adapter",
+        "open-telemetry/api": "Emit OpenTelemetry traces and metrics via the bundled SurrealDB\\Telemetry\\OpenTelemetry adapter",
         "open-telemetry/sdk": "Configure OpenTelemetry providers via the runtime-aware observability presets (Runtime::sync/swoole/amp with ObservabilityOptions)",
         "open-telemetry/exporter-otlp": "OTLP exporter used by the runtime-aware observability presets to ship traces and metrics"
     },
     "autoload": {
         "psr-4": {
-            "SurrealDB\\SDK\\": "src/"
+            "SurrealDB\\": "src/"
         }
     },
     "autoload-dev": {

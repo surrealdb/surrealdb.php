@@ -3,9 +3,9 @@
 namespace SurrealDB\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Middleware\MiddlewarePipeline;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Middleware\MiddlewarePipeline;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 use SurrealDB\Tests\Fakes\RecordingMiddleware;
 
 final class MiddlewarePipelineTest extends TestCase

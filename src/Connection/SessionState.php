@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
-use SurrealDB\SDK\Auth\AuthState;
+use SurrealDB\Auth\AuthState;
 
 /**
  * Mutable state for a single session: its selected namespace/database, defined

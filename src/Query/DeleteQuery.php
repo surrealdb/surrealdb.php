@@ -1,14 +1,14 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Enum\Output;
-use SurrealDB\SDK\Query\Concerns\HasOutput;
-use SurrealDB\SDK\Query\Concerns\HasTimeout;
-use SurrealDB\SDK\Query\Concerns\HasVersion;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Enum\Output;
+use SurrealDB\Query\Concerns\HasOutput;
+use SurrealDB\Query\Concerns\HasTimeout;
+use SurrealDB\Query\Concerns\HasVersion;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 
 /**
  * Fluent `DELETE` builder. Defaults to `RETURN BEFORE` so deleted records are

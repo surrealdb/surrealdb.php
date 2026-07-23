@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
 /** Root (system) user credentials. */
 final readonly class RootAuth implements Credentials

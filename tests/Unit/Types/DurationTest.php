@@ -3,7 +3,7 @@
 namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Types\Duration;
+use SurrealDB\Types\Duration;
 
 final class DurationTest extends TestCase
 {

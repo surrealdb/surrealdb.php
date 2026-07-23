@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Events;
+namespace SurrealDB\Events;
 
-use SurrealDB\SDK\Live\LiveMessage;
+use SurrealDB\Live\LiveMessage;
 
 /** Dispatched when a live query notification is received. */
 final readonly class LiveMessageReceived

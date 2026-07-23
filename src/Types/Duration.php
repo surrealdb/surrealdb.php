@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
-use SurrealDB\SDK\Exceptions\InvalidValueException;
+use SurrealDB\Exceptions\InvalidValueException;
 use function strlen;
 
 /**

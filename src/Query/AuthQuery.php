@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
 /**
  * Fluent builder that selects the currently-authenticated record by reading the

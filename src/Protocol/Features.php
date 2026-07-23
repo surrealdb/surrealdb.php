@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Protocol;
+namespace SurrealDB\Protocol;
 
 /**
  * The catalogue of features known to the SDK, including the SurrealDB version

@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Events;
+namespace SurrealDB\Events;
 
-use SurrealDB\SDK\Protocol\NamespaceDatabase;
+use SurrealDB\Protocol\NamespaceDatabase;
 
 /** Dispatched when a session selects a namespace and/or database. */
 final readonly class NamespaceDatabaseSelected

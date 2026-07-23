@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Contracts\SurrealType;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Contracts\SurrealType;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 use function is_array;
 
 /**

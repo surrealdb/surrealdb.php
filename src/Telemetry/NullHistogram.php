@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry;
+namespace SurrealDB\Telemetry;
 
-use SurrealDB\SDK\Contracts\Histogram;
+use SurrealDB\Contracts\Histogram;
 
 /** A histogram that discards every measurement; returned by {@see NullMeter}. */
 final class NullHistogram implements Histogram

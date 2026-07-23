@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
 /**
  * An awaitable, single-assignment slot produced by a {@see Scheduler}. Used to

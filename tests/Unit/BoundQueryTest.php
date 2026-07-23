@@ -3,8 +3,8 @@
 namespace SurrealDB\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Exceptions\ExpressionException;
-use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\Exceptions\ExpressionException;
+use SurrealDB\Query\BoundQuery;
 
 final class BoundQueryTest extends TestCase
 {

@@ -2,10 +2,10 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Contracts\DuplexTransportInterface;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Contracts\DuplexTransportInterface;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 
 /**
  * An in-memory duplex transport. Each sent frame is answered by the configured
@@ -28,8 +28,8 @@ final class FakeDuplexTransport implements DuplexTransportInterface
     public function __construct(
         \Closure $responder,
         private readonly Codec $codec = new Codec(
-            new \SurrealDB\SDK\Codec\CborSerializer(),
-            new \SurrealDB\SDK\Codec\CborDeserializer(),
+            new \SurrealDB\Codec\CborSerializer(),
+            new \SurrealDB\Codec\CborDeserializer(),
         ),
     ) {
         $this->responder = $responder;

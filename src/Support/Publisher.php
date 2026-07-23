@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Support;
+namespace SurrealDB\Support;
 
 /**
  * A tiny synchronous publish/subscribe helper used for engine lifecycle

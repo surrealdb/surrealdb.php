@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Middleware;
+namespace SurrealDB\Middleware;
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
-use SurrealDB\SDK\Contracts\MiddlewareInterface;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Contracts\MiddlewareInterface;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 
 /**
  * The built-in debugger: logs every RPC request, its outcome, and timing to a

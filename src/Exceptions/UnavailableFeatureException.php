@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
-use SurrealDB\SDK\Protocol\Feature;
+use SurrealDB\Protocol\Feature;
 
 /** Thrown when a feature is not available in the connected version of SurrealDB. */
 final class UnavailableFeatureException extends SurrealException

@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Rpc;
+namespace SurrealDB\Rpc;
 
 /**
  * An immutable RPC request. Mirrors the JS `RpcRequest` type: a method plus

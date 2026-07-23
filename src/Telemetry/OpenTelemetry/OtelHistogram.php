@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\OpenTelemetry;
+namespace SurrealDB\Telemetry\OpenTelemetry;
 
 use OpenTelemetry\API\Metrics\HistogramInterface;
-use SurrealDB\SDK\Contracts\Histogram;
+use SurrealDB\Contracts\Histogram;
 
 /** Wraps an OpenTelemetry histogram instrument. */
 final class OtelHistogram implements Histogram

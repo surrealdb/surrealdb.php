@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
-use SurrealDB\SDK\Connection\DriverContext;
+use SurrealDB\Connection\DriverContext;
 
 /**
- * Constructs an engine for a connection. The {@see \SurrealDB\SDK\Engines\EngineRegistry}
+ * Constructs an engine for a connection. The {@see \SurrealDB\Engines\EngineRegistry}
  * accepts either an implementation of this interface or a plain
  * `callable(DriverContext): EngineInterface` factory.
  */

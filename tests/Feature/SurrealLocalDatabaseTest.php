@@ -4,12 +4,12 @@ namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\None;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Surreal;
+use SurrealDB\Types\None;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 
 /**
  * Database-backed coverage for the public SDK surface.

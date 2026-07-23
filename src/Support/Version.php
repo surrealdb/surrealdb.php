@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Support;
+namespace SurrealDB\Support;
 
 /** Version range checking against the SDK's supported SurrealDB versions. */
 final class Version

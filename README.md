@@ -119,9 +119,9 @@ The SDK emits OpenTelemetry traces and metrics for every RPC. Enable it per runt
 - **OpenSwoole / FrankenPHP (Amp)** (`Runtime::swoole` / `Runtime::amp`): each span is exported directly with no batching, over a non-blocking transport (Swoole runtime hooks, or the Amp PSR-18 client).
 
 ```php
-use SurrealDB\SDK\Runtime\Runtime;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
+use SurrealDB\Runtime\Runtime;
+use SurrealDB\Surreal;
+use SurrealDB\Telemetry\OpenTelemetry\ObservabilityOptions;
 
 $observability = new ObservabilityOptions(
     endpoint: "http://localhost:4318", // OTLP collector
@@ -143,10 +143,10 @@ Requires `open-telemetry/sdk` and `open-telemetry/exporter-otlp` (plus `amphp/ht
 When the framework owns the response lifecycle (e.g. Laravel), build the providers yourself and flush in a terminable hook rather than relying on the shutdown handler:
 
 ```php
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelObservability;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Surreal;
+use SurrealDB\Telemetry\OpenTelemetry\ObservabilityOptions;
+use SurrealDB\Telemetry\OpenTelemetry\OtelObservability;
 
 $telemetry = OtelObservability::batched(new ObservabilityOptions(serviceName: "my-app"));
 
