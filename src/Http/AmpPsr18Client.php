@@ -16,7 +16,7 @@ use SurrealDB\Exceptions\SurrealException;
  * stall the event loop. Every consumer of the SDK's PSR-18 seam can take this
  * client unchanged: requests suspend the current fiber instead of blocking,
  * and response bodies are lazy streams, so incremental readers (e.g. the
- * Spectron SSE chat stream) yield to the loop between reads.
+ * Agent Memory SSE chat stream) yield to the loop between reads.
  *
  * Requires amphp/http-client-psr7 and discoverable PSR-17 factories.
  */

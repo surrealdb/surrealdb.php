@@ -9,7 +9,7 @@ use SurrealDB\Exceptions\HttpConnectionException;
 /**
  * A single HTTP request/response exchange — the one connection primitive shared
  * by every HTTP client in the SDK (the SurrealDB database transport and the
- * Spectron client alike). Implementations perform exactly one round-trip and
+ * Agent Memory client alike). Implementations perform exactly one round-trip and
  * raise on a non-success status, leaving payload encoding to the caller.
  */
 interface HttpConnectionInterface

@@ -10,7 +10,7 @@ use SurrealDB\Exceptions\HttpConnectionException;
 /**
  * The default {@see HttpConnectionInterface}: performs one PSR-18 exchange and
  * throws {@see HttpConnectionException} on any non-2xx response. Shared by the
- * SurrealDB HTTP transport (RPC + raw import/export) and the Spectron client.
+ * SurrealDB HTTP transport (RPC + raw import/export) and the Agent Memory client.
  */
 final class HttpConnection implements HttpConnectionInterface
 {
