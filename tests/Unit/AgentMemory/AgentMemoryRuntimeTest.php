@@ -28,7 +28,9 @@ final class AgentMemoryRuntimeTest extends TestCase
 
     public function testSwooleProfileUsesTheCoroutineScheduler(): void
     {
-        $runtime = AgentMemoryRuntime::swoole();
+        // Hooks stay off: where the extension is loaded, enabling them would move
+        // every later test in this process onto coroutine I/O.
+        $runtime = AgentMemoryRuntime::swoole(enableHooks: false);
 
         $this->assertInstanceOf(SwooleScheduler::class, $runtime->scheduler);
         $this->assertNull($runtime->httpClient);
