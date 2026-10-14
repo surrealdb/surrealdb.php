@@ -81,6 +81,8 @@
         "test": "vendor/bin/phpunit --testsuite default",
         "test:openswoole": "vendor/bin/phpunit --testsuite openswoole",
         "test:frankenphp": "vendor/bin/phpunit --testsuite frankenphp",
+        "test:agent-memory": "vendor/bin/phpunit --testsuite agent-memory",
+        "test:agent-memory-integration": "vendor/bin/phpunit --testsuite agent-memory-integration",
         "test:all": "vendor/bin/phpunit"
     },
     "scripts-descriptions": {
@@ -91,6 +93,8 @@
         "test": "Run the full suite on the default synchronous PHP-FPM/CLI driver (sync scheduler).",
         "test:openswoole": "Run the OpenSwoole coroutine runtime suite (requires the openswoole extension).",
         "test:frankenphp": "Run the FrankenPHP / Amp (Revolt) runtime suite (requires revolt/event-loop).",
-        "test:all": "Run every suite: default (sync) + OpenSwoole + FrankenPHP."
+        "test:agent-memory": "Run the Agent Memory client unit tests (no server needed).",
+        "test:agent-memory-integration": "Run the Agent Memory tests against a real server (start one with scripts/agent-memory-server.sh).",
+        "test:all": "Run every suite: default (sync), OpenSwoole, FrankenPHP, and the Agent Memory suites (the integration suite skips without a server)."
     }
 }
