@@ -156,7 +156,7 @@ foreach ($db->statements('RETURN 1; THROW "boom"')->responses() as $response) {
 
 ### Data types
 
-SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions.
+SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions, except `Bytes`: it is sent as a byte string, which comes back as a plain PHP `string`.
 
 ## Sessions and transactions
 
