@@ -28,11 +28,10 @@ final class StreamWebSocketClient implements WebSocketClientInterface
     private bool $connected = false;
 
     /**
-     * Messages read while checking the connection, for {@see self::receive()}.
-     *
-     * @var list<string>
+     * Bytes taken off the socket while checking the connection, not yet read
+     * as frames. Reads consume them before the socket.
      */
-    private array $pending = [];
+    private string $inbox = '';
 
     public function __construct(
         private readonly float $connectTimeout = 10.0,
@@ -40,7 +39,7 @@ final class StreamWebSocketClient implements WebSocketClientInterface
 
     public function connect(string $url, array $subprotocols = [], array $headers = []): void
     {
-        $this->pending = [];
+        $this->inbox = '';
 
         $parts = parse_url($url);
 
@@ -89,13 +88,69 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         return $this->connected && is_resource($this->socket) && !feof($this->socket);
     }
 
-    private function hasUnreadData(): bool
+    private function takeAvailableBytes(): void
     {
-        $read = [$this->socket];
-        $write = null;
-        $except = null;
+        if (!is_resource($this->socket)) {
+            return;
+        }
 
-        return @stream_select($read, $write, $except, 0) > 0;
+        stream_set_blocking($this->socket, false);
+
+        try {
+            while (($chunk = @fread($this->socket, 65536)) !== false && $chunk !== '') {
+                $this->inbox .= $chunk;
+            }
+        } finally {
+            if (is_resource($this->socket)) {
+                stream_set_blocking($this->socket, true);
+            }
+        }
+    }
+
+    /**
+     * Whether the complete frames waiting in the inbox include a close frame.
+     */
+    private function closeFrameReceived(): bool
+    {
+        $offset = 0;
+        $available = strlen($this->inbox);
+
+        while ($available - $offset >= 2) {
+            $opcode = ord($this->inbox[$offset]) & 0x0F;
+            $second = ord($this->inbox[$offset + 1]);
+            $length = $second & 0x7F;
+            $header = 2;
+
+            if ($length === 126) {
+                if ($available - $offset < 4) {
+                    return false;
+                }
+
+                $length = (int) unpack('n', $this->inbox, $offset + 2)[1];
+                $header = 4;
+            } elseif ($length === 127) {
+                if ($available - $offset < 10) {
+                    return false;
+                }
+
+                $length = (int) unpack('J', $this->inbox, $offset + 2)[1];
+                $header = 10;
+            }
+
+            $header += ($second & 0x80) !== 0 ? 4 : 0;
+
+            if ($available - $offset < $header + $length) {
+                return false;
+            }
+
+            if ($opcode === 0x8) {
+                return true;
+            }
+
+            $offset += $header + $length;
+        }
+
+        return false;
     }
 
     public function close(int $code = 1000, string $reason = ''): void
@@ -117,36 +172,24 @@ final class StreamWebSocketClient implements WebSocketClientInterface
     }
 
     /**
-     * Whether the connection is open. Frames the server already sent are
-     * read first: a close frame waiting in the buffer means the connection is
-     * closed, though the stream is not at EOF until it is read. Messages read
-     * along the way are kept for {@see self::receive()}.
+     * Whether the connection is open. A close frame the server already sent
+     * means it is not, though the stream is not at EOF until that frame is
+     * read; so whatever has arrived is taken off the socket (without waiting)
+     * and checked for one. Frames before it are still returned by
+     * {@see self::receive()}.
      */
     public function isConnected(): bool
     {
-        while ($this->isOpen() && $this->hasUnreadData()) {
-            $message = $this->readMessage(null);
-
-            if ($message === null) {
-                break;
-            }
-
-            $this->pending[] = $message;
+        if (!$this->isOpen()) {
+            return false;
         }
 
-        return $this->isOpen();
+        $this->takeAvailableBytes();
+
+        return $this->isOpen() && !$this->closeFrameReceived();
     }
 
     public function receive(?float $timeout = null): ?string
-    {
-        if ($this->pending !== []) {
-            return array_shift($this->pending);
-        }
-
-        return $this->readMessage($timeout);
-    }
-
-    private function readMessage(?float $timeout): ?string
     {
         if (!$this->isOpen()) {
             return null;
@@ -350,7 +393,8 @@ final class StreamWebSocketClient implements WebSocketClientInterface
             return null;
         }
 
-        $data = '';
+        $data = substr($this->inbox, 0, $length);
+        $this->inbox = substr($this->inbox, strlen($data));
 
         while (strlen($data) < $length) {
             $chunk = @fread($this->socket, $length - strlen($data));
