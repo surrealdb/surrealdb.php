@@ -73,6 +73,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
     {
         return new FeatureSet(
             Features::liveQueries(),
+            Features::liveQueryBindings(),
             Features::refreshTokens(),
             Features::sessions(),
             Features::transactions(),
@@ -90,6 +91,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
         // Connect once synchronously so the controller can proceed immediately.
         $connected = $this->connectOnce();
+        $generation = $this->generation;
 
         // Background read + reconnect loop and keepalive pinger. Both are
         // no-ops under the synchronous scheduler (reads are driven on demand).
@@ -99,9 +101,19 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         $this->context->scheduler->spawn(fn () => $this->runLoop());
         $this->context->scheduler->spawn(fn () => $this->runPinger());
 
-        if ($connected) {
+        // An eager scheduler may already have run the read loop, which can
+        // have lost this socket (and announced its replacement itself).
+        if ($connected && $this->isCurrent($generation)) {
             $this->publisher->publish('connected');
         }
+    }
+
+    /**
+     * Whether the socket opened as `$generation` is still the live one.
+     */
+    private function isCurrent(int $generation): bool
+    {
+        return $this->active && !$this->terminated && $this->generation === $generation;
     }
 
     public function close(): void
@@ -246,7 +258,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
                 $this->context->scheduler->spawn(function () use ($generation): void {
                     // The socket may have dropped (and a retry begun) before
                     // this task ran; announcing then would answer a dead link.
-                    if ($this->active && !$this->terminated && $this->generation === $generation) {
+                    if ($this->isCurrent($generation)) {
                         $this->publisher->publish('connected');
                     }
                 });

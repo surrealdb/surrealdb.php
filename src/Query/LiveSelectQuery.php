@@ -67,6 +67,19 @@ final class LiveSelectQuery extends QueryBuilder
         return $this;
     }
 
+    /**
+     * Filter the notifications. A {@see BoundQuery} condition with bound
+     * values needs SurrealDB 3.0 or later: 2.x evaluates the condition for
+     * each notification, after the bindings are gone, so {@see self::execute()}
+     * refuses it there. Inline the values in a string condition instead.
+     */
+    public function where(string|BoundQuery $cond): static
+    {
+        $this->cond = $cond;
+
+        return $this;
+    }
+
     /** Resolve the given record-link fields (`FETCH`). */
     public function fetch(string ...$fields): static
     {
@@ -81,8 +94,15 @@ final class LiveSelectQuery extends QueryBuilder
     public function execute(): ManagedLiveSubscription
     {
         $this->connection->assertFeature(Features::liveQueries());
+        $query = $this->build();
 
-        $subscription = new ManagedLiveSubscription($this->connection, $this->build(), $this->session);
+        // Only a `where()` with a BoundQuery adds bindings; on 2.x they would
+        // be gone by the time the condition is evaluated.
+        if ($query->bindings !== []) {
+            $this->connection->assertFeature(Features::liveQueryBindings());
+        }
+
+        $subscription = new ManagedLiveSubscription($this->connection, $query, $this->session);
         $subscription->start();
 
         return $subscription;
