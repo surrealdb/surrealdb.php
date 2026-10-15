@@ -73,6 +73,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
     {
         return new FeatureSet(
             Features::liveQueries(),
+            Features::liveQueryBindings(),
             Features::refreshTokens(),
             Features::sessions(),
             Features::transactions(),

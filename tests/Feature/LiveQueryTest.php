@@ -5,11 +5,14 @@ namespace SurrealDB\Tests\Feature;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Live\LiveAction;
 use SurrealDB\SDK\Live\LiveMessage;
 use SurrealDB\SDK\Live\LiveSubscription;
 use SurrealDB\SDK\Live\ManagedLiveSubscription;
+use SurrealDB\SDK\Protocol\Features;
+use SurrealDB\SDK\Query\BoundQuery;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
@@ -82,6 +85,33 @@ final class LiveQueryTest extends TestCase
 
             $adults->kill();
             $diffs->kill();
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testABoundConditionFiltersOn3xAndIsRefusedOn2x(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $condition = new BoundQuery('age >= $min', ['min' => 18]);
+
+            if (!$db->isFeatureSupported(Features::liveQueryBindings())) {
+                $this->expectException(UnavailableFeatureException::class);
+                $db->live('person')->where($condition)->execute();
+
+                return;
+            }
+
+            $adults = $db->live('person')->where($condition)->execute();
+            $db->create(new RecordId('person', 'child'))->content(['age' => 9])->execute();
+            $db->create(new RecordId('person', 'adult'))->content(['age' => 40])->execute();
+
+            [$adult] = $this->take($adults, 1);
+            self::assertSame(40, $adult->value['age'] ?? null);
+
+            $adults->kill();
         } finally {
             $db->close();
         }
