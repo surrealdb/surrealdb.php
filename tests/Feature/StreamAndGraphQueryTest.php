@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Exceptions\GraphQlException;
+use SurrealDB\SDK\Exceptions\InvalidSessionException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Query\Frame\DoneFrame;
 use SurrealDB\SDK\Query\Frame\ErrorFrame;
@@ -151,6 +152,31 @@ final class StreamAndGraphQueryTest extends TestCase
             self::assertSame([[]], $db->gql('MATCH (p:person) RETURN p.name AS name'));
 
             $txn->cancel();
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAClosedSessionCannotRunGraphQueries(): void
+    {
+        $db = $this->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
+        $this->requireFeature($db, Features::gql());
+
+        try {
+            $session = $db->newSession();
+            $session->closeSession();
+
+            foreach ([
+                'gql' => static fn () => $session->gql('MATCH (p:person) RETURN p'),
+                'graphql' => static fn () => $session->graphql('{ person { id } }'),
+            ] as $call => $attempt) {
+                try {
+                    $attempt();
+                    self::fail("{$call}() on a closed session should fail.");
+                } catch (InvalidSessionException) {
+                    $this->addToAssertionCount(1);
+                }
+            }
         } finally {
             $db->close();
         }

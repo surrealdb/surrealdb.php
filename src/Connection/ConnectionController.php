@@ -308,6 +308,7 @@ final class ConnectionController
     public function refresh(Tokens $tokens, ?string $session = null, bool $skipOverride = false): Tokens
     {
         $this->assertFeature(Features::refreshTokens());
+        $this->requireSession($session);
         $refreshed = $this->requireEngine()->refresh($tokens, $session);
         $this->applyTokens($session, $refreshed, $skipOverride);
 
@@ -317,6 +318,7 @@ final class ConnectionController
     public function revoke(Tokens $tokens, ?string $session = null): void
     {
         $this->assertFeature(Features::refreshTokens());
+        $this->requireSession($session);
         $this->requireEngine()->revoke($tokens, $session);
     }
 
@@ -442,6 +444,7 @@ final class ConnectionController
     public function gql(string $query, array $variables = [], ?string $session = null, ?string $txn = null): iterable
     {
         $this->assertFeature(Features::gql());
+        $this->requireSession($session);
         $this->renewIfDue($session);
 
         return $this->requireEngine()->gql($query, $variables, $session, $txn);
@@ -453,6 +456,7 @@ final class ConnectionController
     public function graphql(string $query, array $variables = [], ?string $operation = null, ?string $session = null): mixed
     {
         $this->assertFeature(Features::graphql());
+        $this->requireSession($session);
         $this->renewIfDue($session);
 
         return $this->requireEngine()->graphql($query, $variables, $operation, $session);
