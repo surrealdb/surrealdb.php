@@ -183,12 +183,17 @@ try {
     $txn->update(new RecordId('account', 'b'))->merge(['balance' => 150])->execute();
     $txn->commit();
 } catch (\Throwable $error) {
-    $txn->cancel();
+    // A commit the server rejected (a write conflict, say) has already
+    // ended the transaction.
+    if (!$txn->isFinished()) {
+        $txn->cancel();
+    }
+
     throw $error;
 }
 ```
 
-Transactions need the default CBOR format.
+Transactions need the default CBOR format. Resetting or closing the session, or losing the connection, also ends them; `isFinished()` reports it.
 
 ## Live queries
 
