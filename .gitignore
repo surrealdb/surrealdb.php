@@ -5,3 +5,5 @@
 .php-cs-fixer.cache
 .agent-memory/
 .phpunit.cache/
+.DS_Store
+*.premigrate
