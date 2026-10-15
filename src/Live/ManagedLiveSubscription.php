@@ -38,9 +38,10 @@ final class ManagedLiveSubscription extends LiveSubscription
             throw new SurrealException('The LIVE query did not return a live query id.');
         }
 
-        // Killed while the query was in flight (another task, during a
-        // replay): don't start receiving, and stop the query just issued.
-        if ($this->killed) {
+        // Killed, or its session reset or signed out, while the query was in
+        // flight (another task, during a replay): don't start receiving, and
+        // stop the query just issued.
+        if ($this->killed || $this->ended) {
             try {
                 self::killOnServer($this->connection, (string) $result, $this->session);
             } catch (\Throwable) {

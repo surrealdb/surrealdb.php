@@ -102,9 +102,10 @@ final class ConnectionController
 
     /**
      * Renewals in flight, keyed like {@see self::$renewAt}: the task doing
-     * each, and a deferred other tasks wait on.
+     * each, and a deferred for each other task waiting on it (a deferred
+     * resumes only one waiter).
      *
-     * @var array<string,array{task: object|int|null, done: Deferred<mixed>}>
+     * @var array<string,array{task: object|int|null, waiters: list<Deferred<mixed>>}>
      */
     private array $renewing = [];
 
@@ -160,6 +161,10 @@ final class ConnectionController
         $engine = $this->registry->create($endpoint->scheme, $this->context);
 
         $this->disconnect();
+
+        // Callbacks still running for the previous connection must not
+        // mistake this one for theirs.
+        $this->connectionEpoch++;
 
         $this->engine = $engine;
         $this->authProvider = $options->authentication;
@@ -797,8 +802,12 @@ final class ConnectionController
             // the old one. The renewing task itself (an auth provider that
             // queries, say) goes ahead.
             if ($renewal['task'] !== self::currentTask()) {
+                /** @var Deferred<mixed> $done */
+                $done = $this->context->scheduler->defer();
+                $this->renewing[$key]['waiters'][] = $done;
+
                 try {
-                    $renewal['done']->await();
+                    $done->await();
                 } catch (\Throwable) {
                     // The renewing task reports its own failure.
                 }
@@ -807,9 +816,7 @@ final class ConnectionController
             return;
         }
 
-        /** @var Deferred<mixed> $done */
-        $done = $this->context->scheduler->defer();
-        $this->renewing[$key] = ['task' => self::currentTask(), 'done' => $done];
+        $this->renewing[$key] = ['task' => self::currentTask(), 'waiters' => []];
 
         try {
             // A new token schedules the next deadline, and signing out clears
@@ -837,8 +844,12 @@ final class ConnectionController
 
             $this->onError(new AuthenticationException('Token renewal failed', $error));
         } finally {
+            $waiters = $this->renewing[$key]['waiters'] ?? [];
             unset($this->renewing[$key]);
-            $done->resolve(true);
+
+            foreach ($waiters as $waiter) {
+                $waiter->resolve(true);
+            }
         }
     }
 
