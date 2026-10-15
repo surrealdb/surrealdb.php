@@ -9,9 +9,15 @@ use SurrealDB\AgentMemory\Options\GrantOptions;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see PrincipalsInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see PrincipalsInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type EffectiveGrantsJson from Schemas
+ * @phpstan-import-type PrincipalJson from Schemas
+ */
 final class Principals implements PrincipalsInterface
 {
     public function __construct(
@@ -21,6 +27,7 @@ final class Principals implements PrincipalsInterface
 
     public function list(?PageOptions $options = null): Page
     {
+        /** @var Page<PrincipalJson> */
         return $this->transport->requestPage($this->base(), 'principals', $options?->toQuery() ?? []);
     }
 
@@ -33,11 +40,13 @@ final class Principals implements PrincipalsInterface
 
     public function get(string $principalId): array
     {
+        /** @var PrincipalJson */
         return $this->transport->requestJson('GET', $this->path($principalId)) ?? [];
     }
 
     public function effective(string $principalId, EffectiveGrantsOptions $options): array
     {
+        /** @var EffectiveGrantsJson */
         return $this->transport->requestJson(
             'GET',
             $this->path($principalId) . '/effective',
@@ -47,6 +56,7 @@ final class Principals implements PrincipalsInterface
 
     public function grant(string $principalId, GrantOptions $options): array
     {
+        /** @var PrincipalJson */
         return $this->transport->requestJson(
             'POST',
             $this->path($principalId) . '/grants',
@@ -56,6 +66,7 @@ final class Principals implements PrincipalsInterface
 
     public function revoke(string $principalId, GrantOptions $options): array
     {
+        /** @var PrincipalJson */
         return $this->transport->requestJson(
             'DELETE',
             $this->path($principalId) . '/grants',

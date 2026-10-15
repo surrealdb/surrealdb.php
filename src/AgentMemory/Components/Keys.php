@@ -9,9 +9,15 @@ use SurrealDB\AgentMemory\Options\KeyRotateOptions;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see KeysInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see KeysInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type KeyDetailJson from Schemas
+ * @phpstan-import-type MintedKeyJson from Schemas
+ */
 final class Keys implements KeysInterface
 {
     public function __construct(
@@ -23,6 +29,7 @@ final class Keys implements KeysInterface
     {
         $payload = $options?->toPayload() ?? [];
 
+        /** @var MintedKeyJson */
         return $this->transport->requestJson(
             'POST',
             $this->base(),
@@ -33,6 +40,7 @@ final class Keys implements KeysInterface
 
     public function list(?PageOptions $options = null): Page
     {
+        /** @var Page<KeyDetailJson> */
         return $this->transport->requestPage($this->base(), 'keys', $options?->toQuery() ?? []);
     }
 
@@ -50,6 +58,7 @@ final class Keys implements KeysInterface
 
     public function rotate(string $keyName, ?KeyRotateOptions $options = null): array
     {
+        /** @var MintedKeyJson */
         return $this->transport->requestJson(
             'POST',
             $this->base() . '/' . Paths::encodeSegment($keyName) . '/rotate',

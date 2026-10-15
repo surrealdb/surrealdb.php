@@ -40,10 +40,14 @@ on:
       - "tests/Unit/AgentMemory/**"
       - "tests/Integration/AgentMemory/**"
       - "tests/Fakes/**"
+      - "tests/PHPStan/**"
       - "scripts/agent-memory-server.sh"
+      - "scripts/AgentMemoryTypesGenerator.php"
+      - "scripts/generate-agent-memory-types.php"
       - "composer.json"
       - "composer.lock"
       - "phpunit.xml"
+      - "phpstan.neon"
       - ".github/workflows/agent-memory.yml"
   pull_request:
     branches: ["main"]
@@ -57,10 +61,14 @@ on:
       - "tests/Unit/AgentMemory/**"
       - "tests/Integration/AgentMemory/**"
       - "tests/Fakes/**"
+      - "tests/PHPStan/**"
       - "scripts/agent-memory-server.sh"
+      - "scripts/AgentMemoryTypesGenerator.php"
+      - "scripts/generate-agent-memory-types.php"
       - "composer.json"
       - "composer.lock"
       - "phpunit.xml"
+      - "phpstan.neon"
       - ".github/workflows/agent-memory.yml"
   schedule:
     # 05:17 UTC daily: tests against spectron's main to catch upstream drift.
@@ -110,7 +118,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist
 
       - name: Static analysis
-        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress src/AgentMemory.php src/AgentMemory
+        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress src/AgentMemory.php src/AgentMemory tests/PHPStan
 
       - name: Run unit tests
         run: composer test:agent-memory

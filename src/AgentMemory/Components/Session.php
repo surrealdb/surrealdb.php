@@ -7,11 +7,17 @@ use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 use function is_array;
 use function is_string;
 
-/** Implements {@see SessionInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see SessionInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type SessionContextResponseJson from Schemas
+ * @phpstan-import-type TurnResponseJson from Schemas
+ */
 final class Session implements SessionInterface
 {
     public readonly string $id;
@@ -41,6 +47,7 @@ final class Session implements SessionInterface
 
     public function turns(?PageOptions $options = null): Page
     {
+        /** @var Page<TurnResponseJson> */
         return $this->transport->requestPage($this->base() . '/turns', 'turns', $options?->toQuery() ?? []);
     }
 
@@ -55,6 +62,7 @@ final class Session implements SessionInterface
     {
         Guard::notBlank($query, 'Session::context() requires a non-empty query.');
 
+        /** @var SessionContextResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/context', body: ['query' => $query], idempotent: true) ?? [];
     }
 

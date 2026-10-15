@@ -32,7 +32,11 @@ use SurrealDB\AgentMemory\Triple;
  *   following path-level and `$ref`'d parameters, `$ref`'d request bodies, and
  *   `allOf`/`oneOf`/`anyOf` compositions, and
  * - every response member the client reads (a page's rows, an unwrapped
- *   result) is still in the operation's 200 response.
+ *   result) is still in the operation's success (200, 201 or 202) response,
+ * - src/AgentMemory/Schema/Schemas.php is what the generator renders from the
+ *   spec today, and
+ * - each method documents the response schema's alias as its return type
+ *   (on the interface it implements), collectors the row alias as a list.
  *
  * Point `AGENT_MEMORY_OPENAPI_SPEC` at the server's `doc/spec/enduser.swagger.json`;
  * the spec-driven tests skip without it unless `AGENT_MEMORY_REQUIRE_SERVER=1`.
@@ -124,6 +128,11 @@ final class SpecCoverageTest extends TestCase
         'create_self_key' => ['method' => Keys::class . '::create', 'options' => Options\KeyCreateOptions::class],
         'rotate_self_key' => ['method' => Keys::class . '::rotate', 'options' => Options\KeyRotateOptions::class],
         'delete_self_key' => ['method' => Keys::class . '::delete'],
+    ];
+
+    /** Operations whose method returns something other than the response schema, and why. */
+    private const array RETURNS_OTHER = [
+        'create_session' => 'returns a Session handle built from SessionResponseJson',
     ];
 
     /** Spec fields the client deliberately does not send, per operation, and why. */
@@ -222,17 +231,65 @@ final class SpecCoverageTest extends TestCase
                 continue;
             }
 
-            $members = array_keys(self::properties($spec, self::okResponseSchema($operation)));
+            $members = array_keys(self::properties($spec, self::successResponseSchema($operation)));
 
             foreach ($expected as $member) {
                 if (!in_array($member, $members, true)) {
-                    $gaps[] = "{$operationId} ({$operation['method']} {$operation['path']}): the client reads `{$member}`; the 200 response has "
+                    $gaps[] = "{$operationId} ({$operation['method']} {$operation['path']}): the client reads `{$member}`; the success response has "
                         . ($members === [] ? 'no members' : '`' . implode('`, `', $members) . '`');
                 }
             }
         }
 
         $this->assertSame([], $gaps, "Response members the PHP client reads that the spec no longer has:\n  - " . implode("\n  - ", $gaps));
+    }
+
+    public function testGeneratedSchemaTypesMatchTheSpec(): void
+    {
+        $committed = (string) file_get_contents(dirname(__DIR__, 3) . '/' . \AgentMemoryTypesGenerator::TARGET);
+
+        $this->assertSame(
+            (new \AgentMemoryTypesGenerator(self::spec()))->render(),
+            str_replace("\r\n", "\n", $committed),
+            \AgentMemoryTypesGenerator::TARGET . ' is stale: run composer generate:agent-memory-types -- $AGENT_MEMORY_OPENAPI_SPEC',
+        );
+    }
+
+    public function testEveryMethodReturnsItsResponseSchema(): void
+    {
+        $spec = self::spec();
+        $gaps = [];
+
+        foreach (self::operations($spec) as $operationId => $operation) {
+            $coverage = self::OPERATIONS[$operationId] ?? null;
+            $schema = self::successResponseSchema($operation);
+
+            if ($coverage === null || $schema === [] || isset(self::RETURNS_OTHER[$operationId])) {
+                continue;
+            }
+
+            if (isset($coverage['page'], $coverage['collect'])) {
+                $row = self::alias(self::properties($spec, $schema)[$coverage['page']]['items'] ?? [], "{$operationId} rows");
+                $expected = [$coverage['method'] => "Page<{$row}>", $coverage['collect'] => "list<{$row}>"];
+            } elseif (isset($coverage['member'])) {
+                $member = self::properties($spec, $schema)[$coverage['member']] ?? [];
+                $expected = [$coverage['method'] => isset($member['items'])
+                    ? 'list<' . self::alias($member['items'], "{$operationId} {$coverage['member']}") . '>'
+                    : self::alias($member, "{$operationId} {$coverage['member']}")];
+            } else {
+                $expected = [$coverage['method'] => self::alias($schema, $operationId)];
+            }
+
+            foreach ($expected as $method => $type) {
+                $documented = self::documentedReturn($method);
+
+                if ($documented !== $type) {
+                    $gaps[] = "{$operationId}: {$method}() documents @return " . ($documented ?? '(none)') . "; the spec's response is {$type}";
+                }
+            }
+        }
+
+        $this->assertSame([], $gaps, "Return types that do not match the spec:\n  - " . implode("\n  - ", $gaps));
     }
 
     public function testValueObjectsCoverTheirSchemas(): void
@@ -390,17 +447,60 @@ final class SpecCoverageTest extends TestCase
     }
 
     /**
-     * The JSON schema of an operation's 200 response, or `[]` when it has none.
+     * The JSON schema of an operation's success response: the first of 200,
+     * 201 and 202 with a JSON body, or `[]` when there is none.
      *
      * @param array{method:string,path:string,op:array<string,mixed>,parameters:list<array<string,mixed>>} $operation
      *
      * @return array<string,mixed>
      */
-    private static function okResponseSchema(array $operation): array
+    private static function successResponseSchema(array $operation): array
     {
-        $response = self::deref(self::spec(), $operation['op']['responses']['200'] ?? []);
+        foreach (['200', '201', '202'] as $status) {
+            $response = self::deref(self::spec(), $operation['op']['responses'][$status] ?? []);
 
-        return $response['content']['application/json']['schema'] ?? [];
+            if (isset($response['content']['application/json']['schema'])) {
+                return $response['content']['application/json']['schema'];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * The schema name a `#/components/schemas/<name>` reference points at,
+     * which is also its alias on {@see \SurrealDB\AgentMemory\Schema\Schemas}.
+     *
+     * @param array<string,mixed> $schema
+     */
+    private static function alias(array $schema, string $what): string
+    {
+        $ref = $schema['$ref'] ?? null;
+
+        if (!is_string($ref) || !str_starts_with($ref, '#/components/schemas/')) {
+            self::fail("{$what}: the response schema is not a \$ref, so it has no alias to check against");
+        }
+
+        return substr($ref, strlen('#/components/schemas/'));
+    }
+
+    /**
+     * The type in the first `@return` tag of `Class::method`'s docblock on the
+     * interface method it implements, or on the method itself when it
+     * implements none.
+     */
+    private static function documentedReturn(string $method): ?string
+    {
+        [$class, $name] = explode('::', $method);
+        $reflection = new \ReflectionMethod($class, $name);
+
+        try {
+            $docblock = $reflection->getPrototype()->getDocComment();
+        } catch (\ReflectionException) {
+            $docblock = $reflection->getDocComment();
+        }
+
+        return preg_match('/@return\s+(\S+)/', (string) $docblock, $match) === 1 ? $match[1] : null;
     }
 
     /**

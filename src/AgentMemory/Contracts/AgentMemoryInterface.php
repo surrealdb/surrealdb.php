@@ -23,6 +23,7 @@ use SurrealDB\AgentMemory\Options\RememberManyOptions;
 use SurrealDB\AgentMemory\Options\RememberOptions;
 use SurrealDB\AgentMemory\Options\StateOptions;
 use SurrealDB\AgentMemory\Page;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Streaming\ChatChunk;
 
 /**
@@ -30,6 +31,26 @@ use SurrealDB\AgentMemory\Streaming\ChatChunk;
  * lookup; chat; maintenance and audit; and a sub-client for each resource
  * family. {@see AgentMemory} implements it over HTTP. Type code against this
  * interface to substitute a test double or a decorator.
+ *
+ * Responses are the decoded JSON arrays, typed for static analysis by the
+ * PHPStan shapes on {@see Schemas}, generated from the OpenAPI description.
+ *
+ * @phpstan-import-type AuditRowJson from Schemas
+ * @phpstan-import-type ChatResponseJson from Schemas
+ * @phpstan-import-type ConsolidateResponseJson from Schemas
+ * @phpstan-import-type ContextQueryResponseJson from Schemas
+ * @phpstan-import-type ElaborateResponseJson from Schemas
+ * @phpstan-import-type FactsBatchResponseJson from Schemas
+ * @phpstan-import-type FactsResponseJson from Schemas
+ * @phpstan-import-type ForgetResponseJson from Schemas
+ * @phpstan-import-type FsckReportJson from Schemas
+ * @phpstan-import-type InspectResponseJson from Schemas
+ * @phpstan-import-type LookupResponseJson from Schemas
+ * @phpstan-import-type ProfileResponseJson from Schemas
+ * @phpstan-import-type QueryMemoryResponseJson from Schemas
+ * @phpstan-import-type ReflectResponseJson from Schemas
+ * @phpstan-import-type StateResponseJson from Schemas
+ * @phpstan-import-type WhoamiJson from Schemas
  */
 interface AgentMemoryInterface
 {
@@ -90,7 +111,7 @@ interface AgentMemoryInterface
      * (`POST /facts`). Idempotent within a 30-second window. Without an
      * existing `sessionId` a session is created and returned as `sessionId`.
      *
-     * @return array<int|string,mixed>
+     * @return FactsResponseJson
      */
     public function remember(?string $text = null, ?RememberOptions $options = null): array;
 
@@ -100,7 +121,7 @@ interface AgentMemoryInterface
      *
      * @param list<Message|array<string,mixed>> $messages conversation messages ({@see Message}, or `role` + `content` arrays)
      *
-     * @return array<int|string,mixed>
+     * @return FactsBatchResponseJson
      */
     public function rememberMany(array $messages, ?RememberManyOptions $options = null): array;
 
@@ -110,7 +131,7 @@ interface AgentMemoryInterface
      * Retried like a read, with an `Idempotency-Key`, as the JS client does; a
      * retry after a lost response can record one more retrieval trace.
      *
-     * @return array<int|string,mixed>
+     * @return QueryMemoryResponseJson
      */
     public function recall(string $query, ?RecallOptions $options = null): array;
 
@@ -126,7 +147,7 @@ interface AgentMemoryInterface
      * Retried like a read, with an `Idempotency-Key`, as the JS client does; a
      * retry after a lost response can record one more retrieval trace.
      *
-     * @return array<int|string,mixed>
+     * @return LookupResponseJson
      */
     public function lookup(string $query, ?LookupOptions $options = null): array;
 
@@ -134,7 +155,7 @@ interface AgentMemoryInterface
      * Forgets memory matching a natural-language query (`POST /forget`). Pass
      * `dryRun` to preview the count first.
      *
-     * @return array<int|string,mixed>
+     * @return ForgetResponseJson
      */
     public function forget(string $query, ?ForgetOptions $options = null): array;
 
@@ -142,7 +163,7 @@ interface AgentMemoryInterface
      * Full chat round trip (`POST /chat`): returns the reply, its citations,
      * and the memory updates. For incremental tokens use {@see chatStream()}.
      *
-     * @return array<int|string,mixed>
+     * @return ChatResponseJson
      */
     public function chat(string $message, ?ChatOptions $options = null): array;
 
@@ -171,7 +192,7 @@ interface AgentMemoryInterface
      * Retried like a read, with an `Idempotency-Key`, as the JS client does; a
      * retry after a lost response can record one more retrieval trace.
      *
-     * @return array<int|string,mixed>
+     * @return ContextQueryResponseJson
      */
     public function context(string $query, ?ContextOptions $options = null): array;
 
@@ -179,7 +200,7 @@ interface AgentMemoryInterface
      * Runs a reflection pass; may persist attributes when the options say so
      * (`POST /reflect`).
      *
-     * @return array<int|string,mixed>
+     * @return ReflectResponseJson
      */
     public function reflect(string $query, ?ReflectOptions $options = null): array;
 
@@ -187,7 +208,7 @@ interface AgentMemoryInterface
      * Consolidates accumulated observations into durable facts
      * (`POST /consolidate`).
      *
-     * @return array<int|string,mixed>
+     * @return ConsolidateResponseJson
      */
     public function consolidate(?ConsolidateOptions $options = null): array;
 
@@ -195,14 +216,14 @@ interface AgentMemoryInterface
      * Infers and emits new relation edges between entities (`POST /elaborate`),
      * from one named entity or across a sweep of the low-relation ones.
      *
-     * @return array<int|string,mixed>
+     * @return ElaborateResponseJson
      */
     public function elaborate(ElaborateOptions $options): array;
 
     /**
      * Runs an integrity check over the memory store (`POST /fsck`).
      *
-     * @return array<int|string,mixed>
+     * @return FsckReportJson
      */
     public function fsck(?FsckOptions $options = null): array;
 
@@ -214,18 +235,22 @@ interface AgentMemoryInterface
      * other responses carry (e.g. an attribute's `entity`) can be passed as is,
      * and an {@see EntityRef} is sent as its `entity:` ref.
      *
-     * @return array<int|string,mixed>
+     * @return InspectResponseJson
      */
     public function inspect(EntityRef|string $ref, ?InspectOptions $options = null): array;
 
-    /** A page of audit rows (one per trace) for write and recall activity (`GET /audit`). */
+    /**
+     * A page of audit rows (one per trace) for write and recall activity (`GET /audit`).
+     *
+     * @return Page<AuditRowJson>
+     */
     public function audit(?AuditOptions $options = null): Page;
 
     /**
      * Every audit row matching `$options`, walking the pages in order
      * (`GET /audit`).
      *
-     * @return list<array<string,mixed>>
+     * @return list<AuditRowJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor`
      */
@@ -235,21 +260,21 @@ interface AgentMemoryInterface
      * Structured memory state snapshot (`GET /state`). Each table is bounded;
      * `truncated` flags the ones that were cut.
      *
-     * @return array<int|string,mixed>
+     * @return StateResponseJson
      */
     public function state(?StateOptions $options = null): array;
 
     /**
      * Static and dynamic profile slices (`GET /profile`).
      *
-     * @return array<int|string,mixed>
+     * @return ProfileResponseJson
      */
     public function profile(): array;
 
     /**
      * The calling principal's identity and resolved grants (`GET /me`).
      *
-     * @return array<int|string,mixed>
+     * @return WhoamiJson
      */
     public function whoami(): array;
 }

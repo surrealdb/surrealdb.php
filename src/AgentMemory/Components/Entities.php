@@ -12,9 +12,18 @@ use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Options\TopEntitiesOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see EntitiesInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see EntitiesInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type AttributeDetailJson from Schemas
+ * @phpstan-import-type EntityDetailJson from Schemas
+ * @phpstan-import-type EntityMatchJson from Schemas
+ * @phpstan-import-type EntityResponseJson from Schemas
+ * @phpstan-import-type NeighbourJson from Schemas
+ */
 final class Entities implements EntitiesInterface
 {
     public function __construct(
@@ -24,6 +33,7 @@ final class Entities implements EntitiesInterface
 
     public function list(?EntityListOptions $options = null): Page
     {
+        /** @var Page<EntityDetailJson> */
         return $this->transport->requestPage($this->base(), 'entities', $options?->toQuery() ?? []);
     }
 
@@ -45,18 +55,19 @@ final class Entities implements EntitiesInterface
     {
         Guard::notBlank($query, 'Entity search requires a non-empty query.');
 
-        /** @var list<array<string,mixed>> */
+        /** @var list<EntityMatchJson> */
         return $this->transport->requestMember('GET', $this->base() . '/search', 'matches', ['q' => $query] + ($options?->toQuery() ?? []));
     }
 
     public function top(?TopEntitiesOptions $options = null): array
     {
-        /** @var list<array<string,mixed>> */
+        /** @var list<EntityMatchJson> */
         return $this->transport->requestMember('GET', $this->base() . '/top', 'entities', $options?->toQuery() ?? []);
     }
 
     public function get(string $entityType, string $name, ?EntityGetOptions $options = null): array
     {
+        /** @var EntityResponseJson */
         return $this->transport->requestJson('GET', $this->path($entityType, $name), $options?->toQuery() ?? []) ?? [];
     }
 
@@ -64,12 +75,13 @@ final class Entities implements EntitiesInterface
     {
         $path = $this->path($entityType, $name) . '/history/' . Paths::encodeSegment($key);
 
-        /** @var list<array<string,mixed>> */
+        /** @var list<AttributeDetailJson> */
         return $this->transport->requestMember('GET', $path, 'history');
     }
 
     public function changes(string $entityType, string $name, ?PageOptions $options = null): Page
     {
+        /** @var Page<AttributeDetailJson> */
         return $this->transport->requestPage($this->path($entityType, $name) . '/history', 'history', $options?->toQuery() ?? []);
     }
 
@@ -82,6 +94,7 @@ final class Entities implements EntitiesInterface
 
     public function neighbours(string $entityType, string $name, ?NeighbourhoodOptions $options = null): Page
     {
+        /** @var Page<NeighbourJson> */
         return $this->transport->requestPage($this->path($entityType, $name) . '/neighbourhood', 'neighbours', $options?->toQuery() ?? []);
     }
 

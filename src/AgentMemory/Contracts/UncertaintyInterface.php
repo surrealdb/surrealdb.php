@@ -7,22 +7,29 @@ use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Exceptions\ScopeException;
 use SurrealDB\AgentMemory\Options\UncertaintyListOptions;
 use SurrealDB\AgentMemory\Page;
+use SurrealDB\AgentMemory\Schema\Schemas;
 
 /**
  * Open questions memory has recorded, such as two contending values for one
  * attribute, and their settlement. A row's `resolvable` flag says whether
  * {@see resolve()} would succeed for the calling key.
+ *
+ * @phpstan-import-type UncertaintyJson from Schemas
  */
 interface UncertaintyInterface
 {
-    /** A page of uncertainty flags, optionally for one subject or settled state. */
+    /**
+     * A page of uncertainty flags, optionally for one subject or settled state.
+     *
+     * @return Page<UncertaintyJson>
+     */
     public function list(?UncertaintyListOptions $options = null): Page;
 
     /**
      * Every uncertainty flag matching `$options`, walking the pages in order
      * (`GET /uncertainty`).
      *
-     * @return list<array<string,mixed>>
+     * @return list<UncertaintyJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
      */
@@ -45,7 +52,7 @@ interface UncertaintyInterface
      * @param string      $acceptedValue the value to accept
      * @param string|null $note          why it was chosen, stored as the new row's source clause
      *
-     * @return array<string,mixed> the settled `uncertainty` row
+     * @return UncertaintyJson the settled `uncertainty` row
      *
      * @throws NotFoundException when no such flag is visible to the caller
      * @throws ScopeException    when the flag reaches beyond the caller's `memory:write` region

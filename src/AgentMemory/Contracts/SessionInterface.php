@@ -5,8 +5,14 @@ namespace SurrealDB\AgentMemory\Contracts;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
+use SurrealDB\AgentMemory\Schema\Schemas;
 
-/** An open conversation session within an Agent Memory context. */
+/**
+ * An open conversation session within an Agent Memory context.
+ *
+ * @phpstan-import-type SessionContextResponseJson from Schemas
+ * @phpstan-import-type TurnResponseJson from Schemas
+ */
 interface SessionInterface
 {
     /** Session id (API path segment). */
@@ -26,14 +32,18 @@ interface SessionInterface
     /** Deletes this session on the server. */
     public function close(): void;
 
-    /** A page of the turns recorded against this session, within the caller's read region. */
+    /**
+     * A page of the turns recorded against this session, within the caller's read region.
+     *
+     * @return Page<TurnResponseJson>
+     */
     public function turns(?PageOptions $options = null): Page;
 
     /**
      * Every turn recorded against this session, walking the pages in order
      * (`GET /sessions/{id}/turns`). A transcript is usually read whole.
      *
-     * @return list<array<string,mixed>>
+     * @return list<TurnResponseJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
      */
@@ -44,7 +54,7 @@ interface SessionInterface
      *
      * Retried like a read, with an `Idempotency-Key`, as the JS client does.
      *
-     * @return array<int|string,mixed>
+     * @return SessionContextResponseJson
      */
     public function context(string $query): array;
 }

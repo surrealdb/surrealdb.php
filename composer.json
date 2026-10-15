@@ -59,7 +59,10 @@
     "autoload-dev": {
         "psr-4": {
             "SurrealDB\\Tests\\": "tests/"
-        }
+        },
+        "classmap": [
+            "scripts/AgentMemoryTypesGenerator.php"
+        ]
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
@@ -84,7 +87,8 @@
         "test:frankenphp": "vendor/bin/phpunit --testsuite frankenphp",
         "test:agent-memory": "vendor/bin/phpunit --testsuite agent-memory",
         "test:agent-memory-integration": "vendor/bin/phpunit --testsuite agent-memory-integration",
-        "test:all": "vendor/bin/phpunit"
+        "test:all": "vendor/bin/phpunit",
+        "generate:agent-memory-types": "@php scripts/generate-agent-memory-types.php"
     },
     "scripts-descriptions": {
         "analyse": "Run PHPStan static analysis on the source tree.",
@@ -96,6 +100,7 @@
         "test:frankenphp": "Run the FrankenPHP / Amp (Revolt) runtime suite (requires revolt/event-loop).",
         "test:agent-memory": "Run the Agent Memory client unit tests (no server needed).",
         "test:agent-memory-integration": "Run the Agent Memory tests against a real server (start one with scripts/agent-memory-server.sh).",
-        "test:all": "Run every suite: default (sync), OpenSwoole, FrankenPHP, and the Agent Memory suites (the integration suite skips without a server)."
+        "test:all": "Run every suite: default (sync), OpenSwoole, FrankenPHP, and the Agent Memory suites (the integration suite skips without a server).",
+        "generate:agent-memory-types": "Regenerate src/AgentMemory/Schema/Schemas.php (PHPStan response types) from the Agent Memory OpenAPI spec: pass its path after `--`, or set AGENT_MEMORY_OPENAPI_SPEC."
     }
 }

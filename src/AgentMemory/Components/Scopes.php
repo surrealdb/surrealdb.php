@@ -9,9 +9,15 @@ use SurrealDB\AgentMemory\Options\ScopeListOptions;
 use SurrealDB\AgentMemory\Options\ScopeRegisterOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see ScopesInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see ScopesInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type ForgetScopeResponseJson from Schemas
+ * @phpstan-import-type ScopeNodeJson from Schemas
+ */
 final class Scopes implements ScopesInterface
 {
     public function __construct(
@@ -21,6 +27,7 @@ final class Scopes implements ScopesInterface
 
     public function list(?ScopeListOptions $options = null): Page
     {
+        /** @var Page<ScopeNodeJson> */
         return $this->transport->requestPage($this->base(), 'scopes', $options?->toQuery() ?? []);
     }
 
@@ -33,6 +40,7 @@ final class Scopes implements ScopesInterface
 
     public function register(ScopeRegisterOptions $options): array
     {
+        /** @var ScopeNodeJson */
         return $this->transport->requestJson('POST', $this->base(), body: $options->toPayload()) ?? [];
     }
 
@@ -45,6 +53,7 @@ final class Scopes implements ScopesInterface
 
     public function forget(?ScopeForgetOptions $options = null): array
     {
+        /** @var ForgetScopeResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/forget', body: $options?->toPayload() ?? []) ?? [];
     }
 

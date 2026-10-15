@@ -7,9 +7,14 @@ use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\UncertaintyListOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see UncertaintyInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see UncertaintyInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type UncertaintyJson from Schemas
+ */
 final class Uncertainty implements UncertaintyInterface
 {
     public function __construct(
@@ -19,6 +24,7 @@ final class Uncertainty implements UncertaintyInterface
 
     public function list(?UncertaintyListOptions $options = null): Page
     {
+        /** @var Page<UncertaintyJson> */
         return $this->transport->requestPage($this->base(), 'unknowns', $options?->toQuery() ?? []);
     }
 
@@ -43,7 +49,7 @@ final class Uncertainty implements UncertaintyInterface
         $body = ['acceptedValue' => $acceptedValue] + ($note === null ? [] : ['note' => $note]);
         $path = $this->base() . '/' . Paths::encodeSegment($uncertaintyId) . '/resolve';
 
-        /** @var array<string,mixed> */
+        /** @var UncertaintyJson */
         return $this->transport->requestMember('POST', $path, 'uncertainty', body: $body);
     }
 

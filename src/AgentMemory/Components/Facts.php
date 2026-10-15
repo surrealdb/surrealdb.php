@@ -10,9 +10,16 @@ use SurrealDB\AgentMemory\Options\AttributeListOptions;
 use SurrealDB\AgentMemory\Options\RelationListOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see FactsInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see FactsInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type ActionDetailJson from Schemas
+ * @phpstan-import-type AttributeDetailJson from Schemas
+ * @phpstan-import-type RelationDetailJson from Schemas
+ */
 final class Facts implements FactsInterface
 {
     public function __construct(
@@ -22,6 +29,7 @@ final class Facts implements FactsInterface
 
     public function attributes(?AttributeListOptions $options = null): Page
     {
+        /** @var Page<AttributeDetailJson> */
         return $this->transport->requestPage($this->base() . '/attributes', 'attributes', $options?->toQuery() ?? []);
     }
 
@@ -34,6 +42,7 @@ final class Facts implements FactsInterface
 
     public function relations(?RelationListOptions $options = null): Page
     {
+        /** @var Page<RelationDetailJson> */
         return $this->transport->requestPage($this->base() . '/relations', 'relations', $options?->toQuery() ?? []);
     }
 
@@ -56,6 +65,7 @@ final class Facts implements FactsInterface
 
     public function actions(?ActionListOptions $options = null): Page
     {
+        /** @var Page<ActionDetailJson> */
         return $this->transport->requestPage($this->base() . '/actions', 'actions', $options?->toQuery() ?? []);
     }
 

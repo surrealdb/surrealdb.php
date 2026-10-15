@@ -4,6 +4,7 @@ namespace SurrealDB\AgentMemory;
 
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use function count;
 use function is_array;
 use function is_bool;
@@ -27,7 +28,11 @@ use function array_key_exists;
  * }
  * ```
  *
- * @template T = array<string, mixed> the row type; untyped decoded rows by default
+ * Every collection method narrows `T` to its row schema: `$memory->documents->list()`
+ * is a `Page<DocumentJson>` ({@see Schemas}). `T` is covariant, since a page
+ * is read-only: a `Page<DocumentJson>` is also a `Page<array<string, mixed>>`.
+ *
+ * @template-covariant T = array<string, mixed> the row type; untyped decoded rows by default
  *
  * @implements \IteratorAggregate<int, T>
  */
@@ -166,9 +171,9 @@ final class Page implements \IteratorAggregate, \Countable
     }
 
     /**
-     * @return \ArrayIterator<int, T>
+     * @return \Iterator<int, T>
      */
-    public function getIterator(): \ArrayIterator
+    public function getIterator(): \Iterator
     {
         return new \ArrayIterator($this->items);
     }

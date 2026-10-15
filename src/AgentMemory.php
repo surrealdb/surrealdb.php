@@ -36,6 +36,7 @@ use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
 use SurrealDB\AgentMemory\Payload;
 use SurrealDB\AgentMemory\RetryPolicy;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Streaming\ChatChunk;
 use SurrealDB\AgentMemory\Streaming\ChatStreamParser;
 use SurrealDB\AgentMemory\Transport;
@@ -69,6 +70,23 @@ use SurrealDB\Http\PsrHttpClientProvider;
  * $memory->remember('I just got promoted to CTO');
  * $hits = $memory->recall('What is my role?');
  * ```
+ *
+ * @phpstan-import-type AuditRowJson from Schemas
+ * @phpstan-import-type ChatResponseJson from Schemas
+ * @phpstan-import-type ConsolidateResponseJson from Schemas
+ * @phpstan-import-type ContextQueryResponseJson from Schemas
+ * @phpstan-import-type ElaborateResponseJson from Schemas
+ * @phpstan-import-type FactsBatchResponseJson from Schemas
+ * @phpstan-import-type FactsResponseJson from Schemas
+ * @phpstan-import-type ForgetResponseJson from Schemas
+ * @phpstan-import-type FsckReportJson from Schemas
+ * @phpstan-import-type InspectResponseJson from Schemas
+ * @phpstan-import-type LookupResponseJson from Schemas
+ * @phpstan-import-type ProfileResponseJson from Schemas
+ * @phpstan-import-type QueryMemoryResponseJson from Schemas
+ * @phpstan-import-type ReflectResponseJson from Schemas
+ * @phpstan-import-type StateResponseJson from Schemas
+ * @phpstan-import-type WhoamiJson from Schemas
  */
 final class AgentMemory implements AgentMemoryInterface
 {
@@ -148,6 +166,7 @@ final class AgentMemory implements AgentMemoryInterface
     {
         $payload = Payload::compact(['text' => $text]) + ($options?->toPayload() ?? []);
 
+        /** @var FactsResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/facts', body: $payload, idempotent: true) ?? [];
     }
 
@@ -160,6 +179,7 @@ final class AgentMemory implements AgentMemoryInterface
             ),
         ] + ($options?->toPayload() ?? []);
 
+        /** @var FactsBatchResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/facts/batch', body: $payload, idempotent: true) ?? [];
     }
 
@@ -169,6 +189,7 @@ final class AgentMemory implements AgentMemoryInterface
 
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
+        /** @var QueryMemoryResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/query', body: $payload, idempotent: true) ?? [];
     }
 
@@ -180,6 +201,7 @@ final class AgentMemory implements AgentMemoryInterface
 
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
+        /** @var LookupResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/lookup', body: $payload, idempotent: true) ?? [];
     }
 
@@ -189,6 +211,7 @@ final class AgentMemory implements AgentMemoryInterface
 
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
+        /** @var ForgetResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/forget', body: $payload) ?? [];
     }
 
@@ -198,6 +221,7 @@ final class AgentMemory implements AgentMemoryInterface
 
         $payload = ['message' => $message] + ($options?->toPayload() ?? []);
 
+        /** @var ChatResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/chat', body: $payload) ?? [];
     }
 
@@ -214,6 +238,7 @@ final class AgentMemory implements AgentMemoryInterface
 
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
+        /** @var ContextQueryResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/context', body: $payload, idempotent: true) ?? [];
     }
 
@@ -223,11 +248,13 @@ final class AgentMemory implements AgentMemoryInterface
 
         $payload = ['query' => $query] + ($options ?? new ReflectOptions())->toPayload();
 
+        /** @var ReflectResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/reflect', body: $payload) ?? [];
     }
 
     public function consolidate(?ConsolidateOptions $options = null): array
     {
+        /** @var ConsolidateResponseJson */
         return $this->transport->requestJson(
             'POST',
             $this->base() . '/consolidate',
@@ -237,11 +264,13 @@ final class AgentMemory implements AgentMemoryInterface
 
     public function elaborate(ElaborateOptions $options): array
     {
+        /** @var ElaborateResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/elaborate', body: $options->toPayload()) ?? [];
     }
 
     public function fsck(?FsckOptions $options = null): array
     {
+        /** @var FsckReportJson */
         return $this->transport->requestJson(
             'POST',
             $this->base() . '/fsck',
@@ -253,11 +282,13 @@ final class AgentMemory implements AgentMemoryInterface
     {
         $query = ['ref' => $ref instanceof EntityRef ? $ref->tagged() : $ref] + ($options?->toQuery() ?? []);
 
+        /** @var InspectResponseJson */
         return $this->transport->requestJson('GET', $this->base() . '/inspect', $query) ?? [];
     }
 
     public function audit(?AuditOptions $options = null): Page
     {
+        /** @var Page<AuditRowJson> */
         return $this->transport->requestPage($this->base() . '/audit', 'rows', $options?->toQuery() ?? []);
     }
 
@@ -270,16 +301,19 @@ final class AgentMemory implements AgentMemoryInterface
 
     public function state(?StateOptions $options = null): array
     {
+        /** @var StateResponseJson */
         return $this->transport->requestJson('GET', $this->base() . '/state', $options?->toQuery() ?? []) ?? [];
     }
 
     public function profile(): array
     {
+        /** @var ProfileResponseJson */
         return $this->transport->requestJson('GET', $this->base() . '/profile') ?? [];
     }
 
     public function whoami(): array
     {
+        /** @var WhoamiJson */
         return $this->transport->requestJson('GET', $this->base() . '/me') ?? [];
     }
 

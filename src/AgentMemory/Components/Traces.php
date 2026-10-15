@@ -7,9 +7,15 @@ use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see TracesInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see TracesInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type TraceRecordJson from Schemas
+ * @phpstan-import-type TraceStatsResponseJson from Schemas
+ */
 final class Traces implements TracesInterface
 {
     public function __construct(
@@ -19,6 +25,7 @@ final class Traces implements TracesInterface
 
     public function list(?PageOptions $options = null): Page
     {
+        /** @var Page<TraceRecordJson> */
         return $this->transport->requestPage($this->base(), 'traces', $options?->toQuery() ?? []);
     }
 
@@ -31,11 +38,13 @@ final class Traces implements TracesInterface
 
     public function get(string $traceId): array
     {
+        /** @var TraceRecordJson */
         return $this->transport->requestJson('GET', $this->base() . '/' . Paths::encodeSegment($traceId)) ?? [];
     }
 
     public function stats(): array
     {
+        /** @var TraceStatsResponseJson */
         return $this->transport->requestJson('GET', $this->base() . '/stats') ?? [];
     }
 

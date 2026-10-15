@@ -8,6 +8,7 @@ use SurrealDB\AgentMemory\Options\ActionListOptions;
 use SurrealDB\AgentMemory\Options\AttributeListOptions;
 use SurrealDB\AgentMemory\Options\RelationListOptions;
 use SurrealDB\AgentMemory\Page;
+use SurrealDB\AgentMemory\Schema\Schemas;
 
 /**
  * The stored fact families as walkable collections: attributes
@@ -19,10 +20,18 @@ use SurrealDB\AgentMemory\Page;
  * {@see AgentMemoryInterface::lookup()}: its `facts` are attributes, its
  * `relations` span both `src` and `dst` ({@see allEdgesOf()} walks both), and
  * its `events` are actions.
+ *
+ * @phpstan-import-type ActionDetailJson from Schemas
+ * @phpstan-import-type AttributeDetailJson from Schemas
+ * @phpstan-import-type RelationDetailJson from Schemas
  */
 interface FactsInterface
 {
-    /** A page of attributes, optionally for one entity or key. */
+    /**
+     * A page of attributes, optionally for one entity or key.
+     *
+     * @return Page<AttributeDetailJson>
+     */
     public function attributes(?AttributeListOptions $options = null): Page;
 
     /**
@@ -32,13 +41,17 @@ interface FactsInterface
      *
      * @param int|null $max stop collecting once this many attributes are in (at least 1)
      *
-     * @return list<array<string,mixed>>
+     * @return list<AttributeDetailJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
      */
     public function allAttributes(?AttributeListOptions $options = null, ?int $max = null): array;
 
-    /** A page of relations, optionally by subject, object, or label. */
+    /**
+     * A page of relations, optionally by subject, object, or label.
+     *
+     * @return Page<RelationDetailJson>
+     */
     public function relations(?RelationListOptions $options = null): Page;
 
     /**
@@ -48,7 +61,7 @@ interface FactsInterface
      *
      * @param int|null $max stop collecting once this many relations are in (at least 1)
      *
-     * @return list<array<string,mixed>>
+     * @return list<RelationDetailJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
      */
@@ -65,13 +78,17 @@ interface FactsInterface
      * @param string|null      $label  only edges with this label
      * @param int|null         $limit  relations per page
      *
-     * @return list<array<string,mixed>>
+     * @return list<RelationDetailJson>
      *
      * @throws InvalidArgumentException when `$entity` is not a `<type>/<name>` ref
      */
     public function allEdgesOf(EntityRef|string $entity, ?string $label = null, ?int $limit = null): array;
 
-    /** A page of actions, optionally by actor, verb, or time window. */
+    /**
+     * A page of actions, optionally by actor, verb, or time window.
+     *
+     * @return Page<ActionDetailJson>
+     */
     public function actions(?ActionListOptions $options = null): Page;
 
     /**
@@ -81,7 +98,7 @@ interface FactsInterface
      *
      * @param int|null $max stop collecting once this many actions are in (at least 1)
      *
-     * @return list<array<string,mixed>>
+     * @return list<ActionDetailJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
      */

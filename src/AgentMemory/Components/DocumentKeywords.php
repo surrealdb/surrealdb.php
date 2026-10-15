@@ -8,9 +8,17 @@ use SurrealDB\AgentMemory\Options\KeywordListOptions;
 use SurrealDB\AgentMemory\Options\KeywordSearchOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see DocumentKeywordsInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see DocumentKeywordsInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type DocumentKeywordJson from Schemas
+ * @phpstan-import-type KeywordDetailJson from Schemas
+ * @phpstan-import-type KeywordJson from Schemas
+ * @phpstan-import-type KeywordSearchResponseJson from Schemas
+ */
 final class DocumentKeywords implements DocumentKeywordsInterface
 {
     public function __construct(
@@ -20,6 +28,7 @@ final class DocumentKeywords implements DocumentKeywordsInterface
 
     public function list(?KeywordListOptions $options = null): Page
     {
+        /** @var Page<KeywordJson> */
         return $this->transport->requestPage($this->base(), 'keywords', $options?->toQuery() ?? []);
     }
 
@@ -32,11 +41,13 @@ final class DocumentKeywords implements DocumentKeywordsInterface
 
     public function search(KeywordSearchOptions $options): array
     {
+        /** @var KeywordSearchResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/search', body: $options->toPayload(), idempotent: true) ?? [];
     }
 
     public function get(string $normalised): array
     {
+        /** @var KeywordDetailJson */
         return $this->transport->requestJson('GET', $this->base() . '/' . Paths::encodeSegment($normalised)) ?? [];
     }
 
@@ -45,7 +56,7 @@ final class DocumentKeywords implements DocumentKeywordsInterface
         $path = Paths::contextApiPrefix($this->contextId) . '/documents/'
             . Paths::encodeSegment($documentId) . '/keywords';
 
-        /** @var list<array<string,mixed>> */
+        /** @var list<DocumentKeywordJson> */
         return $this->transport->requestMember('GET', $path, 'keywords');
     }
 

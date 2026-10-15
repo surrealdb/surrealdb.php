@@ -10,9 +10,18 @@ use SurrealDB\AgentMemory\Options\DocumentUploadOptions;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
+use SurrealDB\AgentMemory\Schema\Schemas;
 use SurrealDB\AgentMemory\Transport;
 
-/** Implements {@see DocumentsInterface} over the Agent Memory HTTP API. */
+/**
+ * Implements {@see DocumentsInterface} over the Agent Memory HTTP API.
+ *
+ * @phpstan-import-type ChunkJson from Schemas
+ * @phpstan-import-type DocumentJson from Schemas
+ * @phpstan-import-type QueryResponseJson from Schemas
+ * @phpstan-import-type RecomputeLinksResponse from Schemas
+ * @phpstan-import-type UploadResponse from Schemas
+ */
 final class Documents implements DocumentsInterface
 {
     public readonly DocumentKeywords $keywords;
@@ -26,6 +35,7 @@ final class Documents implements DocumentsInterface
 
     public function upload(DocumentUploadOptions $options): array
     {
+        /** @var UploadResponse */
         return $this->transport->requestMultipart('POST', $this->base(), $options->toForm()) ?? [];
     }
 
@@ -33,12 +43,14 @@ final class Documents implements DocumentsInterface
     {
         $path = $this->base() . '/' . Paths::encodeSegment($documentId);
 
+        /** @var UploadResponse */
         return $this->transport->requestMultipart('PUT', $path, $options->toForm())
             ?? ['id' => $documentId, 'status' => 'queued', 'contentHash' => '', 'deduplicated' => false];
     }
 
     public function get(string $documentId): array
     {
+        /** @var DocumentJson */
         return $this->transport->requestJson('GET', $this->base() . '/' . Paths::encodeSegment($documentId)) ?? [];
     }
 
@@ -51,6 +63,7 @@ final class Documents implements DocumentsInterface
     {
         $path = $this->base() . '/' . Paths::encodeSegment($documentId) . '/chunks';
 
+        /** @var Page<ChunkJson> */
         return $this->transport->requestPage($path, 'chunks', $options?->toQuery() ?? []);
     }
 
@@ -63,6 +76,7 @@ final class Documents implements DocumentsInterface
 
     public function list(?DocumentListOptions $options = null): Page
     {
+        /** @var Page<DocumentJson> */
         return $this->transport->requestPage($this->base(), 'documents', $options?->toQuery() ?? []);
     }
 
@@ -87,11 +101,13 @@ final class Documents implements DocumentsInterface
 
     public function query(DocumentQueryOptions $options): array
     {
+        /** @var QueryResponseJson */
         return $this->transport->requestJson('POST', $this->base() . '/query', body: $options->toPayload(), idempotent: true) ?? [];
     }
 
     public function recomputeLinks(): array
     {
+        /** @var RecomputeLinksResponse */
         return $this->transport->requestJson('POST', $this->base() . '/recompute-links', body: []) ?? [];
     }
 
