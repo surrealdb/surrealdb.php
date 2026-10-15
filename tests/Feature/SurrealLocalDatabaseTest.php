@@ -141,6 +141,8 @@ final class SurrealLocalDatabaseTest extends TestCase
             $db->create(new RecordId('person', 'tobie'))->content(['name' => 'Tobie'])->execute();
 
             $hostile = 'person; DELETE person; SELECT * FROM person';
+            // Strict servers only write to defined tables.
+            $db->run('DEFINE TABLE ' . Table::escapeIdent($hostile) . '; DEFINE TABLE ' . Table::escapeIdent('trailing\\'));
             $created = $db->create($hostile)->content(['name' => 'Hostile'])->execute();
 
             self::assertIsArray($created);
