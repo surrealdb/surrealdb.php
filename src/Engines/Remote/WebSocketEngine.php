@@ -158,13 +158,17 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             throw new ConnectionUnavailableException();
         }
 
+        // A value the codec cannot encode is the caller's error, not a lost
+        // connection, so serialize before the transport-failure handling.
+        $payload = $this->context->codec->serialize($request->toWire());
+
         $id = (string) $request->id;
         /** @var Deferred<RpcResponse<mixed>> $deferred */
         $deferred = $this->context->scheduler->defer(fn () => $this->readAndDispatchOnce());
         $this->calls[$id] = $deferred;
 
         try {
-            $this->transport->sendFrame($this->context->codec->serialize($request->toWire()));
+            $this->transport->sendFrame($payload);
         } catch (\Throwable $error) {
             unset($this->calls[$id]);
             $this->connectionLost();
