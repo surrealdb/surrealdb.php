@@ -11,6 +11,7 @@ use SurrealDB\SDK\Exceptions\AlreadyExistsException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\ThrownException;
 use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
@@ -274,6 +275,11 @@ SURQL);
     public function testApiInvokesUserDefinedEndpoints(string $protocol): void
     {
         $db = $this->connect($protocol);
+
+        if (!$db->isFeatureSupported(Features::api())) {
+            $db->close();
+            self::markTestSkipped('DEFINE API needs SurrealDB 3.0 or later.');
+        }
 
         try {
             $db->run(<<<'SURQL'
