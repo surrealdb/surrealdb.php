@@ -326,6 +326,40 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testAFinalDisconnectWhileDrainingAnEarlierSocketStillYieldsTheLastOne(): void
+    {
+        $db = $this->connect(['attempts' => 1, 'retryDelay' => 0.001]);
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $db->create(new RecordId('person', 'one'))->execute();
+            $db->create(new RecordId('person', 'two'))->execute();
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            $records = [];
+
+            foreach ($live as $message) {
+                $records[] = (string) $message->record;
+
+                // Still draining the first socket's feed: the second one
+                // receives a notification, then is lost for good.
+                if (count($records) === 1) {
+                    $db->create(new RecordId('person', 'three'))->execute();
+                    $db->run('RETURN 1');
+                    $this->client->refuseConnections();
+                    $this->client->sever();
+                    self::assertSame(ConnectionStatus::Disconnected, $db->status());
+                }
+            }
+
+            self::assertSame(['person:one', 'person:two', 'person:three'], $records);
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testLiveQueriesAreReplayedBeforeConnectedIsAnnounced(): void
     {
         $db = $this->connect();

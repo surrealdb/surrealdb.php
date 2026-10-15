@@ -373,6 +373,60 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame([null, true], $result);
     }
 
+    public function testARenewalFailingForAReplacedConnectionIsNotReported(): void
+    {
+        $errors = $this->inLoop(function (): array {
+            $namespace = 'amp_renew_' . bin2hex(random_bytes(4));
+            $setup = new Surreal(Runtime::amp());
+            $this->connect($setup);
+
+            try {
+                // Renewal is due 60 seconds before expiry: about a second in.
+                $setup->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace};"
+                    . " DEFINE USER renew ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 61s, FOR SESSION 1h");
+            } finally {
+                $setup->close();
+            }
+
+            $calls = 0;
+            $renewing = false;
+            $failing = function () use (&$calls, &$renewing, $namespace): NamespaceAuth {
+                // The first connection's renewal fails, after a while.
+                if (++$calls > 1) {
+                    $renewing = true;
+                    $this->delay(0.5);
+
+                    throw new \RuntimeException('old renewal failed');
+                }
+
+                return new NamespaceAuth($namespace, 'renew', 'secret');
+            };
+
+            $db = new Surreal(Runtime::amp());
+            $this->connect($db, $failing);
+
+            try {
+                $this->waitFor(static function () use (&$renewing): bool {
+                    return $renewing;
+                });
+
+                $this->connect($db, static fn (): NamespaceAuth => new NamespaceAuth($namespace, 'renew', 'secret'));
+                $errors = [];
+                $db->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+                    $errors[] = $error->getMessage();
+                });
+
+                $this->delay(1.0);
+
+                return $errors;
+            } finally {
+                $db->close();
+            }
+        });
+
+        $this->assertSame([], $errors);
+    }
+
     public function testATokenCloseToExpiryIsKeptWhileStillValid(): void
     {
         $result = $this->inLoop(function (): ?array {
