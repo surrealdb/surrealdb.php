@@ -9,6 +9,7 @@ use SurrealDB\SDK\Connection\ConnectionState;
 use SurrealDB\SDK\Connection\ConnectionStatus;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverContext;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Runtime\Runtime;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Transport\Amp\AmpWebSocketTransport;
@@ -83,6 +84,129 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame(2, $result[0]);
         $this->assertSame(ConnectionStatus::Connected, $result[1]);
         $this->assertSame(['hello'], $result[2]);
+    }
+
+    public function testATransactionIsFinishedAsSoonAsItsSocketIsLost(): void
+    {
+        $result = $this->inLoop(function (): ?array {
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $options = Runtime::amp();
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+
+            try {
+                if (!$db->isFeatureSupported(Features::transactions())) {
+                    return null;
+                }
+
+                $txn = $db->beginTransaction();
+                $finishedWhileReconnecting = null;
+                $connected = 0;
+                $db->subscribe('reconnecting', static function () use (&$finishedWhileReconnecting, $txn): void {
+                    $finishedWhileReconnecting ??= $txn->isFinished();
+                });
+                $db->subscribe('connected', static function () use (&$connected): void {
+                    $connected++;
+                });
+
+                $transports[0]->close();
+
+                $deadline = microtime(true) + 5;
+
+                while ($connected === 0 && microtime(true) < $deadline) {
+                    $this->delay(0.05);
+                }
+
+                return [$finishedWhileReconnecting, $txn->isFinished()];
+            } finally {
+                $db->close();
+            }
+        });
+
+        if ($result === null) {
+            $this->markTestSkipped('Interactive transactions need SurrealDB 3.0 or later.');
+        }
+
+        $this->assertSame([true, true], $result);
+    }
+
+    public function testATokenCloseToExpiryIsKeptWhileStillValid(): void
+    {
+        $result = $this->inLoop(function (): ?array {
+            $db = new Surreal(Runtime::amp());
+            $this->connect($db);
+
+            try {
+                if (!$db->isFeatureSupported(Features::sessions())) {
+                    return null;
+                }
+
+                $user = 'brief_' . bin2hex(random_bytes(4));
+                $db->run("DEFINE USER {$user} ON ROOT PASSWORD 'secret' ROLES OWNER DURATION FOR TOKEN 30s, FOR SESSION 1h");
+                $db->signin(new RootAuth($user, 'secret'));
+                $token = $db->accessToken();
+                $fork = $db->forkSession();
+
+                // Renewal is due at once, and nothing can renew these tokens:
+                // let the timers run, then check both are still signed in.
+                $this->delay(0.2);
+
+                return [
+                    $token,
+                    $db->accessToken(),
+                    $fork->accessToken(),
+                    $fork->run("RETURN 'ok'"),
+                ];
+            } finally {
+                $db->close();
+            }
+        });
+
+        if ($result === null) {
+            $this->markTestSkipped('Sessions need SurrealDB 3.0 or later.');
+        }
+
+        [$token, $source, $fork, $ran] = $result;
+        $this->assertNotNull($token);
+        $this->assertSame($token, $source);
+        $this->assertSame($token, $fork);
+        $this->assertSame(['ok'], $ran);
+    }
+
+    public function testAKeptTokenIsSignedOutWhenItExpires(): void
+    {
+        $result = $this->inLoop(function (): array {
+            $db = new Surreal(Runtime::amp());
+            $this->connect($db);
+
+            try {
+                $user = 'fleeting_' . bin2hex(random_bytes(4));
+                $db->run("DEFINE USER {$user} ON ROOT PASSWORD 'secret' ROLES OWNER DURATION FOR TOKEN 2s, FOR SESSION 1h");
+                $db->signin(new RootAuth($user, 'secret'));
+                $signedIn = $db->accessToken();
+                $signedOut = false;
+                $db->subscribe('auth', static function ($tokens) use (&$signedOut): void {
+                    $signedOut = $signedOut || $tokens === null;
+                });
+
+                // Nothing can renew it, so it is kept until it expires.
+                $this->delay(3.5);
+
+                return [$signedIn, $db->accessToken(), $signedOut];
+            } finally {
+                $db->close();
+            }
+        });
+
+        [$signedIn, $after, $signedOut] = $result;
+        $this->assertNotNull($signedIn);
+        $this->assertNull($after);
+        $this->assertTrue($signedOut);
     }
 
     private function connect(Surreal $db): void

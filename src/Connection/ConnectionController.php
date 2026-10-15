@@ -2,6 +2,7 @@
 
 namespace SurrealDB\SDK\Connection;
 
+use SurrealDB\SDK\Auth\AuthState;
 use SurrealDB\SDK\Auth\Credentials;
 use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Auth\Tokens;
@@ -12,6 +13,7 @@ use SurrealDB\SDK\Contracts\EngineInterface;
 use SurrealDB\SDK\Engines\EngineRegistry;
 use SurrealDB\SDK\Enum\SpanKind;
 use SurrealDB\SDK\Enum\SpanStatus;
+use SurrealDB\SDK\Enum\CodecEnum;
 use SurrealDB\SDK\Events\AuthChanged;
 use SurrealDB\SDK\Events\Connected;
 use SurrealDB\SDK\Events\Connecting;
@@ -20,12 +22,14 @@ use SurrealDB\SDK\Events\Disconnected;
 use SurrealDB\SDK\Events\NamespaceDatabaseSelected;
 use SurrealDB\SDK\Events\Reconnecting;
 use SurrealDB\SDK\Exceptions\AuthenticationException;
+use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Exceptions\InvalidSessionException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedVersionException;
+use SurrealDB\SDK\Live\LiveSubscription;
 use SurrealDB\SDK\Protocol\Feature;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Protocol\NamespaceDatabase;
@@ -208,8 +212,8 @@ final class ConnectionController
 
     public function use(?NamespaceDatabase $what, ?string $session = null): NamespaceDatabase
     {
-        $result = $this->requireEngine()->use($what, $session);
         $sessionState = $this->requireSession($session);
+        $result = $this->requireEngine()->use($what, $session);
 
         if ($result->namespace !== null) {
             $sessionState->namespace = $result->namespace;
@@ -232,7 +236,10 @@ final class ConnectionController
      */
     public function signin(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        $this->requireSession($session);
         $tokens = $this->requireEngine()->signin($auth, $session);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
+        $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
         return $tokens;
@@ -243,7 +250,10 @@ final class ConnectionController
      */
     public function signup(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        $this->requireSession($session);
         $tokens = $this->requireEngine()->signup($auth, $session);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
+        $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
         return $tokens;
@@ -251,8 +261,9 @@ final class ConnectionController
 
     public function authenticate(string $token, ?string $session = null, bool $skipOverride = false): void
     {
-        $this->requireEngine()->authenticate($token, $session);
         $sessionState = $this->requireSession($session);
+        $this->requireEngine()->authenticate($token, $session);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $sessionState->auth->accessToken = $token;
         $sessionState->auth->overridden = $sessionState->auth->overridden || !$skipOverride;
         $this->handleAuthChanged($session);
@@ -275,29 +286,37 @@ final class ConnectionController
 
     public function set(string $name, mixed $value, ?string $session = null): void
     {
+        $sessionState = $this->requireSession($session);
         $this->requireEngine()->set($name, $value, $session);
-        $this->requireSession($session)->variables[$name] = $value;
+        $sessionState->variables[$name] = $value;
     }
 
     public function unset(string $name, ?string $session = null): void
     {
+        $sessionState = $this->requireSession($session);
         $this->requireEngine()->unset($name, $session);
-        unset($this->requireSession($session)->variables[$name]);
+        unset($sessionState->variables[$name]);
     }
 
     public function invalidate(?string $session = null): void
     {
+        $sessionState = $this->requireSession($session);
         $this->requireEngine()->invalidate($session);
+        $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
     }
 
     public function reset(?string $session = null): void
     {
-        $this->requireEngine()->reset($session);
         $sessionState = $this->requireSession($session);
+        $this->requireEngine()->reset($session);
         $sessionState->namespace = null;
         $sessionState->database = null;
         $sessionState->variables = [];
+        // Resetting the session cancels its transactions and live queries
+        // on the server (SurrealDB 2.x sends no KILLED notification for them).
+        $sessionState->transactions = [];
+        $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
 
         $payload = new NamespaceDatabase();
@@ -309,19 +328,38 @@ final class ConnectionController
     {
         $this->assertFeature(Features::transactions());
 
-        return $this->requireEngine()->begin($session);
+        // Committing sends the transaction id as a UUID value, which JSON
+        // cannot express; refuse up front rather than leave it open.
+        if ($this->context->format === CodecEnum::JSON) {
+            throw new ConfigurationException(
+                'Configuration',
+                'Interactive transactions need the CBOR format: SurrealDB only accepts the transaction id as a UUID.',
+            );
+        }
+
+        $sessionState = $this->requireSession($session);
+        $txn = $this->requireEngine()->begin($session);
+        $sessionState->transactions[$txn] = true;
+
+        return $txn;
+    }
+
+    /** Whether a transaction begun on this connection is still open on the server. */
+    public function isTransactionOpen(string $txn, ?string $session = null): bool
+    {
+        return isset($this->state?->session($session)?->transactions[$txn]);
     }
 
     public function commit(string $txn, ?string $session = null): void
     {
         $this->assertFeature(Features::transactions());
-        $this->requireEngine()->commit($txn, $session);
+        $this->endTransaction($txn, $session, fn () => $this->requireEngine()->commit($txn, $session));
     }
 
     public function cancel(string $txn, ?string $session = null): void
     {
         $this->assertFeature(Features::transactions());
-        $this->requireEngine()->cancel($txn, $session);
+        $this->endTransaction($txn, $session, fn () => $this->requireEngine()->cancel($txn, $session));
     }
 
     public function importSql(string $data): void
@@ -342,6 +380,9 @@ final class ConnectionController
      */
     public function query(BoundQuery $query, ?string $session = null, ?string $txn = null): iterable
     {
+        // A closed session's handle fails here rather than on the server.
+        $this->requireSession($session);
+
         return $this->requireEngine()->query($query, $session, $txn);
     }
 
@@ -356,6 +397,15 @@ final class ConnectionController
     }
 
     /**
+     * @internal a subscription on the session, which ends if the session is
+     * reset. A closed session's handle cannot start one.
+     */
+    public function registerLive(LiveSubscription $subscription, ?string $session): void
+    {
+        $this->requireSession($session)->live[$subscription] = true;
+    }
+
+    /**
      * @return list<string>
      */
     public function sessions(): array
@@ -367,23 +417,17 @@ final class ConnectionController
 
     public function createSession(?string $clone = null): string
     {
-        $state = $this->requireState();
-        $this->assertFeature(Features::sessions());
+        return $this->attachSession($clone === null ? null : $this->requireSession($clone));
+    }
 
-        $id = Uuid::v4()->toRfc4122();
-        $this->requireEngine()->attach($id);
-
-        if ($clone === null) {
-            $state->sessions[$id] = new SessionState(id: $id);
-        } else {
-            $source = $this->requireSession($clone);
-            $session = new SessionState(id: $id, namespace: $source->namespace, database: $source->database);
-            $session->variables = $source->variables;
-            $state->sessions[$id] = $session;
-            $this->restoreSession($session);
-        }
-
-        return $id;
+    /**
+     * Create a session that starts with a copy of another session's namespace,
+     * database, variables and authentication. Unlike {@see self::createSession()},
+     * the source may be the default session (null).
+     */
+    public function forkSession(?string $source): string
+    {
+        return $this->attachSession($this->requireSession($source));
     }
 
     public function destroySession(?string $session): void
@@ -395,6 +439,8 @@ final class ConnectionController
         }
 
         $this->requireEngine()->detach($session);
+        // Its live queries go with it: nothing can receive or kill them now.
+        $this->endLiveQueries($state->sessions[$session]);
         unset($state->sessions[$session]);
     }
 
@@ -413,6 +459,9 @@ final class ConnectionController
             }
 
             foreach ($this->requireState()->allSessions() as $session) {
+                // A new socket starts without the old one's transactions.
+                $session->transactions = [];
+
                 if ($session->id !== null) {
                     $this->requireEngine()->attach($session->id);
                 }
@@ -451,6 +500,11 @@ final class ConnectionController
         // a counter increment rather than a span (which would activate a scope
         // in one callback and close it in another).
         $this->connections->add(1, ['db.system.name' => 'surrealdb', 'outcome' => 'reconnect']);
+        // The lost socket took its transactions with it.
+        foreach ($this->state?->allSessions() ?? [] as $session) {
+            $session->transactions = [];
+        }
+
         $this->status = ConnectionStatus::Reconnecting;
         $this->events->publish('reconnecting');
         $this->context->events->dispatch(new Reconnecting());
@@ -466,6 +520,34 @@ final class ConnectionController
     // =================================================================== //
     //  Authentication                                                     //
     // =================================================================== //
+
+    /**
+     * End the session's live subscriptions: they were started by whoever it
+     * was signed in as. The server stops them on reset (2.x without a
+     * `KILLED` notification), and should on a change of principal, which
+     * SurrealDB 3.0.x did not always do (GHSA-4m82-p8cx-f94j).
+     */
+    private function endLiveQueries(SessionState $sessionState): void
+    {
+        foreach ($sessionState->live as $subscription => $_) {
+            $subscription->sessionEnded();
+        }
+
+        $sessionState->live = new \WeakMap();
+    }
+
+    /**
+     * An explicit sign-in changes who the session is; renewing (the SDK's
+     * own sign-in with the same credentials or token) does not.
+     */
+    private function endLiveQueriesUnlessRenewing(?string $session, bool $renewing): void
+    {
+        $sessionState = $this->state?->session($session);
+
+        if (!$renewing && $sessionState !== null) {
+            $this->endLiveQueries($sessionState);
+        }
+    }
 
     private function applyTokens(?string $session, Tokens $tokens, bool $skipOverride): void
     {
@@ -526,25 +608,46 @@ final class ConnectionController
             $this->context->scheduler->delay((float) $delay);
 
             try {
-                $this->applyAuthentication($session);
+                $kept = $this->applyAuthentication($session, keepValidToken: true);
+                $token = $this->state?->session($session)?->auth->accessToken;
+                $expiry = $token === null ? null : Jwt::expiry($token);
+
+                // Nothing could replace the token: check again once it has
+                // expired, which signs the session out (and ends its live
+                // queries) unless something can replace it by then.
+                if ($kept && $expiry !== null) {
+                    $this->context->scheduler->delay((float) max($expiry - time(), 0));
+
+                    if ($this->state?->session($session)?->auth->accessToken === $token) {
+                        $this->applyAuthentication($session);
+                    }
+                }
             } catch (\Throwable $error) {
                 $this->onError(new AuthenticationException('Token renewal failed', $error));
             }
         });
     }
 
-    private function applyAuthentication(?string $session): void
+    /**
+     * @param bool $keepValidToken when nothing can replace the token, keep it
+     *                             while it is still valid rather than sign the
+     *                             session out (renewal, as opposed to restoring a
+     *                             session on a new socket)
+     *
+     * @return bool whether it kept a token nothing could replace
+     */
+    private function applyAuthentication(?string $session, bool $keepValidToken = false): bool
     {
         $sessionState = $this->state?->session($session);
 
         if ($sessionState === null) {
-            return;
+            return false;
         }
 
         if ($this->skipRenewal) {
             $this->abortAuthentication($session);
 
-            return;
+            return false;
         }
 
         $token = $sessionState->auth->accessToken;
@@ -556,7 +659,7 @@ final class ConnectionController
                 try {
                     $this->authenticate($token, $session, true);
 
-                    return;
+                    return false;
                 } catch (ServerException) {
                     // Fall through to the next strategy.
                 }
@@ -570,7 +673,7 @@ final class ConnectionController
                 try {
                     $this->refresh($tokens, $session, true);
 
-                    return;
+                    return false;
                 } catch (ServerException) {
                     // Fall through to the next strategy.
                 }
@@ -578,10 +681,16 @@ final class ConnectionController
         }
 
         if (!$sessionState->auth->overridden && $this->applyAuthProvider($session)) {
-            return;
+            return false;
+        }
+
+        if ($keepValidToken && $token !== null && (Jwt::expiry($token) ?? PHP_INT_MAX) > time()) {
+            return true;
         }
 
         $this->abortAuthentication($session);
+
+        return false;
     }
 
     private function applyAuthProvider(?string $session): bool
@@ -635,8 +744,112 @@ final class ConnectionController
     //  Session restore + helpers                                          //
     // =================================================================== //
 
-    private function restoreSession(SessionState $session): void
+    private function attachSession(?SessionState $source): string
     {
+        $state = $this->requireState();
+        $this->assertFeature(Features::sessions());
+
+        $id = Uuid::v4()->toRfc4122();
+        $this->requireEngine()->attach($id);
+
+        // A new session is authenticated by the configured auth provider, if
+        // any; a fork reuses its source's access token. Not its refresh token:
+        // the server revokes one when it is used, so two sessions renewing
+        // with the same one would leave the slower of them signed out.
+        $session = $source === null ? new SessionState(id: $id) : new SessionState(
+            id: $id,
+            namespace: $source->namespace,
+            database: $source->database,
+            auth: new AuthState(
+                $source->auth->accessToken,
+                null,
+                $source->auth->overridden,
+            ),
+        );
+        $session->variables = $source->variables ?? [];
+        $state->sessions[$id] = $session;
+
+        try {
+            $this->restoreSession($session, $source !== null);
+        } catch (\Throwable $error) {
+            // Nothing outside holds the id yet, so nobody else could close it.
+            unset($state->sessions[$id]);
+
+            try {
+                $this->requireEngine()->detach($id);
+            } catch (\Throwable) {
+                // The restore failure is the one worth reporting.
+            }
+
+            throw $error;
+        }
+
+        return $id;
+    }
+
+    /**
+     * Run a commit or cancel. Once the server has answered, even with an
+     * error (a commit that hit a conflict is gone too), the transaction is
+     * over; only a call that may not have reached the server leaves it open.
+     *
+     * @param \Closure(): void $end
+     */
+    private function endTransaction(string $txn, ?string $session, \Closure $end): void
+    {
+        try {
+            $end();
+        } catch (ServerException $error) {
+            $this->forgetTransaction($txn, $session);
+
+            throw $error;
+        }
+
+        $this->forgetTransaction($txn, $session);
+    }
+
+    private function forgetTransaction(string $txn, ?string $session): void
+    {
+        $sessionState = $this->state?->session($session);
+
+        if ($sessionState !== null) {
+            unset($sessionState->transactions[$txn]);
+        }
+    }
+
+    /**
+     * Signing in with namespace or database credentials also selects them.
+     *
+     * @param array<string,mixed> $auth
+     */
+    private function selectFromCredentials(array $auth, ?string $session): void
+    {
+        $sessionState = $this->requireSession($session);
+
+        // The protocol accepts both spellings.
+        $namespace = $auth['ns'] ?? $auth['NS'] ?? null;
+        $database = $auth['db'] ?? $auth['DB'] ?? null;
+
+        if (is_string($namespace)) {
+            $sessionState->namespace = $namespace;
+        }
+
+        if (is_string($database)) {
+            $sessionState->database = $database;
+        }
+    }
+
+    /**
+     * @param bool $fork whether the session's tokens were copied from another
+     *                   session, which still holds them
+     */
+    private function restoreSession(SessionState $session, bool $fork = false): void
+    {
+        // Authenticate first: a server that refuses guests (the SurrealDB 2.x
+        // default) rejects USE and LET from an anonymous session.
+        if (!$fork || !$this->authenticateWithCopiedToken($session)) {
+            $this->applyAuthentication($session->id);
+        }
+
         if ($session->namespace !== null || $session->database !== null) {
             $this->use(new NamespaceDatabase($session->namespace, $session->database), $session->id);
         }
@@ -644,8 +857,33 @@ final class ConnectionController
         foreach ($session->variables as $name => $value) {
             $this->requireEngine()->set($name, $value, $session->id);
         }
+    }
 
-        $this->applyAuthentication($session->id);
+    /**
+     * A fork's copied token is good for as long as the source's is, even when
+     * it is too close to expiry for a reconnect to bother reusing it.
+     */
+    private function authenticateWithCopiedToken(SessionState $session): bool
+    {
+        $token = $session->auth->accessToken;
+
+        if ($token === null) {
+            return false;
+        }
+
+        $expiry = Jwt::expiry($token);
+
+        if ($expiry !== null && $expiry <= time()) {
+            return false;
+        }
+
+        try {
+            $this->authenticate($token, $session->id, true);
+
+            return true;
+        } catch (ServerException) {
+            return false;
+        }
     }
 
     /**

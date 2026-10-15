@@ -92,6 +92,15 @@ final class LiveFeed implements \IteratorAggregate
         $this->wake();
     }
 
+    /**
+     * Stop receiving and drop what is queued: nothing more is yielded.
+     */
+    public function discard(): void
+    {
+        $this->queue = [];
+        $this->close();
+    }
+
     public function isClosed(): bool
     {
         return $this->closed;
