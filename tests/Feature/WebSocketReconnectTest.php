@@ -478,6 +478,32 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testASubscriptionReleasedWhileItIsReplayedIsKilled(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+
+            // Let go of it while its own query is being replayed.
+            $this->client->beforeSend = static function (string $payload) use (&$live): ?string {
+                if (str_contains($payload, 'LIVE SELECT')) {
+                    $live = null;
+                }
+
+                return null;
+            };
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            $this->client->beforeSend = null;
+
+            self::assertSame([], $db->run('INFO FOR TABLE person')[0]['lives']);
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testAnUnmanagedSubscriptionIsNotAliveAfterAReconnect(): void
     {
         $db = $this->connect();

@@ -280,8 +280,14 @@ final class ConnectionController
      */
     public function signin(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
-        $this->requireSession($session);
+        $sessionState = $this->requireSession($session);
+        $generation = $this->beginAuthChange($sessionState, $skipOverride);
         $tokens = $this->requireEngine()->signin($auth, $session);
+
+        if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
+            return $tokens;
+        }
+
         $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
@@ -294,8 +300,14 @@ final class ConnectionController
      */
     public function signup(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
-        $this->requireSession($session);
+        $sessionState = $this->requireSession($session);
+        $generation = $this->beginAuthChange($sessionState, $skipOverride);
         $tokens = $this->requireEngine()->signup($auth, $session);
+
+        if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
+            return $tokens;
+        }
+
         $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
@@ -306,7 +318,13 @@ final class ConnectionController
     public function authenticate(string $token, ?string $session = null, bool $skipOverride = false): void
     {
         $sessionState = $this->requireSession($session);
+        $generation = $this->beginAuthChange($sessionState, $skipOverride);
         $this->requireEngine()->authenticate($token, $session);
+
+        if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
+            return;
+        }
+
         $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $sessionState->auth->accessToken = $token;
         $sessionState->auth->overridden = $sessionState->auth->overridden || !$skipOverride;
@@ -316,8 +334,14 @@ final class ConnectionController
     public function refresh(Tokens $tokens, ?string $session = null, bool $skipOverride = false): Tokens
     {
         $this->assertFeature(Features::refreshTokens());
-        $this->requireSession($session);
+        $sessionState = $this->requireSession($session);
+        $generation = $this->beginAuthChange($sessionState, $skipOverride);
         $refreshed = $this->requireEngine()->refresh($tokens, $session);
+
+        if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
+            return $refreshed;
+        }
+
         $this->applyTokens($session, $refreshed, $skipOverride);
 
         return $refreshed;
@@ -349,6 +373,7 @@ final class ConnectionController
     public function invalidate(?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
+        $this->beginAuthChange($sessionState, false);
         $this->requireEngine()->invalidate($session);
         $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
@@ -357,6 +382,7 @@ final class ConnectionController
     public function reset(?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
+        $this->beginAuthChange($sessionState, false);
         $this->requireEngine()->reset($session);
         $sessionState->namespace = null;
         $sessionState->database = null;
@@ -634,6 +660,21 @@ final class ConnectionController
             try {
                 $subscription->replay();
                 $replayed[] = $weak;
+
+                // The application may have let go of it while its query was
+                // in flight. Once this loop lets go too, nothing would stop
+                // the new query on the server.
+                $id = $subscription->id();
+                $owner = $subscription->session();
+                unset($subscription);
+
+                if ($weak->get() === null && $id !== '') {
+                    try {
+                        LiveSubscription::killOnServer($this, $id, $owner);
+                    } catch (\Throwable) {
+                        // Best effort: it is gone on this side either way.
+                    }
+                }
             } catch (\Throwable $error) {
                 // The new socket was lost too: the subscriptions stay
                 // tracked and waiting, for the next connection to replay.
@@ -694,23 +735,27 @@ final class ConnectionController
         // for itself.
         $renewing = $this->renewing;
         $this->renewing = [];
-
-        foreach ($renewing as $renewal) {
-            foreach ($renewal['waiters'] as $waiter) {
-                $waiter->resolve(true);
-            }
-        }
-
         $live = $this->managedLive;
         $this->managedLive = new \WeakMap();
 
-        foreach ($live as $subscription => $_) {
-            $subscription->connectionClosed();
-        }
-
+        // Announced before waking anyone: a woken task can run straight away
+        // (OpenSwoole) and connect again, which this must not then undo.
         $this->status = ConnectionStatus::Disconnected;
-        $this->events->publish('disconnected');
-        $this->context->events->dispatch(new Disconnected());
+
+        try {
+            $this->events->publish('disconnected');
+            $this->context->events->dispatch(new Disconnected());
+        } finally {
+            foreach ($renewing as $renewal) {
+                foreach ($renewal['waiters'] as $waiter) {
+                    $waiter->resolve(true);
+                }
+            }
+
+            foreach ($live as $subscription => $_) {
+                $subscription->connectionClosed();
+            }
+        }
     }
 
     private function onReconnecting(): void
@@ -784,6 +829,24 @@ final class ConnectionController
         if (!$renewing && $sessionState !== null) {
             $this->endLiveQueries($sessionState);
         }
+    }
+
+    /**
+     * An explicit change starts a new generation, before its request goes
+     * out; a renewal or restore (`$skipOverride`) carries on the current one.
+     */
+    private function beginAuthChange(SessionState $sessionState, bool $skipOverride): int
+    {
+        return $skipOverride ? $sessionState->auth->generation : ++$sessionState->auth->generation;
+    }
+
+    /**
+     * Whether nothing changed the session's authentication since `$generation`
+     * began: no explicit sign-in or sign-out, and still the same connection.
+     */
+    private function isCurrentAuth(?string $session, AuthState $auth, int $generation): bool
+    {
+        return $this->state?->session($session)?->auth === $auth && $auth->generation === $generation;
     }
 
     private function applyTokens(?string $session, Tokens $tokens, bool $skipOverride): void
@@ -993,7 +1056,11 @@ final class ConnectionController
             return false;
         }
 
-        $token = $sessionState->auth->accessToken;
+        // Each step below can wait (on the server, or on an auth provider),
+        // and an explicit sign-in or sign-out meanwhile takes precedence.
+        $auth = $sessionState->auth;
+        $generation = $auth->generation;
+        $token = $auth->accessToken;
 
         if ($token !== null) {
             $expiry = Jwt::expiry($token);
@@ -1007,6 +1074,10 @@ final class ConnectionController
                     // Fall through to the next strategy.
                 }
             }
+        }
+
+        if (!$this->isCurrentAuth($session, $auth, $generation)) {
+            return false;
         }
 
         if ($sessionState->auth->refreshToken !== null) {
@@ -1023,7 +1094,15 @@ final class ConnectionController
             }
         }
 
-        if (!$sessionState->auth->overridden && $this->applyAuthProvider($session)) {
+        if (!$this->isCurrentAuth($session, $auth, $generation)) {
+            return false;
+        }
+
+        if (!$sessionState->auth->overridden && $this->applyAuthProvider($session, $auth, $generation)) {
+            return false;
+        }
+
+        if (!$this->isCurrentAuth($session, $auth, $generation)) {
             return false;
         }
 
@@ -1036,13 +1115,18 @@ final class ConnectionController
         return false;
     }
 
-    private function applyAuthProvider(?string $session): bool
+    private function applyAuthProvider(?string $session, AuthState $auth, int $generation): bool
     {
         if ($this->authProvider === null) {
             return false;
         }
 
         $computed = $this->resolveProvider($this->authProvider, $session);
+
+        // Signed in or out explicitly while the provider ran: that stands.
+        if (!$this->isCurrentAuth($session, $auth, $generation)) {
+            return true;
+        }
 
         if ($computed === null) {
             return false;

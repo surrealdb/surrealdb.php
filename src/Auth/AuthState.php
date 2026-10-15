@@ -7,9 +7,13 @@ namespace SurrealDB\SDK\Auth;
  *
  * `overridden` marks that an explicit signin/signup/authenticate took place,
  * in which case a configured auth provider must not silently take over.
+ * `generation` counts explicit changes (sign-in, sign-out, reset), so that a
+ * renewal running meanwhile can tell it was overtaken.
  */
 final class AuthState
 {
+    public int $generation = 0;
+
     public function __construct(
         public ?string $accessToken = null,
         public ?string $refreshToken = null,
