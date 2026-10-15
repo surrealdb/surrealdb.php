@@ -272,6 +272,47 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testLosingTheSocketDuringReplayKeepsTheSubscriptionForTheNextOne(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $events = [];
+
+            foreach (['reconnecting', 'connected'] as $event) {
+                $db->subscribe($event, static function () use (&$events, $event): void {
+                    $events[] = $event;
+                });
+            }
+
+            // Drop the first replacement socket just as the LIVE query is
+            // re-issued on it.
+            $client = $this->client;
+            $client->beforeSend = static function (string $payload) use ($client): void {
+                if (str_contains($payload, 'LIVE SELECT')) {
+                    $client->beforeSend = null;
+                    $client->sever();
+                }
+            };
+
+            $client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame(['reconnecting', 'reconnecting', 'connected'], $events);
+            self::assertTrue($live->isAlive());
+
+            $db->create(new RecordId('person', 'after'))->execute();
+
+            foreach ($live as $message) {
+                self::assertSame('person:after', (string) $message->record);
+
+                break;
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testAnUnmanagedSubscriptionIsNotAliveAfterAReconnect(): void
     {
         $db = $this->connect();

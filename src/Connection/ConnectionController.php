@@ -79,6 +79,12 @@ final class ConnectionController
      */
     private \WeakMap $managedLive;
 
+    /**
+     * Counts reconnect attempts, so work done for one socket can tell that
+     * it has since been lost.
+     */
+    private int $connectionEpoch = 0;
+
     /** How long to wait before retrying a renewal that failed. */
     private const RENEWAL_RETRY_SECONDS = 5;
 
@@ -266,6 +272,7 @@ final class ConnectionController
     public function signin(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
         $tokens = $this->requireEngine()->signin($auth, $session);
+        $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
         return $tokens;
@@ -277,6 +284,7 @@ final class ConnectionController
     public function signup(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
         $tokens = $this->requireEngine()->signup($auth, $session);
+        $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
         return $tokens;
@@ -333,6 +341,8 @@ final class ConnectionController
         $sessionState->namespace = null;
         $sessionState->database = null;
         $sessionState->variables = [];
+        // Resetting the session cancels its transactions on the server.
+        $sessionState->transactions = [];
         $this->handleAuthInvalidate($session);
 
         $payload = new NamespaceDatabase();
@@ -354,21 +364,30 @@ final class ConnectionController
             );
         }
 
-        return $this->requireEngine()->begin($session);
+        $txn = $this->requireEngine()->begin($session);
+        $this->requireSession($session)->transactions[$txn] = true;
+
+        return $txn;
+    }
+
+    /** Whether a transaction begun on this connection is still open on the server. */
+    public function isTransactionOpen(string $txn, ?string $session = null): bool
+    {
+        return isset($this->state?->session($session)?->transactions[$txn]);
     }
 
     public function commit(string $txn, ?string $session = null): void
     {
         $this->assertFeature(Features::transactions());
         $this->renewIfDue($session);
-        $this->requireEngine()->commit($txn, $session);
+        $this->endTransaction($txn, $session, fn () => $this->requireEngine()->commit($txn, $session));
     }
 
     public function cancel(string $txn, ?string $session = null): void
     {
         $this->assertFeature(Features::transactions());
         $this->renewIfDue($session);
-        $this->requireEngine()->cancel($txn, $session);
+        $this->endTransaction($txn, $session, fn () => $this->requireEngine()->cancel($txn, $session));
     }
 
     public function importSql(string $data): void
@@ -473,6 +492,9 @@ final class ConnectionController
             }
 
             foreach ($this->requireState()->allSessions() as $session) {
+                // A new socket starts without the old one's transactions.
+                $session->transactions = [];
+
                 if ($session->id !== null) {
                     $this->requireEngine()->attach($session->id);
                 }
@@ -483,8 +505,11 @@ final class ConnectionController
             $this->requireEngine()->ready();
 
             // Before announcing the connection, so a listener that writes in
-            // response already has the live queries listening.
-            $this->replayLiveQueries();
+            // response already has the live queries listening. If this socket
+            // was lost meanwhile, the next one announces itself instead.
+            if (!$this->replayLiveQueries()) {
+                return;
+            }
 
             $this->status = ConnectionStatus::Connected;
             $this->events->publish('connected', $version);
@@ -498,9 +523,12 @@ final class ConnectionController
     /**
      * Re-issue managed live queries on a new socket, once their sessions are
      * restored. A subscription whose query fails ends; the others carry on.
+     *
+     * @return bool false if the socket was lost while replaying
      */
-    private function replayLiveQueries(): void
+    private function replayLiveQueries(): bool
     {
+        $epoch = $this->connectionEpoch;
         $subscriptions = [];
 
         foreach ($this->managedLive as $subscription => $_) {
@@ -520,10 +548,19 @@ final class ConnectionController
             try {
                 $subscription->replay();
             } catch (\Throwable $error) {
+                // The new socket was lost too: the subscriptions stay
+                // tracked and waiting, for the next connection to replay.
+                if ($this->connectionEpoch !== $epoch) {
+                    return false;
+                }
+
                 unset($this->managedLive[$subscription]);
+                $subscription->connectionClosed();
                 $this->onError($error);
             }
         }
+
+        return true;
     }
 
     private function onDisconnected(): void
@@ -556,6 +593,7 @@ final class ConnectionController
         // in one callback and close it in another).
         $this->connections->add(1, ['db.system.name' => 'surrealdb', 'outcome' => 'reconnect']);
         $this->status = ConnectionStatus::Reconnecting;
+        $this->connectionEpoch++;
 
         foreach ($this->managedLive as $subscription => $_) {
             $subscription->suspend($this->context->scheduler);
@@ -852,6 +890,53 @@ final class ConnectionController
      * @param bool $fork whether the session's tokens were copied from another
      *                   session, which still holds them
      */
+    /**
+     * Run a commit or cancel. Once the server has answered, even with an
+     * error (a commit that hit a conflict is gone too), the transaction is
+     * over; only a call that may not have reached the server leaves it open.
+     *
+     * @param \Closure(): void $end
+     */
+    private function endTransaction(string $txn, ?string $session, \Closure $end): void
+    {
+        try {
+            $end();
+        } catch (ServerException $error) {
+            $this->forgetTransaction($txn, $session);
+
+            throw $error;
+        }
+
+        $this->forgetTransaction($txn, $session);
+    }
+
+    private function forgetTransaction(string $txn, ?string $session): void
+    {
+        $sessionState = $this->state?->session($session);
+
+        if ($sessionState !== null) {
+            unset($sessionState->transactions[$txn]);
+        }
+    }
+
+    /**
+     * Signing in with namespace or database credentials also selects them.
+     *
+     * @param array<string,mixed> $auth
+     */
+    private function selectFromCredentials(array $auth, ?string $session): void
+    {
+        $sessionState = $this->requireSession($session);
+
+        if (is_string($auth['ns'] ?? null)) {
+            $sessionState->namespace = $auth['ns'];
+        }
+
+        if (is_string($auth['db'] ?? null)) {
+            $sessionState->database = $auth['db'];
+        }
+    }
+
     private function restoreSession(SessionState $session, bool $fork = false): void
     {
         // Authenticate first: a server that refuses guests (the SurrealDB 2.x

@@ -13,6 +13,13 @@ final class SessionState
     /** @var array<string,mixed> */
     public array $variables = [];
 
+    /**
+     * Interactive transactions open on the server, by id.
+     *
+     * @var array<string,true>
+     */
+    public array $transactions = [];
+
     public function __construct(
         public ?string $id = null,
         public ?string $namespace = null,
