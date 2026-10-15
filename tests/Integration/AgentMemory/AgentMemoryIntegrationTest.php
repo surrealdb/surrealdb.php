@@ -5,7 +5,7 @@ namespace SurrealDB\Tests\Integration\AgentMemory;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Enum\InferMode;
 use SurrealDB\AgentMemory\Enum\LookupSection;
-use SurrealDB\AgentMemory\Enum\TopEntitiesOrder;
+use SurrealDB\AgentMemory\Enum\EntityRanking;
 use SurrealDB\AgentMemory\Enum\Verb;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\AuthException;
@@ -156,12 +156,12 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $this->assertGreaterThanOrEqual(2, $people->totalSize);
         $this->assertContains($alice, array_column(iterator_to_array($people->autoPaginate(), false), 'name'));
 
-        $matches = $entities->search($alice, new EntitySearchOptions(type: 'person'));
+        $matches = $entities->search(query: $alice, options: new EntitySearchOptions(type: 'person'));
         $this->assertSame($alice, $matches[0]['entity']['name']);
         $this->assertSame(1.0, (float) $matches[0]['score']);
         $this->assertSame(5, $matches[0]['factCount']);
 
-        $top = $entities->top(new TopEntitiesOptions(by: TopEntitiesOrder::COVERAGE, type: 'person', limit: 3));
+        $top = $entities->top(new TopEntitiesOptions(by: EntityRanking::COVERAGE, type: 'person', limit: 3));
         $this->assertNotEmpty($top);
         $this->assertArrayHasKey('factCount', $top[0]);
 
@@ -173,10 +173,10 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $history = $entities->history('person', $alice, 'role');
         $this->assertSame(['CTO'], array_column($history, 'value'));
 
-        $all = $entities->historyAll('person', $alice, new PageOptions(limit: 2));
+        $all = $entities->changes('person', $alice, new PageOptions(limit: 2));
         $this->assertCount(3, iterator_to_array($all->autoPaginate(), false));
 
-        $neighbours = $entities->neighbourhood('person', $alice, new NeighbourhoodOptions(count: true));
+        $neighbours = $entities->neighbours('person', $alice, new NeighbourhoodOptions(count: true));
         $this->assertSame(1, $neighbours->totalSize);
         $this->assertSame('works_at', $neighbours->items[0]['label']);
         $this->assertTrue($neighbours->items[0]['outbound']);

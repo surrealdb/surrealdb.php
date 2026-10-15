@@ -3,19 +3,19 @@
 namespace SurrealDB\AgentMemory\Options;
 
 use SurrealDB\AgentMemory\Components\Entities;
-use SurrealDB\AgentMemory\Enum\TopEntitiesOrder;
+use SurrealDB\AgentMemory\Enum\EntityRanking;
 use SurrealDB\AgentMemory\Payload;
 
 /** Options for {@see Entities::top()}. */
 final readonly class TopEntitiesOptions
 {
     /**
-     * @param TopEntitiesOrder|string|null $by    ranking; defaults to `coverage`
-     * @param string|null                  $type  restrict to one entity type
-     * @param int|null                     $limit maximum entities (default 10)
+     * @param EntityRanking|string|null $by    ranking; defaults to `coverage`
+     * @param string|null               $type  restrict to one entity type
+     * @param int|null                  $limit maximum entities (default 10)
      */
     public function __construct(
-        public TopEntitiesOrder|string|null $by = null,
+        public EntityRanking|string|null $by = null,
         public ?string $type = null,
         public ?int $limit = null,
     ) {}

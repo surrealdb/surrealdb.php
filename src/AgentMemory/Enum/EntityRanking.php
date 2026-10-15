@@ -2,8 +2,10 @@
 
 namespace SurrealDB\AgentMemory\Enum;
 
-/** Ordering for the top-entities listing; `coverage` by default. */
-enum TopEntitiesOrder: string
+use SurrealDB\AgentMemory\Components\Entities;
+
+/** How {@see Entities::top()} ranks entities; `coverage` by default. */
+enum EntityRanking: string
 {
     /** Most facts first. */
     case COVERAGE = 'coverage';

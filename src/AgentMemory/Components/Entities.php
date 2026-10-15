@@ -17,7 +17,7 @@ use SurrealDB\AgentMemory\Transport;
 
 /**
  * Entity records with their attributes, relations, history, and graph
- * neighbourhood, plus deterministic name search and ranked listings.
+ * neighbours, plus deterministic name search and ranked listings.
  */
 final class Entities
 {
@@ -40,14 +40,12 @@ final class Entities
      *
      * @return list<array<string,mixed>> the `matches`
      */
-    public function search(string $name, ?EntitySearchOptions $options = null): array
+    public function search(string $query, ?EntitySearchOptions $options = null): array
     {
-        Guard::notBlank($name, 'Entity search requires a non-empty name.');
-
-        $query = ['q' => $name] + ($options?->toQuery() ?? []);
+        Guard::notBlank($query, 'Entity search requires a non-empty query.');
 
         /** @var list<array<string,mixed>> */
-        return $this->transport->requestMember('GET', $this->base() . '/search', 'matches', $query);
+        return $this->transport->requestMember('GET', $this->base() . '/search', 'matches', ['q' => $query] + ($options?->toQuery() ?? []));
     }
 
     /**
@@ -88,17 +86,22 @@ final class Entities
         return $this->transport->requestMember('GET', $path, 'history', $options?->toQuery() ?? []);
     }
 
-    /** A page of the entity's attribute history across every key. */
-    public function historyAll(string $entityType, string $name, ?PageOptions $options = null): Page
+    /**
+     * One page of every key's supersession chain for the entity, newest first
+     * (`GET /entities/{type}/{name}/history`): what changed about the subject,
+     * where {@see history()} is how one key changed.
+     */
+    public function changes(string $entityType, string $name, ?PageOptions $options = null): Page
     {
         return $this->transport->requestPage($this->path($entityType, $name) . '/history', 'history', $options?->toQuery() ?? []);
     }
 
     /**
-     * A page of the entity's graph neighbours: each relation edge with its
-     * label, direction (`outbound`), and the entity at the far end.
+     * A page of the entity's graph neighbours (`GET /entities/{type}/{name}/neighbourhood`):
+     * each relation edge with its label, direction (`outbound`), and the entity
+     * at the far end.
      */
-    public function neighbourhood(string $entityType, string $name, ?NeighbourhoodOptions $options = null): Page
+    public function neighbours(string $entityType, string $name, ?NeighbourhoodOptions $options = null): Page
     {
         return $this->transport->requestPage($this->path($entityType, $name) . '/neighbourhood', 'neighbours', $options?->toQuery() ?? []);
     }

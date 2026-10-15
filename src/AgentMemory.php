@@ -80,7 +80,7 @@ final class AgentMemory
     /** Document ingestion, retrieval, corpus search, and the keyword graph. */
     public readonly Documents $documents;
 
-    /** Entity records, history, graph neighbourhood, search, and rankings. */
+    /** Entity records, history, graph neighbours, search, and rankings. */
     public readonly Entities $entities;
 
     /** The stored fact families: attributes, relations, and actions. */

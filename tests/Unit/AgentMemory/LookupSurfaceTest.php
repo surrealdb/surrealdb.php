@@ -7,7 +7,8 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\AgentMemoryOptions;
 use SurrealDB\AgentMemory\EntityRef;
-use SurrealDB\AgentMemory\Enum\TopEntitiesOrder;
+use SurrealDB\AgentMemory\Enum\EntityRanking;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\ActionListOptions;
 use SurrealDB\AgentMemory\Options\EntityGetOptions;
 use SurrealDB\AgentMemory\Options\EntityHistoryOptions;
@@ -63,16 +64,40 @@ final class LookupSurfaceTest extends TestCase
         $this->assertSame(self::BASE . '/entities/search?q=alice&type=person&limit=3', $connection->url);
         $this->assertSame('alice', $matches[0]['entity']['name']);
 
-        $top = $entities->top(new TopEntitiesOptions(by: TopEntitiesOrder::RECENCY, limit: 2));
+        $top = $entities->top(new TopEntitiesOptions(by: EntityRanking::RECENCY, limit: 2));
         $this->assertSame(self::BASE . '/entities/top?by=recency&limit=2', $connection->url);
         $this->assertSame('bob', $top[0]['entity']['name']);
     }
 
-    public function testEntitySearchRejectsAnEmptyName(): void
+    public function testEntitySearchRejectsABlankQuery(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $connection = new RecordingHttpConnection(new Response(200, [], '{}'));
 
-        $this->client(new RecordingHttpConnection(new Response(200, [], '{}')))->entities->search('');
+        foreach (['empty' => '', 'whitespace-only' => '  '] as $name => $query) {
+            try {
+                $this->client($connection)->entities->search($query);
+                $this->fail("The {$name} search query should be rejected");
+            } catch (\InvalidArgumentException $e) {
+                $this->assertSame(InvalidArgumentException::class, $e::class, $name);
+                $this->assertSame('Entity search requires a non-empty query.', $e->getMessage(), $name);
+            }
+        }
+
+        $this->assertNull($connection->url);
+    }
+
+    public function testEntitySearchTakesItsQueryByName(): void
+    {
+        $connection = new RecordingHttpConnection(new Response(200, [], '{"matches":[]}'));
+
+        $this->client($connection)->entities->search(query: 'alice');
+
+        $this->assertSame(self::BASE . '/entities/search?q=alice', $connection->url);
+    }
+
+    public function testEnumsCarryTheServersValues(): void
+    {
+        $this->assertSame(['coverage', 'importance', 'recency'], array_column(EntityRanking::cases(), 'value'));
     }
 
     public function testEntityReadsCarryTheirTemporalAndPageParameters(): void
@@ -89,10 +114,10 @@ final class LookupSurfaceTest extends TestCase
             $connection->url,
         );
 
-        $entities->historyAll('person', 'alice', new PageOptions(limit: 10, cursor: 'h2'));
+        $entities->changes('person', 'alice', new PageOptions(limit: 10, cursor: 'h2'));
         $this->assertSame(self::BASE . '/entities/person/alice/history?limit=10&cursor=h2', $connection->url);
 
-        $entities->neighbourhood('person', 'alice', new NeighbourhoodOptions(minFacts: 2, limit: 8));
+        $entities->neighbours('person', 'alice', new NeighbourhoodOptions(minFacts: 2, limit: 8));
         $this->assertSame(self::BASE . '/entities/person/alice/neighbourhood?minFacts=2&limit=8', $connection->url);
     }
 

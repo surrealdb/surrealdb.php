@@ -233,7 +233,7 @@ $answer["resolution"]["kind"]; // "entity", "ambiguous", "topic", or "empty"
 $answer["facts"]["items"];     // the subject's attributes, ranked by importance
 ```
 
-The fact families are also collections of their own (`$memory->facts->attributes()`, `->relations()`, `->actions()`), next to `$memory->entities` (search, rankings, history, and graph neighbourhood) and `$memory->uncertainty` (open questions and their settlement).
+The fact families are also collections of their own (`$memory->facts->attributes()`, `->relations()`, `->actions()`), next to `$memory->entities` (search, rankings, `changes()` history, and `neighbours()`) and `$memory->uncertainty` (open questions and their settlement).
 
 ### Pagination
 
