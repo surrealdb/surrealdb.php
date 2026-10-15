@@ -509,6 +509,8 @@ final class ConnectionController
         }
 
         $this->requireEngine()->detach($session);
+        // Its live queries go with it: nothing can receive or kill them now.
+        $this->endLiveQueries($state->sessions[$session]);
         unset($state->sessions[$session]);
     }
 
