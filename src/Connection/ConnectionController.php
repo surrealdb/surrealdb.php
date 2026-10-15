@@ -720,6 +720,9 @@ final class ConnectionController
 
     private function scheduleRenewal(?string $session): void
     {
+        // Whatever the previous token was due for no longer applies.
+        unset($this->renewAt[$session ?? '']);
+
         $sessionState = $this->state?->session($session);
         $token = $sessionState?->auth->accessToken;
 
