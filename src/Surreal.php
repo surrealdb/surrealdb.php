@@ -204,6 +204,30 @@ final class Surreal implements QueryExecutor
 		return $this->query(new BoundQuery($surql, $bindings));
 	}
 
+	/**
+	 * Import SurrealQL through the HTTP `/import` endpoint (also when connected
+	 * over WebSocket). SurrealDB 3.x requires the script to begin with
+	 * `OPTION IMPORT;`, as {@see self::export()} output does.
+	 *
+	 * @throws \SurrealDB\SDK\Exceptions\ServerException for the first statement that failed
+	 * @throws \SurrealDB\SDK\Exceptions\HttpConnectionException when the server rejected the import
+	 */
+	public function import(string $surql): void
+	{
+		$this->connection->importSql($surql);
+	}
+
+	/**
+	 * Export the selected database as SurrealQL through the HTTP `/export`
+	 * endpoint.
+	 *
+	 * @param array<string,mixed> $options export options, e.g. `['tables' => ['person'], 'records' => false]`
+	 */
+	public function export(array $options = []): string
+	{
+		return $this->connection->exportSql($options);
+	}
+
 	// =================================================================== //
 	//  Fluent statement builders                                          //
 	// =================================================================== //
