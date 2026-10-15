@@ -578,11 +578,22 @@ final class ConnectionController
         $subscriptions = [];
         $replayed = [];
 
+        // Held weakly, so a subscription the application lets go of while an
+        // earlier one is replaying is not replayed too, and left running on
+        // the server once the batch drops it.
         foreach ($this->managedLive as $subscription => $_) {
-            $subscriptions[] = $subscription;
+            $subscriptions[] = \WeakReference::create($subscription);
         }
 
-        foreach ($subscriptions as $subscription) {
+        unset($subscription);
+
+        foreach ($subscriptions as $weak) {
+            $subscription = $weak->get();
+
+            if ($subscription === null) {
+                continue;
+            }
+
             // Its session is gone (or it was killed): end it, which also
             // releases an iteration waiting for the replay.
             if (!$subscription->isAlive()) {
@@ -594,7 +605,7 @@ final class ConnectionController
 
             try {
                 $subscription->replay();
-                $replayed[] = $subscription;
+                $replayed[] = $weak;
             } catch (\Throwable $error) {
                 // The new socket was lost too: the subscriptions stay
                 // tracked and waiting, for the next connection to replay.
@@ -615,8 +626,10 @@ final class ConnectionController
 
         // Only now, so a consumer that writes as soon as it resumes does not
         // miss a change a query still being replayed would have caught.
-        foreach ($replayed as $subscription) {
-            $subscription->resumeIteration();
+        unset($subscription);
+
+        foreach ($replayed as $weak) {
+            $weak->get()?->resumeIteration();
         }
 
         return true;
@@ -672,8 +685,20 @@ final class ConnectionController
             $subscription->suspend($this->context->scheduler);
         }
 
-        $this->events->publish('reconnecting');
-        $this->context->events->dispatch(new Reconnecting());
+        // A listener that throws must not stop the reconnect half way, which
+        // would leave the engine neither connected nor closed.
+        $announcements = [
+            fn () => $this->events->publish('reconnecting'),
+            fn () => $this->context->events->dispatch(new Reconnecting()),
+        ];
+
+        foreach ($announcements as $announce) {
+            try {
+                $announce();
+            } catch (\Throwable $error) {
+                $this->onError($error);
+            }
+        }
     }
 
     private function onError(\Throwable $error): void
