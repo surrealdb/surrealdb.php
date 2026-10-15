@@ -47,7 +47,8 @@ final class Table extends Value
     }
 
     /**
-     * Emit a bare identifier when safe, otherwise a backtick-quoted one.
+     * Emit a bare identifier when safe, otherwise a backtick-quoted one with
+     * backslashes and backticks escaped, so no input can close the quotes.
      */
     public static function escapeIdent(string $ident): string
     {
@@ -55,6 +56,6 @@ final class Table extends Value
             return $ident;
         }
 
-        return '`' . str_replace('`', '\\`', $ident) . '`';
+        return '`' . str_replace(['\\', '`'], ['\\\\', '\\`'], $ident) . '`';
     }
 }
