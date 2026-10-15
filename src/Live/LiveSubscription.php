@@ -23,10 +23,15 @@ abstract class LiveSubscription implements \IteratorAggregate
 
     protected bool $serverKilled = false;
 
+    /** No more notifications can arrive: the session was reset. */
+    protected bool $ended = false;
+
     public function __construct(
         protected readonly ConnectionController $connection,
         protected readonly ?string $session = null,
-    ) {}
+    ) {
+        $connection->registerLive($this, $session);
+    }
 
     /** The live query id the server assigned. */
     abstract public function id(): string;
@@ -36,11 +41,14 @@ abstract class LiveSubscription implements \IteratorAggregate
 
     /**
      * Whether notifications can still arrive: not killed by the client or the
-     * server, and the session still exists.
+     * server, the session not reset, and the session still exists.
      */
     public function isAlive(): bool
     {
-        return !$this->killed && !$this->killedByServer() && $this->connection->state()?->session($this->session) !== null;
+        return !$this->killed
+            && !$this->killedByServer()
+            && !$this->ended
+            && $this->connection->state()?->session($this->session) !== null;
     }
 
     /**
@@ -53,7 +61,7 @@ abstract class LiveSubscription implements \IteratorAggregate
             return;
         }
 
-        if (!$this->killedByServer()) {
+        if (!$this->killedByServer() && !$this->ended) {
             self::killOnServer($this->connection, $this->id(), $this->session);
         }
 
@@ -77,6 +85,16 @@ abstract class LiveSubscription implements \IteratorAggregate
 
             yield $message;
         }
+    }
+
+    /**
+     * @internal the session was reset, which stopped the query on the server
+     * without a `KILLED` notification on SurrealDB 2.x
+     */
+    public function sessionReset(): void
+    {
+        $this->ended = true;
+        $this->closeFeed();
     }
 
     /**
