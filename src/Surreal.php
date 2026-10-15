@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK;
 
 use Psr\Log\NullLogger;
+use SurrealDB\SDK\Api\SurrealApi;
 use SurrealDB\SDK\Auth\Credentials;
 use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Auth\Tokens;
@@ -25,6 +26,7 @@ use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Live\LiveMessage;
 use SurrealDB\SDK\Protocol\Feature;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Protocol\NamespaceDatabase;
 use SurrealDB\SDK\Query\AuthQuery;
 use SurrealDB\SDK\Query\BoundQuery;
@@ -331,6 +333,17 @@ final class Surreal implements QueryExecutor
 		array $args = [],
 	): RunQuery {
 		return new RunQuery($this, $name, $version, $args);
+	}
+
+	/**
+	 * Call user-defined API endpoints (`DEFINE API`), optionally under a path
+	 * prefix: `$db->api()->get('/users')->execute()`.
+	 */
+	public function api(string $prefix = ''): SurrealApi
+	{
+		$this->connection->assertFeature(Features::api());
+
+		return new SurrealApi($this, $prefix);
 	}
 
 	/**
