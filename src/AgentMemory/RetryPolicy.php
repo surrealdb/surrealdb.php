@@ -11,9 +11,10 @@ use function in_array;
  *
  * - `503` is retried for every request: the server sends it when it sheds load
  *   or a dependency was unreachable, and guarantees no work was done.
- * - Idempotent reads (`GET`/`HEAD`) and writes explicitly marked idempotent are
- *   also retried on connection errors (`status === null`) and on the other
- *   statuses that can heal on their own: `408`, `429`, `500`, `502`, `504`.
+ * - Idempotent reads (`GET`/`HEAD`) and requests marked idempotent (the
+ *   `/facts` writes and the read-only POSTs) are also retried on connection
+ *   errors (`status === null`) and on the other statuses that can heal on
+ *   their own: `408`, `429`, `500`, `502`, `504`.
  * - An idempotent write that meets `409` because the first attempt is still
  *   running under the same `Idempotency-Key` is retried, so it can collect the
  *   stored result once that attempt finishes.

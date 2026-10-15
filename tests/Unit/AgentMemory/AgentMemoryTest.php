@@ -30,9 +30,11 @@ use SurrealDB\AgentMemory\Options\AuditOptions;
 use SurrealDB\AgentMemory\Options\ChatOptions;
 use SurrealDB\AgentMemory\Options\ConsolidateOptions;
 use SurrealDB\AgentMemory\Options\ContextOptions;
+use SurrealDB\AgentMemory\Options\DocumentQueryOptions;
 use SurrealDB\AgentMemory\Options\ElaborateOptions;
 use SurrealDB\AgentMemory\Options\ForgetOptions;
 use SurrealDB\AgentMemory\Options\InspectOptions;
+use SurrealDB\AgentMemory\Options\KeywordSearchOptions;
 use SurrealDB\AgentMemory\Options\LookupOptions;
 use SurrealDB\AgentMemory\Options\RecallOptions;
 use SurrealDB\AgentMemory\Options\RememberManyOptions;
@@ -163,7 +165,8 @@ final class AgentMemoryTest extends TestCase
             . '"lens":[["team/eng","org/acme"]],"scopeView":"merged","includeDuplicates":true}',
             $connection->body,
         );
-        $this->assertArrayNotHasKey('Idempotency-Key', $connection->headers);
+        // A read-only POST, so it is retried like a read and carries a key, as the JS client sends.
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $connection->headers['Idempotency-Key']);
     }
 
     public function testLookupPostsTheQueryWithSubjectAndSections(): void
@@ -568,15 +571,42 @@ final class AgentMemoryTest extends TestCase
 
     public function testLoadSheddingIsRetriedForEveryRequest(): void
     {
-        // A 503 promises no work was done, so even a non-idempotent POST read is retried.
+        // A 503 promises no work was done, so even a non-idempotent write is retried.
         $connection = new SequenceHttpConnection([
             new HttpConnectionException('shed', 503, 'Unavailable', '{"message":"busy"}', ['Retry-After' => ['1']]),
-            new Response(200, [], '{"hits":[]}'),
+            new Response(200, [], '{"deleted":0}'),
         ]);
 
-        $this->assertSame(['hits' => []], $this->retryingClient($connection)->recall('anything'));
+        $this->assertSame(['deleted' => 0], $this->retryingClient($connection)->forget('anything'));
         $this->assertSame(['POST', 'POST'], array_column($connection->requests, 'method'));
         $this->assertSame($connection->requests[0]['body'], $connection->requests[1]['body']);
+        $this->assertArrayNotHasKey('Idempotency-Key', $connection->requests[0]['headers']);
+    }
+
+    public function testReadOnlyPostsAreRetriedWithAStableIdempotencyKey(): void
+    {
+        $calls = [
+            'recall' => static fn (AgentMemory $m) => $m->recall('role?'),
+            'lookup' => static fn (AgentMemory $m) => $m->lookup('alice'),
+            'context' => static fn (AgentMemory $m) => $m->context('role?'),
+            'documents->query' => static fn (AgentMemory $m) => $m->documents->query(new DocumentQueryOptions('rust')),
+            'documents->keywords->search' => static fn (AgentMemory $m) => $m->documents->keywords->search(new KeywordSearchOptions('rust')),
+            'session->context' => static fn (AgentMemory $m) => $m->sessions->attach('s1')->context('role?'),
+        ];
+
+        foreach ($calls as $name => $call) {
+            $connection = new SequenceHttpConnection([
+                new HttpConnectionException('boom', 500, 'Boom', ''),
+                new Response(200, [], '{}'),
+            ]);
+
+            $call($this->retryingClient($connection));
+
+            $this->assertSame(['POST', 'POST'], array_column($connection->requests, 'method'), $name);
+            $key = $connection->requests[0]['headers']['Idempotency-Key'] ?? '';
+            $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $key, $name);
+            $this->assertSame($key, $connection->requests[1]['headers']['Idempotency-Key'], $name);
+        }
     }
 
     public function testAnIdempotentWriteWaitsOutItsOwnInFlightAttempt(): void
@@ -628,16 +658,26 @@ final class AgentMemoryTest extends TestCase
 
     public function testNonIdempotentWritesAreNotRetried(): void
     {
-        $connection = new SequenceHttpConnection([
-            new HttpConnectionException('boom', 500, 'Boom', ''),
-        ]);
+        $calls = [
+            'forget' => static fn (AgentMemory $m) => $m->forget('anything'),
+            'chat' => static fn (AgentMemory $m) => $m->chat('hello'),
+            'reflect' => static fn (AgentMemory $m) => $m->reflect('anything'),
+        ];
 
-        $this->expectException(ServerException::class);
+        foreach ($calls as $name => $call) {
+            $connection = new SequenceHttpConnection([
+                new HttpConnectionException('boom', 500, 'Boom', ''),
+            ]);
 
-        try {
-            $this->retryingClient($connection)->forget('anything');
-        } finally {
-            $this->assertCount(1, $connection->requests);
+            try {
+                $call($this->retryingClient($connection));
+                $this->fail("{$name} should throw a ServerException");
+            } catch (ServerException $e) {
+                $this->assertSame(500, $e->status, $name);
+            }
+
+            $this->assertCount(1, $connection->requests, $name);
+            $this->assertArrayNotHasKey('Idempotency-Key', $connection->requests[0]['headers'], $name);
         }
     }
 

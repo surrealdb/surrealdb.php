@@ -80,7 +80,7 @@ final class Transport
      *
      * @param array<string,mixed>|null $query      query parameters; `null` values are skipped
      * @param array<mixed>|null        $body       JSON payload; an empty array encodes as `{}`
-     * @param bool                     $idempotent marks a write safe to retry (adds an `Idempotency-Key`)
+     * @param bool                     $idempotent marks the request safe to retry like a `GET` (adds an `Idempotency-Key`)
      *
      * @return array<int|string,mixed>|null decoded body, or `null` for empty/204 responses
      */

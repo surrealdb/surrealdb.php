@@ -269,8 +269,8 @@ Failed requests throw a subclass of `SurrealDB\AgentMemory\Exceptions\AgentMemor
 Retries follow what each status guarantees:
 
 - A 503 means the server shed load or could not reach a dependency, and did no work, so every request is retried on it.
-- `GET` reads and the idempotent writes (`remember`, `rememberMany`) are also retried on connection failures and on 408, 429, 500, 502, and 504. A 409 is retried when it says the first attempt of the same write is still in progress.
-- Other requests (such as `recall` and `chat`) are not retried on those, because the first attempt may already have done its work.
+- `GET` reads and the requests marked idempotent are also retried on connection failures and on 408, 429, 500, 502, and 504. Those are the fact writes `remember` and `rememberMany` (de-duplicated by `Idempotency-Key`), and the read-only POSTs `recall`, `lookup`, `context`, `documents->query`, `documents->keywords->search`, and `$session->context`. A 409 is retried when it says the first attempt of the same write is still in progress.
+- Other requests (such as `forget` and `chat`) are not retried on those, because the first attempt may already have done its work.
 
 The back-off honours the server's `Retry-After` (also exposed as `$e->retryAfter`). A chat stream raises a `StreamException` when the server sends an `error` event, or when the stream ends before its final frame.
 

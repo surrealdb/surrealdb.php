@@ -55,13 +55,15 @@ final class Session
     /**
      * Retrieves session-scoped LLM context text for a query.
      *
+     * Retried like a read, with an `Idempotency-Key`, as the JS client does.
+     *
      * @return array<int|string,mixed>
      */
     public function context(string $query): array
     {
         Guard::notBlank($query, 'Session::context() requires a non-empty query.');
 
-        return $this->transport->requestJson('POST', $this->base() . '/context', body: ['query' => $query]) ?? [];
+        return $this->transport->requestJson('POST', $this->base() . '/context', body: ['query' => $query], idempotent: true) ?? [];
     }
 
     private function base(): string

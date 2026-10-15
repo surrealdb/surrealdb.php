@@ -3,22 +3,26 @@
 namespace SurrealDB\AgentMemory;
 
 /**
- * Idempotency-key derivation for safe write retries.
+ * Derives the `Idempotency-Key` sent with every request the client marks
+ * idempotent. The key is the lowercase hex SHA-256 of the method, path, body,
+ * and a 30-second time bucket, joined by NUL bytes. This is the same
+ * derivation as `idempotencyKey()` in `@surrealdb/memory`, so both SDKs send
+ * the same key for the same request.
  *
- * Mirrors the reference clients: the key is a SHA-256 digest of the request
- * method, path, body, and a 30-second time bucket. Identical writes replayed
- * within the same bucket collapse to a single server-side effect, which makes
- * the `/facts` and `/facts/batch` writes safe to retry.
+ * The server honours it on the `/facts` and `/facts/batch` writes, where a
+ * replay within the bucket has a single effect. The read-only POSTs that are
+ * also marked idempotent (`recall`, `lookup`, `context`, document and keyword
+ * search, session context) send it too, and the server ignores it there.
  */
 final class IdempotencyKey
 {
     private const int BUCKET_SECONDS = 30;
 
     /**
-     * Computes the idempotency key for a write request.
+     * Computes the idempotency key for a request.
      *
      * @param string   $method     HTTP method (e.g. `POST`)
-     * @param string   $path       request path including the context prefix
+     * @param string   $path       request path, without the endpoint or query string
      * @param string   $body       serialised request body (empty string when none)
      * @param int|null $nowSeconds current epoch seconds (injectable for tests)
      *

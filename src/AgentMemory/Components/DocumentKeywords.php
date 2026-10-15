@@ -25,11 +25,13 @@ final class DocumentKeywords
     /**
      * Vector search over keyword embeddings.
      *
+     * Retried like a read, with an `Idempotency-Key`, as the JS client does.
+     *
      * @return array<int|string,mixed>
      */
     public function search(KeywordSearchOptions $options): array
     {
-        return $this->transport->requestJson('POST', $this->base() . '/search', body: $options->toPayload()) ?? [];
+        return $this->transport->requestJson('POST', $this->base() . '/search', body: $options->toPayload(), idempotent: true) ?? [];
     }
 
     /**

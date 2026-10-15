@@ -90,11 +90,13 @@ final class Documents
     /**
      * Hybrid / vector / BM25 / graph search over the document corpus.
      *
+     * Retried like a read, with an `Idempotency-Key`, as the JS client does.
+     *
      * @return array<int|string,mixed>
      */
     public function query(DocumentQueryOptions $options): array
     {
-        return $this->transport->requestJson('POST', $this->base() . '/query', body: $options->toPayload()) ?? [];
+        return $this->transport->requestJson('POST', $this->base() . '/query', body: $options->toPayload(), idempotent: true) ?? [];
     }
 
     /**

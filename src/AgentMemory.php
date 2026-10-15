@@ -205,6 +205,9 @@ final class AgentMemory
     /**
      * Semantic recall over memory for this context (`POST /query`).
      *
+     * Retried like a read, with an `Idempotency-Key`, as the JS client does; a
+     * retry after a lost response can record one more retrieval trace.
+     *
      * @return array<int|string,mixed>
      */
     public function recall(string $query, ?RecallOptions $options = null): array
@@ -213,7 +216,7 @@ final class AgentMemory
 
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
-        return $this->transport->requestJson('POST', $this->base() . '/query', body: $payload) ?? [];
+        return $this->transport->requestJson('POST', $this->base() . '/query', body: $payload, idempotent: true) ?? [];
     }
 
     /**
@@ -223,6 +226,9 @@ final class AgentMemory
      * resolved to: `entity`, `ambiguous` (see `candidates`), `topic`, or
      * `empty` (see `nearest`). Sections are bounded and flag `truncated`; walk
      * {@see $facts} or {@see $uncertainty} for the rest.
+     *
+     * Retried like a read, with an `Idempotency-Key`, as the JS client does; a
+     * retry after a lost response can record one more retrieval trace.
      *
      * @return array<int|string,mixed>
      */
@@ -234,7 +240,7 @@ final class AgentMemory
 
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
-        return $this->transport->requestJson('POST', $this->base() . '/lookup', body: $payload) ?? [];
+        return $this->transport->requestJson('POST', $this->base() . '/lookup', body: $payload, idempotent: true) ?? [];
     }
 
     /**
@@ -294,6 +300,9 @@ final class AgentMemory
      * Retrieves LLM-facing context text for a query without a session
      * (`POST /context`).
      *
+     * Retried like a read, with an `Idempotency-Key`, as the JS client does; a
+     * retry after a lost response can record one more retrieval trace.
+     *
      * @return array<int|string,mixed>
      */
     public function context(string $query, ?ContextOptions $options = null): array
@@ -302,7 +311,7 @@ final class AgentMemory
 
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
-        return $this->transport->requestJson('POST', $this->base() . '/context', body: $payload) ?? [];
+        return $this->transport->requestJson('POST', $this->base() . '/context', body: $payload, idempotent: true) ?? [];
     }
 
     /**
