@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Api\SurrealApi;
 use SurrealDB\SDK\Contracts\QueryExecutor;
 use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\SDK\Types\None;
 
 final class ApiQueryTest extends TestCase
 {
@@ -37,6 +38,23 @@ final class ApiQueryTest extends TestCase
         $request = array_values($query->bindings)[1];
 
         $this->assertSame(['method' => 'get'], $request);
+    }
+
+    public function testExplicitNullBodyIsSentAsNull(): void
+    {
+        $api = new SurrealApi($this->executor());
+
+        $this->assertSame(['method' => 'post', 'body' => null], array_values($api->post('/x', null)->compile()->bindings)[1]);
+        $this->assertSame(['method' => 'put', 'body' => null], array_values($api->invoke('/x', 'put', body: null)->compile()->bindings)[1]);
+    }
+
+    public function testOmittedOrNoneBodyIsLeftOut(): void
+    {
+        $api = new SurrealApi($this->executor());
+
+        $this->assertSame(['method' => 'post'], array_values($api->post('/x')->compile()->bindings)[1]);
+        $this->assertSame(['method' => 'post'], array_values($api->post('/x', None::instance())->compile()->bindings)[1]);
+        $this->assertSame(['method' => 'put', 'headers' => ['a' => '1']], array_values($api->invoke('/x', 'put', headers: ['a' => '1'])->compile()->bindings)[1]);
     }
 
     public function testRemovingADefaultHeader(): void

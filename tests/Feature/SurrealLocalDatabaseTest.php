@@ -155,6 +155,7 @@ DEFINE API "/v1/hello/:name" FOR get, post THEN {
     };
 };
 DEFINE API "/v1/missing" FOR get THEN { RETURN { status: 404, body: "nope" } };
+DEFINE API "/v1/body" FOR post THEN { RETURN { status: 200, body: { none: $request.body IS NONE, null: $request.body IS NULL } } };
 SURQL);
 
             $api = $db->api('/v1');
@@ -171,6 +172,9 @@ SURQL);
             );
 
             self::assertSame('get', $api->get('/hello/jaime')->value()->execute()['method'] ?? null);
+
+            self::assertSame(['none' => true, 'null' => false], $api->post('body')->value()->execute());
+            self::assertSame(['none' => false, 'null' => true], $api->post('body', null)->value()->execute());
 
             $missing = $api->get('missing')->execute();
             self::assertInstanceOf(ApiResponse::class, $missing);
