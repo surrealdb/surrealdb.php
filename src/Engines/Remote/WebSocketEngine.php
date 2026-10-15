@@ -10,6 +10,7 @@ use SurrealDB\SDK\Events\LiveMessageReceived;
 use SurrealDB\SDK\Exceptions\CallTerminatedException;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Live\LiveAction;
+use SurrealDB\SDK\Live\LiveFeed;
 use SurrealDB\SDK\Live\LiveMessage;
 use SurrealDB\SDK\Protocol\FeatureSet;
 use SurrealDB\SDK\Protocol\Features;
@@ -19,6 +20,7 @@ use SurrealDB\SDK\Transport\StreamWebSocketClient;
 use SurrealDB\SDK\Transport\WebSocketTransport;
 use function is_array;
 use function is_string;
+use function count;
 
 /**
  * An engine that maintains a persistent WebSocket connection.
@@ -43,10 +45,25 @@ final class WebSocketEngine extends AbstractRpcEngine
 
     private int $liveSubscriberId = 0;
 
+    /** Notifications kept for live queries nobody has subscribed to yet. */
+    private const int MAX_UNCLAIMED_LIVE = 1000;
+
+    /**
+     * Keyed by query id, then by arrival sequence (global FIFO order).
+     *
+     * @var array<string,array<int,LiveMessage<mixed>>>
+     */
+    private array $unclaimedLive = [];
+
+    private int $unclaimedCount = 0;
+
+    private int $unclaimedSequence = 0;
+
     public function features(): FeatureSet
     {
         return new FeatureSet(
             Features::liveQueries(),
+            Features::liveQueryBindings(),
             Features::refreshTokens(),
             Features::sessions(),
             Features::transactions(),
@@ -90,49 +107,28 @@ final class WebSocketEngine extends AbstractRpcEngine
         // Calls are dispatched immediately once active; nothing to flush.
     }
 
-    public function liveQuery(string $id): iterable
+    /**
+     * Start receiving the notifications for a live query. The feed is
+     * registered immediately, and any notifications that arrived for this id
+     * before anyone subscribed are replayed into it.
+     */
+    public function liveQuery(string $id): LiveFeed
     {
-        /** @var list<LiveMessage<mixed>> $queue */
-        $queue = [];
-        /** @var Deferred<bool>|null $waiter */
-        $waiter = null;
+        $feed = new LiveFeed(
+            $id,
+            $this->context->scheduler,
+            fn (): bool => $this->readAndDispatchOnce(),
+            fn (): bool => $this->active && !$this->terminated,
+        );
 
-        $unsubscribe = $this->subscribeLive($id, function (LiveMessage $message) use (&$queue, &$waiter): void {
-            $queue[] = $message;
+        // Hold the feed weakly so a subscription dropped without kill() is
+        // destroyed, which closes the feed and unsubscribes it.
+        $weak = \WeakReference::create($feed);
+        $feed->onClose($this->subscribeLive($id, static function (LiveMessage $message) use ($weak): void {
+            $weak->get()?->push($message);
+        }));
 
-            if ($waiter instanceof Deferred && $waiter->isPending()) {
-                $pending = $waiter;
-                $waiter = null;
-                $pending->resolve(true);
-            }
-        });
-
-        try {
-            while (!$this->terminated) {
-                while ($queue !== []) {
-                    yield array_shift($queue);
-                }
-
-                if (!$this->active) {
-                    break;
-                }
-
-                /** @var Deferred<bool> $waiter */
-                $waiter = $this->context->scheduler->defer(fn () => $this->readAndDispatchOnce());
-
-                try {
-                    $waiter->await();
-                } catch (\Throwable) {
-                    break;
-                }
-            }
-
-            while ($queue !== []) {
-                yield array_shift($queue);
-            }
-        } finally {
-            $unsubscribe();
-        }
+        return $feed;
     }
 
     /**
@@ -284,8 +280,13 @@ final class WebSocketEngine extends AbstractRpcEngine
 
             if ($message !== null) {
                 $this->context->events->dispatch(new LiveMessageReceived($message));
+                $listeners = $this->liveSubscribers[$message->queryId] ?? [];
 
-                foreach ($this->liveSubscribers[$message->queryId] ?? [] as $listener) {
+                if ($listeners === []) {
+                    $this->holdUnclaimed($message);
+                }
+
+                foreach ($listeners as $listener) {
                     $listener($message);
                 }
             }
@@ -320,6 +321,14 @@ final class WebSocketEngine extends AbstractRpcEngine
         $subscriberId = $this->liveSubscriberId++;
         $this->liveSubscribers[$id][$subscriberId] = $listener;
 
+        $held = $this->unclaimedLive[$id] ?? [];
+        unset($this->unclaimedLive[$id]);
+        $this->unclaimedCount -= count($held);
+
+        foreach ($held as $message) {
+            $listener($message);
+        }
+
         return function () use ($id, $subscriberId): void {
             unset($this->liveSubscribers[$id][$subscriberId]);
 
@@ -327,6 +336,46 @@ final class WebSocketEngine extends AbstractRpcEngine
                 unset($this->liveSubscribers[$id]);
             }
         };
+    }
+
+    /**
+     * Keep a notification nobody has subscribed to yet: a LIVE query's first
+     * notifications can arrive before its caller starts listening.
+     *
+     * @param LiveMessage<mixed> $message
+     */
+    private function holdUnclaimed(LiveMessage $message): void
+    {
+        $this->unclaimedLive[$message->queryId][$this->unclaimedSequence++] = $message;
+        $this->unclaimedCount++;
+
+        // Bound the buffer: drop the globally oldest message (live queries
+        // nobody subscribes to, e.g. ones another client attached to this
+        // session).
+        while ($this->unclaimedCount > self::MAX_UNCLAIMED_LIVE) {
+            $oldest = null;
+            $oldestSequence = PHP_INT_MAX;
+
+            foreach ($this->unclaimedLive as $queryId => $held) {
+                $sequence = array_key_first($held);
+
+                if ($sequence !== null && $sequence < $oldestSequence) {
+                    $oldest = $queryId;
+                    $oldestSequence = $sequence;
+                }
+            }
+
+            if ($oldest === null) {
+                break;
+            }
+
+            unset($this->unclaimedLive[$oldest][$oldestSequence]);
+            $this->unclaimedCount--;
+
+            if ($this->unclaimedLive[$oldest] === []) {
+                unset($this->unclaimedLive[$oldest]);
+            }
+        }
     }
 
     private function failAllCalls(\Throwable $error): void
