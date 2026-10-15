@@ -27,8 +27,14 @@ final class StreamWebSocketClient implements WebSocketClientInterface
 
     private bool $connected = false;
 
+    /**
+     * @param float $pollInterval how long each blocking read waits before it
+     *                            checks the socket again; reaching it does not
+     *                            close an idle connection
+     */
     public function __construct(
         private readonly float $connectTimeout = 10.0,
+        private readonly float $pollInterval = 60.0,
     ) {}
 
     public function connect(string $url, array $subprotocols = [], array $headers = []): void
@@ -104,15 +110,14 @@ final class StreamWebSocketClient implements WebSocketClientInterface
             return null;
         }
 
-        if ($timeout !== null && is_resource($this->socket)) {
-            $seconds = (int) floor($timeout);
-            stream_set_timeout($this->socket, $seconds, (int) (($timeout - $seconds) * 1_000_000));
-        }
-
         $message = '';
+        $started = false;
 
         while (true) {
-            $frame = $this->readFrame();
+            // Only the first byte of a message may time out: once a data frame
+            // has started (even an empty first fragment), the rest of the
+            // message is read to completion.
+            $frame = $this->readFrame($started ? null : $timeout);
 
             if ($frame === null) {
                 return null;
@@ -133,6 +138,7 @@ final class StreamWebSocketClient implements WebSocketClientInterface
                 case 0x0: // continuation
                 case 0x1: // text
                 case 0x2: // binary
+                    $started = true;
                     $message .= $data;
 
                     break;
@@ -199,11 +205,14 @@ final class StreamWebSocketClient implements WebSocketClientInterface
     }
 
     /**
+     * @param float|null $timeout seconds to wait for the frame to start, or null
+     *                            to wait indefinitely
+     *
      * @return array{0:bool,1:int,2:string}|null
      */
-    private function readFrame(): ?array
+    private function readFrame(?float $timeout = null): ?array
     {
-        $header = $this->readRaw(2);
+        $header = $this->readRaw(2, $timeout);
 
         if ($header === null) {
             return null;
@@ -296,11 +305,20 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         }
     }
 
-    private function readRaw(int $length): ?string
+    /**
+     * Read exactly `$length` bytes. A socket read timeout is not end of stream:
+     * without a `$timeout` the read keeps waiting (an idle connection, e.g. one
+     * waiting for live query notifications, is still open), and with one it
+     * gives up only if no byte has arrived yet.
+     */
+    private function readRaw(int $length, ?float $timeout = null): ?string
     {
         if (!is_resource($this->socket)) {
             return null;
         }
+
+        $deadline = $timeout !== null ? microtime(true) + $timeout : null;
+        $this->setReadTimeout($timeout ?? $this->pollInterval);
 
         $data = '';
 
@@ -308,10 +326,23 @@ final class StreamWebSocketClient implements WebSocketClientInterface
             $chunk = @fread($this->socket, $length - strlen($data));
 
             if ($chunk === false || $chunk === '') {
+                if (!is_resource($this->socket) || feof($this->socket)) {
+                    $this->connected = false;
+
+                    return null;
+                }
+
                 $meta = stream_get_meta_data($this->socket);
 
-                if (!empty($meta['timed_out']) || feof($this->socket)) {
-                    return null;
+                if (!empty($meta['timed_out'])) {
+                    if ($data === '' && $deadline !== null && microtime(true) >= $deadline) {
+                        return null;
+                    }
+
+                    if ($data !== '' && $deadline !== null) {
+                        $deadline = null;
+                        $this->setReadTimeout($this->pollInterval);
+                    }
                 }
 
                 continue;
@@ -321,5 +352,15 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         }
 
         return $data;
+    }
+
+    private function setReadTimeout(float $seconds): void
+    {
+        if (!is_resource($this->socket)) {
+            return;
+        }
+
+        $whole = (int) floor($seconds);
+        stream_set_timeout($this->socket, $whole, (int) (($seconds - $whole) * 1_000_000));
     }
 }

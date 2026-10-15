@@ -40,6 +40,8 @@ use SurrealDB\Scheduler\SyncScheduler;
 use SurrealDB\Telemetry\NullMeter;
 use SurrealDB\Telemetry\NullTracer;
 use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
 use SurrealDB\Types\Table;
 
 /**
@@ -209,61 +211,63 @@ final class Surreal implements QueryExecutor
 	// =================================================================== //
 
 	/**
-	 * Begin a `SELECT` against a table, record, or raw target.
+	 * Begin a `SELECT` against a table or record. A string is a table name.
      *
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
      *
      * @return SelectQuery<mixed>
 	 */
-	public function select(RecordId|Table|string $what): SelectQuery
+	public function select(RecordId|RecordIdRange|StringRecordId|Table|string $what): SelectQuery
 	{
 		return new SelectQuery($this, $what);
 	}
 
 	/**
-	 * Begin a `CREATE` for a table or record.
+	 * Begin a `CREATE` for a table or record. A string is a table name. A
+	 * record range is not a valid `CREATE` target.
      *
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|StringRecordId|Table<string>|string $what
      *
      * @return CreateQuery<mixed>
 	 */
-	public function create(RecordId|Table|string $what): CreateQuery
+	public function create(RecordId|StringRecordId|Table|string $what): CreateQuery
 	{
 		return new CreateQuery($this, $what);
 	}
 
 	/**
-	 * Begin an `UPDATE` for a table or record.
+	 * Begin an `UPDATE` for a table or record. A string is a table name.
      *
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
      *
      * @return UpdateQuery<mixed>
 	 */
-	public function update(RecordId|Table|string $what): UpdateQuery
+	public function update(RecordId|RecordIdRange|StringRecordId|Table|string $what): UpdateQuery
 	{
 		return new UpdateQuery($this, $what);
 	}
 
 	/**
-	 * Begin an `UPSERT` for a table or record.
+	 * Begin an `UPSERT` for a table or record. A string is a table name.
      *
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
      *
      * @return UpsertQuery<mixed>
 	 */
-	public function upsert(RecordId|Table|string $what): UpsertQuery
+	public function upsert(RecordId|RecordIdRange|StringRecordId|Table|string $what): UpsertQuery
 	{
 		return new UpsertQuery($this, $what);
 	}
 
 	/**
-	 * Begin a `DELETE` for a table or record (defaults to `RETURN BEFORE`).
+	 * Begin a `DELETE` for a table or record (defaults to `RETURN BEFORE`). A
+	 * string is a table name.
      *
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
      *
      * @return DeleteQuery<mixed>
 	 */
-	public function delete(RecordId|Table|string $what): DeleteQuery
+	public function delete(RecordId|RecordIdRange|StringRecordId|Table|string $what): DeleteQuery
 	{
 		return new DeleteQuery($this, $what);
 	}
@@ -370,7 +374,11 @@ final class Surreal implements QueryExecutor
 			events: $options->events ?? new EventDispatcher(),
 			logger: $options->logger ?? new NullLogger(),
 			scheduler: $options->scheduler ?? new SyncScheduler(),
-			uniqueId: static fn(): string => (string) ++$counter,
+			// By reference: an arrow function would capture a copy of the
+			// counter, and every request would get id 1.
+			uniqueId: static function () use (&$counter): string {
+				return (string) ++$counter;
+			},
 			tracer: $options->tracer ?? new NullTracer(),
 			meter: $options->meter ?? new NullMeter(),
 		);

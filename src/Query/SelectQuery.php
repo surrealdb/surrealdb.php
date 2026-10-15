@@ -7,6 +7,8 @@ use SurrealDB\Query\Concerns\HasCondition;
 use SurrealDB\Query\Concerns\HasTimeout;
 use SurrealDB\Query\Concerns\HasVersion;
 use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
 use SurrealDB\Types\Table;
 
 /**
@@ -30,11 +32,11 @@ final class SelectQuery extends QueryBuilder
     public private(set) array $fetch = [];
 
     /**
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
      */
     public function __construct(
         ?QueryExecutor $executor,
-        public private(set) RecordId|Table|string $what,
+        public private(set) RecordId|RecordIdRange|StringRecordId|Table|string $what,
     ) {
         parent::__construct($executor);
     }

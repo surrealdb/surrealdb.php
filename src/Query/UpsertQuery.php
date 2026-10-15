@@ -9,6 +9,8 @@ use SurrealDB\Query\Concerns\HasDataMutation;
 use SurrealDB\Query\Concerns\HasOutput;
 use SurrealDB\Query\Concerns\HasTimeout;
 use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
 use SurrealDB\Types\Table;
 
 /**
@@ -25,11 +27,11 @@ final class UpsertQuery extends QueryBuilder
     use HasTimeout;
 
     /**
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
      */
     public function __construct(
         ?QueryExecutor $executor,
-        public private(set) RecordId|Table|string $what,
+        public private(set) RecordId|RecordIdRange|StringRecordId|Table|string $what,
     ) {
         parent::__construct($executor);
     }
