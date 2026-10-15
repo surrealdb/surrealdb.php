@@ -96,6 +96,55 @@ final class SessionTransactionTest extends TestCase
         }
     }
 
+    public function testAForkKeepsASourceTokenCloseToExpiry(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $user = 'brief_' . bin2hex(random_bytes(4));
+            $db->run("DEFINE USER {$user} ON ROOT PASSWORD 'secret' ROLES OWNER DURATION FOR TOKEN 30s, FOR SESSION 1h");
+            $db->signin(new RootAuth($user, 'secret'));
+            $token = $db->accessToken();
+
+            $fork = $db->forkSession();
+
+            // Too close to expiry for a reconnect to reuse, but still valid.
+            self::assertSame($token, $fork->accessToken());
+            self::assertSame(['ok'], $fork->run("RETURN 'ok'"));
+            self::assertNotEmpty($fork->run('INFO FOR ROOT'));
+
+            $fork->closeSession();
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testASessionWhoseRestoreFailsIsNotLeft(): void
+    {
+        $db = $this->connect(authentication: static function (?string $session): RootAuth {
+            if ($session !== null) {
+                throw new \RuntimeException('No credentials for new sessions.');
+            }
+
+            return new RootAuth('root', 'root');
+        });
+
+        try {
+            $before = $db->sessions();
+
+            try {
+                $db->newSession();
+                self::fail('newSession() should fail when its authentication does');
+            } catch (\RuntimeException $error) {
+                self::assertSame('No credentials for new sessions.', $error->getMessage());
+            }
+
+            self::assertSame($before, $db->sessions());
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testTheDefaultSessionCannotBeClosed(): void
     {
         $db = $this->connect();
@@ -195,14 +244,17 @@ final class SessionTransactionTest extends TestCase
         }
     }
 
-    private function connect(?DriverOptions $options = null): Surreal
+    /**
+     * @param (\Closure(?string): RootAuth)|null $authentication
+     */
+    private function connect(?DriverOptions $options = null, ?\Closure $authentication = null): Surreal
     {
         $db = new Surreal($options);
         $this->namespace = 'sessions_' . bin2hex(random_bytes(4));
 
         try {
             $db->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc', new ConnectOptions(
-                authentication: new RootAuth('root', 'root'),
+                authentication: $authentication ?? new RootAuth('root', 'root'),
             ));
             $db->run("DEFINE NAMESPACE {$this->namespace}; USE NS {$this->namespace}; DEFINE DATABASE db; DEFINE DATABASE other;");
             $db->use($this->namespace, 'db');

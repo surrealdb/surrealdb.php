@@ -6,11 +6,15 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Query\CreateQuery;
 use SurrealDB\SDK\Query\DeleteQuery;
 use SurrealDB\SDK\Query\SelectQuery;
+use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\BoundIncluded;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\RecordIdRange;
 use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
+use ReflectionMethod;
+use ReflectionNamedType;
+use ReflectionUnionType;
 
 final class TargetEscapingTest extends TestCase
 {
@@ -56,5 +60,21 @@ final class TargetEscapingTest extends TestCase
         $range = new RecordIdRange('person', new BoundIncluded(1), new BoundIncluded(10));
 
         $this->assertSame('SELECT * FROM person:1..=10', new SelectQuery(null, $range)->compile()->query);
+    }
+
+    public function testRecordIdRangeIsNotACreateTarget(): void
+    {
+        // `CREATE person:1..=10` is not valid SurrealQL, so ranges are not CREATE targets.
+        $targets = [
+            new ReflectionMethod(Surreal::class, 'create')->getParameters()[0],
+            new ReflectionMethod(CreateQuery::class, '__construct')->getParameters()[1],
+        ];
+
+        foreach ($targets as $target) {
+            $type = $target->getType();
+            $this->assertInstanceOf(ReflectionUnionType::class, $type);
+            $accepted = array_map(static fn (ReflectionNamedType $t): string => $t->getName(), $type->getTypes());
+            $this->assertNotContains(RecordIdRange::class, $accepted);
+        }
     }
 }
