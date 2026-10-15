@@ -98,14 +98,14 @@ abstract class QueryBuilder
                 continue;
             }
 
-            $result = $chunk->result;
+            $result = $this->result($this->output($chunk->result));
 
             if (is_array($result) && array_is_list($result)) {
                 foreach ($result as $value) {
-                    yield new ValueFrame($chunk->index, $this->output($value), false);
+                    yield $this->valueFrame($chunk->index, $value, false);
                 }
             } else {
-                yield new ValueFrame($chunk->index, $this->output($result), true);
+                yield $this->valueFrame($chunk->index, $result, true);
             }
 
             yield new DoneFrame($chunk->index, $chunk->time, $chunk->type);
@@ -125,7 +125,7 @@ abstract class QueryBuilder
         foreach ($this->streamingExecutor()->stream($this->build()) as $chunk) {
             $responses[] = $chunk->error !== null
                 ? new QueryResponse(false, error: $chunk->error, time: $chunk->time)
-                : new QueryResponse(true, $this->output($chunk->result), time: $chunk->time, type: $chunk->type);
+                : new QueryResponse(true, $this->result($this->output($chunk->result)), time: $chunk->time, type: $chunk->type);
         }
 
         return $responses;
@@ -158,6 +158,28 @@ abstract class QueryBuilder
     /**
      * @return TResult
      */
+    /**
+     * Turn a statement's result into what this builder returns. A builder
+     * whose {@see self::execute()} reshapes or checks the result overrides
+     * this, so {@see self::stream()} and {@see self::responses()} do the same.
+     *
+     * @return TResult
+     */
+    protected function result(mixed $result): mixed
+    {
+        /** @var TResult */
+        return $result;
+    }
+
+    /**
+     * @return ValueFrame<TResult>
+     */
+    private function valueFrame(int $query, mixed $value, bool $single): ValueFrame
+    {
+        /** @var TResult $value */
+        return new ValueFrame($query, $value, $single);
+    }
+
     private function output(mixed $value): mixed
     {
         /** @var TResult */
