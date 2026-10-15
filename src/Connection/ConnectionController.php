@@ -102,10 +102,10 @@ final class ConnectionController
 
     /**
      * Renewals in flight, keyed like {@see self::$renewAt}: the task doing
-     * each, and a deferred for each other task waiting on it (a deferred
-     * resumes only one waiter).
+     * each, a guard telling it its entry is still its own, and a deferred
+     * for each other task waiting on it (a deferred resumes only one waiter).
      *
-     * @var array<string,array{task: object|int|null, waiters: list<Deferred<mixed>>}>
+     * @var array<string,array{task: object|int|null, guard: object, waiters: list<Deferred<mixed>>}>
      */
     private array $renewing = [];
 
@@ -655,6 +655,18 @@ final class ConnectionController
         $this->engine = null;
         $this->renewAt = [];
 
+        // Renewals still running belong to the closed connection: release
+        // the tasks waiting on them, and leave the next connection to renew
+        // for itself.
+        $renewing = $this->renewing;
+        $this->renewing = [];
+
+        foreach ($renewing as $renewal) {
+            foreach ($renewal['waiters'] as $waiter) {
+                $waiter->resolve(true);
+            }
+        }
+
         $live = $this->managedLive;
         $this->managedLive = new \WeakMap();
 
@@ -843,7 +855,8 @@ final class ConnectionController
             return;
         }
 
-        $this->renewing[$key] = ['task' => self::currentTask(), 'waiters' => []];
+        $guard = new \stdClass();
+        $this->renewing[$key] = ['task' => self::currentTask(), 'guard' => $guard, 'waiters' => []];
 
         try {
             // A new token schedules the next deadline, and signing out clears
@@ -879,11 +892,15 @@ final class ConnectionController
 
             $this->onError(new AuthenticationException('Token renewal failed', $error));
         } finally {
-            $waiters = $this->renewing[$key]['waiters'] ?? [];
-            unset($this->renewing[$key]);
+            // Unless the connection was closed meanwhile, which released the
+            // waiters and may have let a new connection start its own.
+            if (($this->renewing[$key]['guard'] ?? null) === $guard) {
+                $waiters = $this->renewing[$key]['waiters'];
+                unset($this->renewing[$key]);
 
-            foreach ($waiters as $waiter) {
-                $waiter->resolve(true);
+                foreach ($waiters as $waiter) {
+                    $waiter->resolve(true);
+                }
             }
         }
     }
