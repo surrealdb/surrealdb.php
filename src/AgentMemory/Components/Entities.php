@@ -5,7 +5,6 @@ namespace SurrealDB\AgentMemory\Components;
 use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\EntityGetOptions;
-use SurrealDB\AgentMemory\Options\EntityHistoryOptions;
 use SurrealDB\AgentMemory\Options\EntityListOptions;
 use SurrealDB\AgentMemory\Options\EntitySearchOptions;
 use SurrealDB\AgentMemory\Options\NeighbourhoodOptions;
@@ -78,12 +77,12 @@ final class Entities
      *
      * @return list<array<string,mixed>>
      */
-    public function history(string $entityType, string $name, string $key, ?EntityHistoryOptions $options = null): array
+    public function history(string $entityType, string $name, string $key): array
     {
         $path = $this->path($entityType, $name) . '/history/' . Paths::encodeSegment($key);
 
         /** @var list<array<string,mixed>> */
-        return $this->transport->requestMember('GET', $path, 'history', $options?->toQuery() ?? []);
+        return $this->transport->requestMember('GET', $path, 'history');
     }
 
     /**

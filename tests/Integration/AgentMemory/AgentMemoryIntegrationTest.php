@@ -35,7 +35,6 @@ use SurrealDB\AgentMemory\Options\ScopeRegisterOptions;
 use SurrealDB\AgentMemory\Options\SessionCreateOptions;
 use SurrealDB\AgentMemory\Options\StateOptions;
 use SurrealDB\AgentMemory\Options\TopEntitiesOptions;
-use SurrealDB\AgentMemory\Options\TraceStatsOptions;
 use SurrealDB\AgentMemory\Options\UncertaintyListOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Triple;
@@ -323,7 +322,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $traces = $memory->traces->list(new PageOptions(limit: 1));
         $this->assertCount(1, $traces);
         $this->assertSame($traces->items[0]['id'], $memory->traces->get($traces->items[0]['id'])['id']);
-        $this->assertSame(1, $memory->traces->stats(new TraceStatsOptions(windowHours: 1))['windowHours']);
+        $this->assertIsInt($memory->traces->stats()['windowHours']);
     }
 
     public function testDocumentsUploadReadListAndDelete(): void

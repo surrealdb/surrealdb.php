@@ -27,7 +27,6 @@ use SurrealDB\AgentMemory\Options\ScopeForgetOptions;
 use SurrealDB\AgentMemory\Options\ScopeListOptions;
 use SurrealDB\AgentMemory\Options\ScopeRegisterOptions;
 use SurrealDB\AgentMemory\Options\SessionCreateOptions;
-use SurrealDB\AgentMemory\Options\TraceStatsOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\Tests\Fakes\RecordingHttpConnection;
 
@@ -293,9 +292,6 @@ final class AgentMemoryComponentsTest extends TestCase
 
         $traces->stats();
         $this->assertSame(self::BASE . '/traces/stats', $connection->url);
-
-        $traces->stats(new TraceStatsOptions(windowHours: 6));
-        $this->assertSame(self::BASE . '/traces/stats?windowHours=6', $connection->url);
     }
 
     public function testPrincipalsGrantAndRevokeSendNamespacedVerbs(): void

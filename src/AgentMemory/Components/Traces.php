@@ -3,7 +3,6 @@
 namespace SurrealDB\AgentMemory\Components;
 
 use SurrealDB\AgentMemory\Options\PageOptions;
-use SurrealDB\AgentMemory\Options\TraceStatsOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
 use SurrealDB\AgentMemory\Transport;
@@ -33,13 +32,14 @@ final class Traces
     }
 
     /**
-     * Aggregate trace statistics over a trailing window (24 hours by default).
+     * Aggregate trace statistics over the server's trailing window; the
+     * response's `windowHours` says which.
      *
      * @return array<int|string,mixed>
      */
-    public function stats(?TraceStatsOptions $options = null): array
+    public function stats(): array
     {
-        return $this->transport->requestJson('GET', $this->base() . '/stats', $options?->toQuery() ?? []) ?? [];
+        return $this->transport->requestJson('GET', $this->base() . '/stats') ?? [];
     }
 
     private function base(): string

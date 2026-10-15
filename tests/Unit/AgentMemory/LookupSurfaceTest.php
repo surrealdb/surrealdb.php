@@ -12,7 +12,6 @@ use SurrealDB\AgentMemory\Enum\LookupSection;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\ActionListOptions;
 use SurrealDB\AgentMemory\Options\EntityGetOptions;
-use SurrealDB\AgentMemory\Options\EntityHistoryOptions;
 use SurrealDB\AgentMemory\Options\EntitySearchOptions;
 use SurrealDB\AgentMemory\Options\NeighbourhoodOptions;
 use SurrealDB\AgentMemory\Options\PageOptions;
@@ -113,11 +112,8 @@ final class LookupSurfaceTest extends TestCase
         $entities->get('person', 'alice', new EntityGetOptions(limit: 20, asOf: '2026-05-01T00:00:00Z'));
         $this->assertSame(self::BASE . '/entities/person/alice?limit=20&asOf=2026-05-01T00%3A00%3A00Z', $connection->url);
 
-        $entities->history('person', 'alice', 'role', new EntityHistoryOptions(validFrom: '2025-01-01', validUntil: '2026-01-01'));
-        $this->assertSame(
-            self::BASE . '/entities/person/alice/history/role?validFrom=2025-01-01&validUntil=2026-01-01',
-            $connection->url,
-        );
+        $entities->history('person', 'alice', 'role');
+        $this->assertSame(self::BASE . '/entities/person/alice/history/role', $connection->url);
 
         $entities->changes('person', 'alice', new PageOptions(limit: 10, cursor: 'h2'));
         $this->assertSame(self::BASE . '/entities/person/alice/history?limit=10&cursor=h2', $connection->url);
