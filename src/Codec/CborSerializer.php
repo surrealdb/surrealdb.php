@@ -2,13 +2,13 @@
 
 namespace SurrealDB\SDK\Codec;
 
-use Beau\CborPHP\CborEncoder;
 use SurrealDB\SDK\Codec\Cbor\CborValueMapper;
+use SurrealDB\SDK\Codec\Cbor\CborWriter;
 
 final class CborSerializer implements SerializerInterface
 {
     public function serialize(mixed $data): string
     {
-        return CborEncoder::encode(CborValueMapper::encode($data));
+        return CborWriter::encode(CborValueMapper::encode($data));
     }
 }
