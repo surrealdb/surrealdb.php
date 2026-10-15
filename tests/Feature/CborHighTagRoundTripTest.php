@@ -160,6 +160,14 @@ final class CborHighTagRoundTripTest extends TestCase
             self::markTestSkipped('Local SurrealDB test database is not available: ' . $error->getMessage());
         }
 
+        // Sets, files and these range forms are SurrealDB 3 types. A 2.x
+        // server does not answer a WebSocket request carrying a tag it does
+        // not know, so do not send one.
+        if ((int) preg_replace('/^surrealdb-/', '', $db->version()) < 3) {
+            $db->close();
+            self::markTestSkipped('These CBOR types need SurrealDB 3.0 or later.');
+        }
+
         return $db;
     }
 }
