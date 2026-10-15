@@ -412,6 +412,7 @@ final class AgentMemoryTest extends TestCase
         $parameters = [
             'AgentMemoryOptions::__construct $apiKey' => new \ReflectionParameter([AgentMemoryOptions::class, '__construct'], 'apiKey'),
             'Transport::__construct $apiKey' => new \ReflectionParameter([Transport::class, '__construct'], 'apiKey'),
+            'Transport::assertNoControlCharacters $value' => new \ReflectionParameter([Transport::class, 'assertNoControlCharacters'], 'value'),
             'Transport::send $headers' => new \ReflectionParameter([Transport::class, 'send'], 'headers'),
         ];
 
@@ -521,6 +522,13 @@ final class AgentMemoryTest extends TestCase
             } catch (\InvalidArgumentException $e) {
                 $this->assertSame(InvalidArgumentException::class, $e::class, $name);
                 $this->assertStringNotContainsString('sp-key', $e->getMessage(), 'the key must not leak into the message');
+                $this->assertStringNotContainsString('sp-key', $e->getTraceAsString(), 'the key must not leak into the trace');
+
+                foreach ($e->getTrace() as $frame) {
+                    foreach ($frame['args'] ?? [] as $argument) {
+                        $this->assertFalse(is_string($argument) && str_contains($argument, 'sp-key'), "{$name}: no frame may carry the key");
+                    }
+                }
             }
         }
 

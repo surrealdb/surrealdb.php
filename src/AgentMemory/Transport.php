@@ -297,7 +297,7 @@ final class Transport
     /**
      * @throws InvalidArgumentException with `$message` when `$value` holds a C0 control character or DEL
      */
-    private static function assertNoControlCharacters(string $value, string $message): void
+    private static function assertNoControlCharacters(#[\SensitiveParameter] string $value, string $message): void
     {
         if (preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
             throw new InvalidArgumentException($message);
