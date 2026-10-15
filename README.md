@@ -48,7 +48,7 @@ v2 is in alpha, so ask Composer for it explicitly (a plain `composer require` in
 composer require surrealdb/surrealdb.php:^2.0@alpha
 ```
 
-Requires PHP 8.4 or later. The WebSocket engine needs nothing extra. The HTTP engine, and `import()` / `export()` on any connection, need a PSR-18 client and PSR-17 factories, found through `php-http/discovery`:
+Requires PHP 8.4 or later. The WebSocket engine needs nothing extra for queries. The HTTP engine, and `health()`, `import()` and `export()` on any connection, need a PSR-18 client and PSR-17 factories, found through `php-http/discovery`:
 
 ```sh
 composer require guzzlehttp/guzzle php-http/discovery
