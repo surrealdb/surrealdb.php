@@ -9,6 +9,7 @@ use SurrealDB\SDK\Query\Concerns\HasOutput;
 use SurrealDB\SDK\Query\Concerns\HasTimeout;
 use SurrealDB\SDK\Query\Concerns\HasVersion;
 use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
 
 /**
@@ -25,11 +26,11 @@ final class CreateQuery extends QueryBuilder
     use HasVersion;
 
     /**
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|StringRecordId|Table<string>|string $what
      */
     public function __construct(
         ?QueryExecutor $executor,
-        public private(set) RecordId|Table|string $what,
+        public private(set) RecordId|StringRecordId|Table|string $what,
     ) {
         parent::__construct($executor);
     }
