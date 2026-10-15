@@ -224,11 +224,14 @@ abstract class LiveSubscription implements \IteratorAggregate
 
     protected function resume(): void
     {
-        if ($this->replayed?->isPending() === true) {
-            $this->replayed->resolve(true);
-        }
-
+        // Cleared first: resolving can run the waiting consumer straight away
+        // (OpenSwoole), and a reconnect it causes suspends iteration afresh.
+        $replayed = $this->replayed;
         $this->replayed = null;
+
+        if ($replayed?->isPending() === true) {
+            $replayed->resolve(true);
+        }
     }
 
     /**
