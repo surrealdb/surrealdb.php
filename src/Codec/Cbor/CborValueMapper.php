@@ -32,7 +32,6 @@ use SurrealDB\SDK\Types\Table;
 use SurrealDB\SDK\Types\Uuid;
 use function is_array;
 use function is_string;
-use function sprintf;
 use function strlen;
 
 final class CborValueMapper
@@ -50,9 +49,10 @@ final class CborValueMapper
 				$data->table,
 				self::encode($data->id),
 			]),
-			$data instanceof RecordIdRange => self::unsupportedHighTag(
-				CborTag::RANGE,
-			),
+			$data instanceof RecordIdRange => self::tag(CborTag::RECORD_ID, [
+				$data->table,
+				self::encodeRange($data->begin, $data->end),
+			]),
 			$data instanceof Decimal => self::tag(
 				CborTag::DECIMAL,
 				(string) $data,
@@ -71,41 +71,22 @@ final class CborValueMapper
 				(string) $data,
 			),
 			$data instanceof Bytes => new CborByteString($data->bytes),
-			$data instanceof File => self::unsupportedHighTag(CborTag::FILE),
-			$data instanceof Set => self::unsupportedHighTag(CborTag::SET),
-			$data instanceof Range => self::unsupportedHighTag(CborTag::RANGE),
-			$data instanceof BoundIncluded => self::unsupportedHighTag(
-				CborTag::BOUND_INCLUDED,
+			$data instanceof File => self::tag(CborTag::FILE, [
+				$data->bucket,
+				$data->key,
+			]),
+			$data instanceof Set => self::tag(
+				CborTag::SET,
+				array_map(self::encode(...), $data->values),
 			),
-			$data instanceof BoundExcluded => self::unsupportedHighTag(
-				CborTag::BOUND_EXCLUDED,
-			),
-			$data instanceof GeometryPoint => self::unsupportedHighTag(
-				CborTag::GEOMETRY_POINT,
-			),
-			$data instanceof GeometryLine => self::unsupportedHighTag(
-				CborTag::GEOMETRY_LINE,
-			),
-			$data instanceof GeometryPolygon => self::unsupportedHighTag(
-				CborTag::GEOMETRY_POLYGON,
-			),
-			$data instanceof GeometryMultiPoint => self::unsupportedHighTag(
-				CborTag::GEOMETRY_MULTIPOINT,
-			),
-			$data instanceof GeometryMultiLine => self::unsupportedHighTag(
-				CborTag::GEOMETRY_MULTILINE,
-			),
-			$data instanceof GeometryMultiPolygon => self::unsupportedHighTag(
-				CborTag::GEOMETRY_MULTIPOLYGON,
-			),
-			$data instanceof GeometryCollection => self::unsupportedHighTag(
-				CborTag::GEOMETRY_COLLECTION,
-			),
+			$data instanceof Range => self::encodeRange($data->begin, $data->end),
+			$data instanceof BoundIncluded, $data instanceof BoundExcluded => self::encodeBound($data),
+			$data instanceof Geometry => self::encodeGeometry($data),
 			is_array($data) => self::encodeArray($data),
 			$data instanceof \JsonSerializable => self::encode(
 				$data->jsonSerialize(),
 			),
-			$data instanceof \stdClass => self::encode(get_object_vars($data)),
+			$data instanceof \stdClass => new CborMap(self::encodeArray(get_object_vars($data))),
 			default => $data,
 		};
 	}
@@ -128,15 +109,75 @@ final class CborValueMapper
 		return new TaggedValue($tag->value, $value);
 	}
 
-	private static function unsupportedHighTag(CborTag $tag): never
-	{
-		throw new SerializationException(
-			"Serialization",
-			sprintf(
-				"welpie21/cbor.php cannot encode SurrealDB CBOR tag %d correctly; refusing to emit malformed CBOR.",
-				$tag->value,
+	/**
+	 * @param BoundIncluded<mixed>|BoundExcluded<mixed>|null $begin
+	 * @param BoundIncluded<mixed>|BoundExcluded<mixed>|null $end
+	 */
+	private static function encodeRange(
+		BoundIncluded|BoundExcluded|null $begin,
+		BoundIncluded|BoundExcluded|null $end,
+	): TaggedValue {
+		return self::tag(CborTag::RANGE, [
+			self::encodeBound($begin),
+			self::encodeBound($end),
+		]);
+	}
+
+	/**
+	 * @param BoundIncluded<mixed>|BoundExcluded<mixed>|null $bound
+	 */
+	private static function encodeBound(
+		BoundIncluded|BoundExcluded|null $bound,
+	): ?TaggedValue {
+		return match (true) {
+			$bound instanceof BoundIncluded => self::tag(
+				CborTag::BOUND_INCLUDED,
+				self::encode($bound->value),
 			),
-		);
+			$bound instanceof BoundExcluded => self::tag(
+				CborTag::BOUND_EXCLUDED,
+				self::encode($bound->value),
+			),
+			default => null,
+		};
+	}
+
+	private static function encodeGeometry(Geometry $geometry): TaggedValue
+	{
+		return match (true) {
+			$geometry instanceof GeometryPoint => self::tag(
+				CborTag::GEOMETRY_POINT,
+				[$geometry->longitude, $geometry->latitude],
+			),
+			$geometry instanceof GeometryLine => self::tag(
+				CborTag::GEOMETRY_LINE,
+				array_map(self::encodeGeometry(...), $geometry->points),
+			),
+			$geometry instanceof GeometryPolygon => self::tag(
+				CborTag::GEOMETRY_POLYGON,
+				array_map(self::encodeGeometry(...), $geometry->rings),
+			),
+			$geometry instanceof GeometryMultiPoint => self::tag(
+				CborTag::GEOMETRY_MULTIPOINT,
+				array_map(self::encodeGeometry(...), $geometry->points),
+			),
+			$geometry instanceof GeometryMultiLine => self::tag(
+				CborTag::GEOMETRY_MULTILINE,
+				array_map(self::encodeGeometry(...), $geometry->lines),
+			),
+			$geometry instanceof GeometryMultiPolygon => self::tag(
+				CborTag::GEOMETRY_MULTIPOLYGON,
+				array_map(self::encodeGeometry(...), $geometry->polygons),
+			),
+			$geometry instanceof GeometryCollection => self::tag(
+				CborTag::GEOMETRY_COLLECTION,
+				array_map(self::encodeGeometry(...), $geometry->geometries),
+			),
+			default => throw new SerializationException(
+				"Serialization",
+				"Unsupported geometry type: " . $geometry::class,
+			),
+		};
 	}
 
 	/**
