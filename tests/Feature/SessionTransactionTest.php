@@ -197,7 +197,7 @@ final class SessionTransactionTest extends TestCase
         }
     }
 
-    public function testAClosedSessionCannotBeResetOrAttachALiveQuery(): void
+    public function testAClosedSessionIsRejectedBeforeAnyRequest(): void
     {
         $db = $this->connect();
 
@@ -209,6 +209,10 @@ final class SessionTransactionTest extends TestCase
             foreach ([
                 'reset' => static fn () => $session->reset(),
                 'liveOf' => static fn () => $session->liveOf($id),
+                'signin' => static fn () => $session->signin(new RootAuth('root', 'root')),
+                'signup' => static fn () => $session->signup(['ns' => 'x', 'db' => 'y', 'ac' => 'z']),
+                'authenticate' => static fn () => $session->authenticate((string) $db->accessToken()),
+                'invalidate' => static fn () => $session->invalidate(),
             ] as $call => $attempt) {
                 try {
                     $attempt();
@@ -352,6 +356,12 @@ final class SessionTransactionTest extends TestCase
             $fork = $db->forkSession();
             self::assertSame([[$this->namespace, 'other']], $fork->run('RETURN [session::ns(), session::db()]'));
             $fork->closeSession();
+
+            // The protocol's uppercase keys select them too.
+            $db->use($this->namespace, 'db');
+            $db->signin(['NS' => $this->namespace, 'DB' => 'other', 'user' => 'db_owner', 'pass' => 'secret']);
+            self::assertSame('other', $db->database());
+            self::assertSame([[$this->namespace, 'other']], $db->run('RETURN [session::ns(), session::db()]'));
         } finally {
             $db->close();
         }
