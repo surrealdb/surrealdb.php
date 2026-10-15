@@ -131,7 +131,8 @@ $db->upsert(new RecordId('person', 'tobie'))->replace(['name' => 'Tobie'])->exec
 $db->delete(new RecordId('person', 'tobie'))->execute();
 $db->insert(new Table('person'), [['name' => 'A'], ['name' => 'B']])->ignore()->execute();
 $db->relate(new RecordId('person', 'tobie'), new Table('knows'), new RecordId('person', 'jaime'), ['since' => 2020])->execute();
-$db->call('fn::greet', args: ['Tobie'])->execute();
+$db->run('DEFINE FUNCTION fn::greet($name: string) { RETURN "Hello, " + $name }');
+$db->call('fn::greet', args: ['Tobie'])->execute();   // "Hello, Tobie"
 ```
 
 Multi-statement SurrealQL can be streamed, or inspected without throwing on failed statements:
