@@ -70,9 +70,9 @@ final class ManagedLiveSubscription extends LiveSubscription
         }
 
         // On failure the connection decides: wait for the next socket, or
-        // end the subscription.
+        // end the subscription. On success it resumes iteration, once every
+        // subscription is replayed.
         $this->start();
-        $this->resume();
     }
 
     public function id(): string

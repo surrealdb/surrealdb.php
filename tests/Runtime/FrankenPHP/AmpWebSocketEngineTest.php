@@ -4,11 +4,13 @@ namespace SurrealDB\Tests\Runtime\FrankenPHP;
 
 use PHPUnit\Framework\TestCase;
 use Revolt\EventLoop;
+use SurrealDB\SDK\Auth\NamespaceAuth;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectionState;
 use SurrealDB\SDK\Connection\ConnectionStatus;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverContext;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Runtime\Runtime;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Transport\Amp\AmpWebSocketTransport;
@@ -149,7 +151,106 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame([$before, $after], $queryIds);
     }
 
-    private function connect(Surreal $db): void
+    public function testATransactionIsFinishedAsSoonAsItsSocketIsLost(): void
+    {
+        $result = $this->inLoop(function (): ?array {
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $options = Runtime::amp();
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+
+            try {
+                if (!$db->isFeatureSupported(Features::transactions())) {
+                    return null;
+                }
+
+                $txn = $db->beginTransaction();
+                $finishedWhileReconnecting = null;
+                $connected = 0;
+                $db->subscribe('reconnecting', static function () use (&$finishedWhileReconnecting, $txn): void {
+                    $finishedWhileReconnecting ??= $txn->isFinished();
+                });
+                $db->subscribe('connected', static function () use (&$connected): void {
+                    $connected++;
+                });
+
+                $transports[0]->close();
+
+                $deadline = microtime(true) + 5;
+
+                while ($connected === 0 && microtime(true) < $deadline) {
+                    $this->delay(0.05);
+                }
+
+                return [$finishedWhileReconnecting, $txn->isFinished()];
+            } finally {
+                $db->close();
+            }
+        });
+
+        if ($result === null) {
+            $this->markTestSkipped('Interactive transactions need SurrealDB 3.0 or later.');
+        }
+
+        $this->assertSame([true, true], $result);
+    }
+
+    public function testACallWaitsForARenewalAlreadyInFlight(): void
+    {
+        $order = $this->inLoop(function (): array {
+            $namespace = 'amp_renew_' . bin2hex(random_bytes(4));
+            $setup = new Surreal(Runtime::amp());
+            $this->connect($setup);
+
+            try {
+                // Renewal is due 60 seconds before expiry: about a second in.
+                $setup->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace};"
+                    . " DEFINE USER renew ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 61s, FOR SESSION 1h");
+            } finally {
+                $setup->close();
+            }
+
+            $calls = 0;
+            $renewing = false;
+            $order = [];
+            $provider = function () use (&$calls, &$renewing, &$order, $namespace): NamespaceAuth {
+                // The first call signs in; the next is the renewal timer's,
+                // which takes a while.
+                if (++$calls > 1) {
+                    $renewing = true;
+                    $this->delay(0.5);
+                    $order[] = 'renewed';
+                }
+
+                return new NamespaceAuth($namespace, 'renew', 'secret');
+            };
+
+            $db = new Surreal(Runtime::amp());
+            $this->connect($db, $provider);
+
+            try {
+                $this->waitFor(static function () use (&$renewing): bool {
+                    return $renewing;
+                });
+
+                $db->run('RETURN 1');
+                $order[] = 'query';
+
+                return $order;
+            } finally {
+                $db->close();
+            }
+        });
+
+        $this->assertSame(['renewed', 'query'], $order);
+    }
+
+    private function connect(Surreal $db, ?\Closure $authentication = null): void
     {
         $url = getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc';
 
@@ -172,7 +273,10 @@ final class AmpWebSocketEngineTest extends TestCase
 
         $db->connect(
             $url,
-            new ConnectOptions(authentication: new RootAuth('root', 'root'), reconnect: ['retryDelay' => 0.05]),
+            new ConnectOptions(
+                authentication: $authentication ?? new RootAuth('root', 'root'),
+                reconnect: ['retryDelay' => 0.05],
+            ),
         );
     }
 

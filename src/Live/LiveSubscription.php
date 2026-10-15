@@ -152,6 +152,15 @@ abstract class LiveSubscription implements \IteratorAggregate
     }
 
     /**
+     * @internal the reconnect replayed the query: iteration carries on with
+     * the new feed
+     */
+    public function resumeIteration(): void
+    {
+        $this->resume();
+    }
+
+    /**
      * @internal the connection closed for good, or the subscription cannot
      * be carried over to a new one
      */
