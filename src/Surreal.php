@@ -223,13 +223,14 @@ final class Surreal implements QueryExecutor
 	}
 
 	/**
-	 * Begin a `CREATE` for a table or record. A string is a table name.
+	 * Begin a `CREATE` for a table or record. A string is a table name. A
+	 * record range is not a valid `CREATE` target.
      *
-     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
+     * @param RecordId<string>|StringRecordId|Table<string>|string $what
      *
      * @return CreateQuery<mixed>
 	 */
-	public function create(RecordId|RecordIdRange|StringRecordId|Table|string $what): CreateQuery
+	public function create(RecordId|StringRecordId|Table|string $what): CreateQuery
 	{
 		return new CreateQuery($this, $what);
 	}
