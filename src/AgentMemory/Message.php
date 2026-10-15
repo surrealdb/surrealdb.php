@@ -49,6 +49,26 @@ final readonly class Message
     }
 
     /**
+     * A system turn, such as the instructions an agent runs under.
+     *
+     * @param list<string>|null $addressees
+     */
+    public static function system(string $content, ?array $addressees = null, ?string $ts = null): self
+    {
+        return new self(TurnRole::SYSTEM, $content, $addressees, $ts);
+    }
+
+    /**
+     * A tool turn: the output of a tool the agent called.
+     *
+     * @param list<string>|null $addressees
+     */
+    public static function tool(string $content, ?array $addressees = null, ?string $ts = null): self
+    {
+        return new self(TurnRole::TOOL, $content, $addressees, $ts);
+    }
+
+    /**
      * @internal one entry of the `messages` array on `POST /facts/batch`
      *
      * @return array<string,mixed>

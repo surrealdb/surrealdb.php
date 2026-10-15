@@ -94,6 +94,21 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $this->assertSame('shipped', $extraction['actions'][0]['verb']);
     }
 
+    public function testAnEntityOnlyTripleUpsertsTheEntity(): void
+    {
+        $memory = self::memory();
+
+        $memory->remember(null, new RememberOptions(
+            infer: InferMode::TRIPLES,
+            scopes: self::$scope,
+            triples: [Triple::entity(self::entity('person', 'dave'))],
+        ));
+
+        $dave = $memory->entities->get('person', 'dave' . self::$run);
+        $this->assertSame('dave' . self::$run, $dave['entity']['name']);
+        $this->assertSame([], $dave['attributes']);
+    }
+
     public function testScopesRegisterPaginateAndTombstone(): void
     {
         $scopes = self::memory()->scopes;
@@ -247,6 +262,20 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
             ['Planning the offsite for May', 'Noted, May it is.'],
             array_column(iterator_to_array($turns->autoPaginate(), false), 'content'),
         );
+    }
+
+    public function testRememberManyAcceptsSystemAndToolTurns(): void
+    {
+        $memory = self::memory();
+
+        $batch = $memory->rememberMany(
+            [Message::system('Answer in one sentence.'), Message::user('What did the build return?'), Message::tool('{"status":"green"}')],
+            new RememberManyOptions(infer: InferMode::NONE, scopes: self::$scope),
+        );
+        $this->assertCount(3, $batch['turnIds']);
+
+        $turns = $memory->sessions->attach($batch['sessionId'])->turns();
+        $this->assertSame(['system', 'user', 'tool'], array_column(iterator_to_array($turns->autoPaginate(), false), 'role'));
     }
 
     public function testSessionLifecycle(): void

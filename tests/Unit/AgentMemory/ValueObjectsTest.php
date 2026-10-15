@@ -125,6 +125,22 @@ final class ValueObjectsTest extends TestCase
         }
     }
 
+    public function testTripleEntityIsAnEntityOnlyUpsert(): void
+    {
+        $this->assertSame(['entity' => ['type' => 'person', 'name' => 'alice']], Triple::entity('person/alice')->toPayload());
+        $this->assertSame(
+            ['entity' => ['type' => 'company', 'name' => 'acme'], 'memory_category' => 'knowledge'],
+            Triple::entity(new EntityRef('company', 'acme'), MemoryCategory::KNOWLEDGE)->toPayload(),
+        );
+
+        try {
+            Triple::entity('alice');
+            $this->fail('An entity ref without a type should be rejected');
+        } catch (\InvalidArgumentException $e) {
+            $this->assertSame(InvalidArgumentException::class, $e::class);
+        }
+    }
+
     public function testMessagesSerialiseRoleContentAndAddressees(): void
     {
         $this->assertSame(
@@ -132,7 +148,12 @@ final class ValueObjectsTest extends TestCase
             Message::user('hi', ['Sam'], '2026-01-01T00:00:00Z')->toPayload(),
         );
         $this->assertSame(['role' => 'assistant', 'content' => 'hello'], Message::assistant('hello')->toPayload());
-        $this->assertSame(['role' => 'tool', 'content' => '{}'], (new Message(TurnRole::TOOL, '{}'))->toPayload());
+        $this->assertSame(['role' => 'system', 'content' => 'Be terse.'], Message::system('Be terse.')->toPayload());
+        $this->assertSame(
+            ['role' => 'tool', 'content' => '{}', 'ts' => '2026-01-01T00:00:00Z'],
+            Message::tool('{}', ts: '2026-01-01T00:00:00Z')->toPayload(),
+        );
+        $this->assertSame(Message::tool('{}')->toPayload(), (new Message(TurnRole::TOOL, '{}'))->toPayload());
     }
 
     public function testMimeTypeCoversTheIngestedExtensionsOnly(): void

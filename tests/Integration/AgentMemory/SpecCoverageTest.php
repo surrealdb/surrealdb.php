@@ -235,7 +235,8 @@ final class SpecCoverageTest extends TestCase
         $tripleFields = array_keys(
             Triple::attribute('t/n', 'k', 'v', confidence: 0.5, memoryCategory: 'x', occurredAt: $at, sourceClause: 'x')->toPayload()
             + Triple::relation('t/n', 'k', 't/m', validFrom: $at, validUntil: $at, sourceClause: 'x')->toPayload()
-            + Triple::action('t/n', 'v', object: 'o', summary: 's', temporalHint: 'h')->toPayload(),
+            + Triple::action('t/n', 'v', object: 'o', summary: 's', temporalHint: 'h')->toPayload()
+            + Triple::entity('t/n', memoryCategory: 'x')->toPayload(),
         );
 
         foreach ([

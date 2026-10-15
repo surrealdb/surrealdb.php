@@ -124,6 +124,15 @@ final class AgentMemoryTest extends TestCase
         );
     }
 
+    public function testRememberSendsAnEntityOnlyTriple(): void
+    {
+        $connection = new RecordingHttpConnection(new Response(200, [], '{}'));
+
+        $this->client($connection)->remember(null, new RememberOptions(infer: InferMode::TRIPLES, triples: [Triple::entity('person/dave')]));
+
+        $this->assertSame('{"infer":"triples","triples":[{"entity":{"type":"person","name":"dave"}}]}', $connection->body);
+    }
+
     public function testRememberManyPostsMessagesToFactsBatch(): void
     {
         $connection = new RecordingHttpConnection(new Response(200, [], '{}'));

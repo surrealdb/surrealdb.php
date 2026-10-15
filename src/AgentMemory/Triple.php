@@ -10,12 +10,13 @@ use SurrealDB\AgentMemory\Options\RememberOptions;
 /**
  * A caller-supplied fact, written verbatim by {@see AgentMemory::remember()}
  * when {@see RememberOptions::$infer} is {@see InferMode::TRIPLES} (no model
- * extraction runs). One of the three fact families:
+ * extraction runs). One of the three fact families, or an entity-only upsert:
  *
  * ```php
  * Triple::attribute('person/alice', 'role', 'CTO');                    // alice.role = CTO
  * Triple::relation('person/alice', 'works_at', 'company/acme');        // alice -[works_at]-> acme
  * Triple::action('person/alice', 'shipped', object: 'the v2 release'); // alice shipped the v2 release
+ * Triple::entity('company/acme');                                      // acme exists
  * ```
  *
  * Time is stated at most one way per fact: an explicit `occurredAt`
@@ -74,7 +75,7 @@ final readonly class Triple
         ?string $sourceClause = null,
     ): self {
         return new self(
-            self::entity($entity),
+            self::toRef($entity),
             key: self::required('key', $key),
             value: $value,
             confidence: $confidence,
@@ -106,9 +107,9 @@ final readonly class Triple
         ?string $sourceClause = null,
     ): self {
         return new self(
-            self::entity($entity),
+            self::toRef($entity),
             key: self::required('label', $label),
-            target: self::entity($target),
+            target: self::toRef($target),
             memoryCategory: $memoryCategory,
             occurredAt: $occurredAt,
             validFrom: $validFrom,
@@ -139,7 +140,7 @@ final readonly class Triple
         ?string $sourceClause = null,
     ): self {
         return new self(
-            self::entity($actor),
+            self::toRef($actor),
             verb: self::required('verb', $verb),
             object: $object,
             summary: $summary,
@@ -149,6 +150,18 @@ final readonly class Triple
             temporalHint: $temporalHint,
             sourceClause: $sourceClause,
         );
+    }
+
+    /**
+     * An entity-only upsert: records that the entity exists without stating a
+     * fact about it. The server rejects every per-fact field on such an entry,
+     * so only the memory category can be set. Wire form: `{"entity": {...}}`.
+     *
+     * @param EntityRef|string $entity the entity, as `<type>/<name>`
+     */
+    public static function entity(EntityRef|string $entity, MemoryCategory|string|null $memoryCategory = null): self
+    {
+        return new self(self::toRef($entity), memoryCategory: $memoryCategory);
     }
 
     /**
@@ -176,7 +189,7 @@ final readonly class Triple
         ]);
     }
 
-    private static function entity(EntityRef|string $ref): EntityRef
+    private static function toRef(EntityRef|string $ref): EntityRef
     {
         return $ref instanceof EntityRef ? $ref : EntityRef::parse($ref);
     }
