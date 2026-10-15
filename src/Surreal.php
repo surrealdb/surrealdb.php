@@ -24,7 +24,8 @@ use SurrealDB\SDK\Events\EventDispatcher;
 use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
-use SurrealDB\SDK\Live\LiveMessage;
+use SurrealDB\SDK\Live\LiveSubscription;
+use SurrealDB\SDK\Live\UnmanagedLiveSubscription;
 use SurrealDB\SDK\Protocol\Feature;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Protocol\NamespaceDatabase;
@@ -33,6 +34,7 @@ use SurrealDB\SDK\Query\BoundQuery;
 use SurrealDB\SDK\Query\CreateQuery;
 use SurrealDB\SDK\Query\DeleteQuery;
 use SurrealDB\SDK\Query\InsertQuery;
+use SurrealDB\SDK\Query\LiveSelectQuery;
 use SurrealDB\SDK\Query\RelateQuery;
 use SurrealDB\SDK\Query\RunQuery;
 use SurrealDB\SDK\Query\SelectQuery;
@@ -45,6 +47,7 @@ use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\RecordIdRange;
 use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
+use SurrealDB\SDK\Types\Uuid;
 
 /**
  * The primary entry point: connect to SurrealDB, manage the session, and run
@@ -380,13 +383,38 @@ final class Surreal implements QueryExecutor
 	}
 
 	/**
-	 * Subscribe to a live query by its id.
+	 * Start a managed live query (`LIVE SELECT`) on a table or record. Configure
+	 * it, then `execute()` it to get a subscription to iterate:
 	 *
-     * @return iterable<LiveMessage<mixed>>
+	 *     $live = $db->live(new Table('person'))->where('age > 18')->execute();
+	 *     foreach ($live as $message) { ... }
+	 *
+	 * A string is a table name.
+	 *
+	 * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
 	 */
-	public function live(string $queryUuid): iterable
+	public function live(RecordId|RecordIdRange|StringRecordId|Table|string $what): LiveSelectQuery
 	{
-		return $this->connection->liveQuery($queryUuid);
+		return new LiveSelectQuery($this->connection, $what);
+	}
+
+	/**
+	 * Subscribe to an existing live query by its id, e.g. one started by a
+	 * `LIVE SELECT` inside {@see self::run()}.
+	 */
+	public function liveOf(Uuid|string $id): UnmanagedLiveSubscription
+	{
+		$this->connection->assertFeature(Features::liveQueries());
+
+		return new UnmanagedLiveSubscription($this->connection, $id);
+	}
+
+	/**
+	 * Stop a live query by its id.
+	 */
+	public function kill(Uuid|string $id): void
+	{
+		LiveSubscription::killOnServer($this->connection, $id);
 	}
 
 	/**
