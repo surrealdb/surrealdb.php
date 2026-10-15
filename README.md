@@ -119,7 +119,7 @@ $db->invalidate();
 
 ### Query builders
 
-Every builder runs with `execute()`; `compile()` returns the SurrealQL and bindings without running it, and `json()` returns plain JSON-compatible values instead of SurrealDB types.
+Every builder runs with `execute()`; `compile()` returns the SurrealQL and bindings without running it, and `json()` returns plain JSON-compatible values instead of SurrealDB types. Live queries are the exception: their notifications always carry SurrealDB types.
 
 ```php
 use SurrealDB\SDK\Enum\Output;
@@ -198,6 +198,8 @@ try {
 Transactions need the default CBOR format. Resetting or closing the session, or losing the connection, also ends them; `isFinished()` reports it.
 
 ## Live queries
+
+Live queries need a WebSocket connection. Over HTTP, `execute()` throws `UnsupportedFeatureException`.
 
 ```php
 use SurrealDB\SDK\Live\LiveAction;
