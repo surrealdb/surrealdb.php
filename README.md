@@ -266,8 +266,9 @@ $db->gql('MATCH (a:person)-[:knows]->(b:person) WHERE a.name = $name RETURN b.na
 // GraphQL over tables with defined fields (SurrealDB 3.2+; needs `DEFINE CONFIG GRAPHQL`).
 $db->graphql('query Person($id: ID!) { person(id: $id) { name } }', ['id' => 'tobie'], 'Person')->dataOrThrow();
 
-// Import and export SurrealQL.
+// Export SurrealQL, then import it into another, empty database.
 $surql = $db->export();
+$db->use('test', 'copy');
 $db->import($surql);
 ```
 
