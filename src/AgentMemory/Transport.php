@@ -133,6 +133,8 @@ final class Transport
      *
      * @param string              $itemsKey the envelope member holding the rows (e.g. `entities`)
      * @param array<string,mixed> $query    filters and page parameters; `null` values are skipped
+     *
+     * @return Page<array<string, mixed>> rows untyped; the calling component narrows the page to its row schema
      */
     public function requestPage(string $path, string $itemsKey, array $query = []): Page
     {

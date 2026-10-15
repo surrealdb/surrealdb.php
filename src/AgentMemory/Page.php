@@ -26,19 +26,21 @@ use function array_key_exists;
  * }
  * ```
  *
- * @implements \IteratorAggregate<int,array<string,mixed>>
+ * @template T = array<string, mixed> the row type; untyped decoded rows by default
+ *
+ * @implements \IteratorAggregate<int, T>
  */
 final class Page implements \IteratorAggregate, \Countable
 {
     /**
-     * @param list<array<string,mixed>>        $items      this page's rows
+     * @param list<T>                          $items      this page's rows
      * @param bool                             $hasMore    whether a further page exists
      * @param string|null                      $nextCursor token for the next page; `null` on the last page
      * @param int|null                         $totalSize  total rows matching the filters, present only on the page
      *                                                     whose request set `count` ({@see next()} does not repeat
      *                                                     the count, which costs the server a full scan)
      * @param array<int|string,mixed>          $raw        the full decoded response envelope
-     * @param (\Closure(string):self)|null     $fetch      re-issues the originating request at a cursor
+     * @param (\Closure(string): self<T>)|null $fetch      re-issues the originating request at a cursor
      */
     public function __construct(
         public readonly array $items,
@@ -52,9 +54,11 @@ final class Page implements \IteratorAggregate, \Countable
     /**
      * @internal builds a page from a collection envelope such as `{"entities": [...], "page": {...}}`
      *
-     * @param array<int|string,mixed>      $envelope decoded response body; `[]` for an empty body
-     * @param string                       $itemsKey the envelope member holding the rows
-     * @param (\Closure(string):self)|null $fetch    re-issues the originating request at a cursor
+     * @param array<int|string,mixed>                          $envelope decoded response body; `[]` for an empty body
+     * @param string                                           $itemsKey the envelope member holding the rows
+     * @param (\Closure(string): self<array<string, mixed>>)|null $fetch    re-issues the originating request at a cursor
+     *
+     * @return self<array<string, mixed>> rows are untyped here; the calling component narrows the page to its schema
      *
      * @throws AgentMemoryException when the envelope lacks the rows member, which every collection
      *                              response declares as required (so the API changed shape)
@@ -76,6 +80,7 @@ final class Page implements \IteratorAggregate, \Countable
         $meta = is_array($envelope['page'] ?? null) ? $envelope['page'] : [];
         $nextCursor = is_string($meta['nextCursor'] ?? null) && $meta['nextCursor'] !== '' ? $meta['nextCursor'] : null;
 
+        /** @var list<array<string, mixed>> $items */
         return new self(
             $items,
             is_bool($meta['hasMore'] ?? null) ? $meta['hasMore'] : $nextCursor !== null,
@@ -88,6 +93,8 @@ final class Page implements \IteratorAggregate, \Countable
 
     /**
      * Fetches the following page, or returns `null` when this is the last one.
+     *
+     * @return self<T>|null
      *
      * @throws AgentMemoryException when the request for the next page fails, or the server
      *                              reported more rows without the cursor to fetch them
@@ -109,7 +116,7 @@ final class Page implements \IteratorAggregate, \Countable
      * Lazily yields every row from this page onward, fetching each further page
      * only once the previous one is exhausted.
      *
-     * @return \Generator<int,array<string,mixed>>
+     * @return \Generator<int, T, mixed, void>
      *
      * @throws AgentMemoryException when a page request fails, or the server hands back a
      *                              cursor it already sent (which would otherwise loop forever)
@@ -141,7 +148,7 @@ final class Page implements \IteratorAggregate, \Countable
     }
 
     /**
-     * @return \ArrayIterator<int,array<string,mixed>>
+     * @return \ArrayIterator<int, T>
      */
     public function getIterator(): \ArrayIterator
     {
