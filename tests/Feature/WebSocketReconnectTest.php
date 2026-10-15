@@ -366,6 +366,11 @@ final class WebSocketReconnectTest extends TestCase
         $db = $this->connect();
 
         try {
+            // SurrealDB 2.x sends no KILLED notification for a KILL.
+            if ((int) preg_replace('/^surrealdb-/', '', $db->version()) < 3) {
+                self::markTestSkipped('Needs SurrealDB 3.0 or later.');
+            }
+
             $live = $db->live(new Table('person'))->execute();
             $db->create(new RecordId('person', 'one'))->execute();
             $db->create(new RecordId('person', 'two'))->execute();
