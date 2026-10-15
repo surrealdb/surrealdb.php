@@ -236,7 +236,9 @@ abstract class LiveSubscription implements \IteratorAggregate
      */
     private function finished(): bool
     {
-        return $this->killed || $this->killedByServer() || $this->ended;
+        // The flag, not the current feed: a killed feed not yet drained
+        // (behind an older socket's) still yields what it received.
+        return $this->killed || $this->serverKilled || $this->ended;
     }
 
     protected function resume(): void
@@ -262,11 +264,9 @@ abstract class LiveSubscription implements \IteratorAggregate
      */
     protected function killedByServer(): bool
     {
-        if (!$this->serverKilled && $this->feed instanceof LiveFeed && $this->feed->isKilled()) {
-            $this->serverKilled = true;
-        }
-
-        return $this->serverKilled;
+        // Not recorded in $serverKilled: that ends iteration, which must
+        // still drain the feed (behind any older socket's) up to the KILLED.
+        return $this->serverKilled || ($this->feed instanceof LiveFeed && $this->feed->isKilled());
     }
 
     /**

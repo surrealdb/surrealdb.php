@@ -282,7 +282,7 @@ final class ConnectionController
     {
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
-        $tokens = $this->requireEngine()->signin($auth, $session);
+        $tokens = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->signin($auth, $session));
 
         if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
             return $tokens;
@@ -302,7 +302,7 @@ final class ConnectionController
     {
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
-        $tokens = $this->requireEngine()->signup($auth, $session);
+        $tokens = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->signup($auth, $session));
 
         if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
             return $tokens;
@@ -319,7 +319,7 @@ final class ConnectionController
     {
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
-        $this->requireEngine()->authenticate($token, $session);
+        $this->sendAuth($sessionState, $skipOverride, fn () => $this->requireEngine()->authenticate($token, $session));
 
         if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
             return;
@@ -336,7 +336,7 @@ final class ConnectionController
         $this->assertFeature(Features::refreshTokens());
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
-        $refreshed = $this->requireEngine()->refresh($tokens, $session);
+        $refreshed = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->refresh($tokens, $session));
 
         if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
             return $refreshed;
@@ -374,7 +374,7 @@ final class ConnectionController
     {
         $sessionState = $this->requireSession($session);
         $this->beginAuthChange($sessionState, false);
-        $this->requireEngine()->invalidate($session);
+        $this->sendAuth($sessionState, false, fn () => $this->requireEngine()->invalidate($session));
         $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
     }
@@ -383,7 +383,7 @@ final class ConnectionController
     {
         $sessionState = $this->requireSession($session);
         $this->beginAuthChange($sessionState, false);
-        $this->requireEngine()->reset($session);
+        $this->sendAuth($sessionState, false, fn () => $this->requireEngine()->reset($session));
         $sessionState->namespace = null;
         $sessionState->database = null;
         $sessionState->variables = [];
@@ -693,6 +693,11 @@ final class ConnectionController
                 } catch (\Throwable) {
                     // Best effort: it is gone on this side either way.
                 }
+
+                // That lost the socket: the next one replays the rest.
+                if (!$this->isCurrentConnection($epoch)) {
+                    return false;
+                }
             }
         }
 
@@ -838,6 +843,33 @@ final class ConnectionController
      * An explicit change starts a new generation, before its request goes
      * out; a renewal or restore (`$skipOverride`) carries on the current one.
      */
+    /**
+     * Send an authentication request. Until an explicit one is answered, the
+     * session's credentials are about to change, so renewals hold off rather
+     * than renew what is being replaced.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $request
+     *
+     * @return T
+     */
+    private function sendAuth(SessionState $sessionState, bool $skipOverride, \Closure $request): mixed
+    {
+        if ($skipOverride) {
+            return $request();
+        }
+
+        $auth = $sessionState->auth;
+        $auth->pending++;
+
+        try {
+            return $request();
+        } finally {
+            $auth->pending--;
+        }
+    }
+
     private function beginAuthChange(SessionState $sessionState, bool $skipOverride): int
     {
         return $skipOverride ? $sessionState->auth->generation : ++$sessionState->auth->generation;
@@ -940,6 +972,15 @@ final class ConnectionController
             return;
         }
 
+        // An explicit sign-in or sign-out is waiting on the server: it
+        // replaces or clears these credentials. Check again shortly, in case
+        // it fails and they still need renewing.
+        if (($this->state?->session($session)?->auth->pending ?? 0) > 0) {
+            $this->checkRenewalAt($session, time() + self::RENEWAL_RETRY_SECONDS);
+
+            return;
+        }
+
         $renewal = $this->renewing[$key] ?? null;
 
         if ($renewal !== null) {
@@ -978,13 +1019,10 @@ final class ConnectionController
                 if ($expiry !== null && $expiry > $at) {
                     $this->renewAt[$key] = $expiry;
 
-                    // Under an async scheduler, check at expiry even if no
-                    // call comes along: that signs the session out (and ends
-                    // its live queries) unless something can replace it.
-                    $this->context->scheduler->spawn(function () use ($expiry, $session): void {
-                        $this->context->scheduler->delay((float) max($expiry - time(), 0));
-                        $this->renewIfDue($session);
-                    });
+                    // Checked at expiry even if no call comes along: that
+                    // signs the session out (and ends its live queries)
+                    // unless something can replace it.
+                    $this->checkRenewalAt($session, $expiry);
                 } else {
                     unset($this->renewAt[$key]);
                 }
@@ -1000,6 +1038,7 @@ final class ConnectionController
             // expire.
             if ($this->renewalDeadline($key) === $at) {
                 $this->renewAt[$key] = time() + self::RENEWAL_RETRY_SECONDS;
+                $this->checkRenewalAt($session, $this->renewAt[$key]);
             }
 
             $this->onError(new AuthenticationException('Token renewal failed', $error));
@@ -1015,6 +1054,19 @@ final class ConnectionController
                 }
             }
         }
+    }
+
+    /**
+     * Under an async scheduler, check the renewal at `$at` even if no call
+     * comes along (the sync scheduler treats spawn as a no-op, and relies on
+     * the checks before each call).
+     */
+    private function checkRenewalAt(?string $session, int $at): void
+    {
+        $this->context->scheduler->spawn(function () use ($at, $session): void {
+            $this->context->scheduler->delay((float) max($at - time(), 0));
+            $this->renewIfDue($session);
+        });
     }
 
     /**

@@ -427,6 +427,47 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame([], $errors);
     }
 
+    public function testAFailedBackgroundRenewalIsRetriedWithoutACall(): void
+    {
+        $calls = $this->inLoop(function (): int {
+            $namespace = 'amp_renew_' . bin2hex(random_bytes(4));
+            $setup = new Surreal(Runtime::amp());
+            $this->connect($setup);
+
+            try {
+                // Renewal is due 60 seconds before expiry: about a second in.
+                $setup->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace};"
+                    . " DEFINE USER renew ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 61s, FOR SESSION 1h");
+            } finally {
+                $setup->close();
+            }
+
+            $calls = 0;
+            $provider = static function () use (&$calls, $namespace): NamespaceAuth {
+                // The renewal timer's first attempt fails.
+                if (++$calls === 2) {
+                    throw new \RuntimeException('provider unavailable');
+                }
+
+                return new NamespaceAuth($namespace, 'renew', 'secret');
+            };
+
+            $db = new Surreal(Runtime::amp());
+            $this->connect($db, $provider);
+
+            try {
+                // No calls: only a timer can retry, five seconds on.
+                $this->delay(7.5);
+
+                return $calls;
+            } finally {
+                $db->close();
+            }
+        });
+
+        $this->assertGreaterThanOrEqual(3, $calls);
+    }
+
     public function testATokenCloseToExpiryIsKeptWhileStillValid(): void
     {
         $result = $this->inLoop(function (): ?array {
