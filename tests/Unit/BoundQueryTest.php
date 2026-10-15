@@ -68,4 +68,16 @@ final class BoundQueryTest extends TestCase
         $this->expectException(ExpressionException::class);
         $first->append(' + $a', ['a' => 2]);
     }
+
+    public function testBindSkipsGeneratedNamesAlreadyPresentInTheBindings(): void
+    {
+        $next = (int) substr(new BoundQuery()->bind(null), \strlen('$bind__')) + 1;
+        $taken = ['bind__' . $next => 'first', 'bind__' . ($next + 1) => 'second'];
+
+        $query = new BoundQuery('RETURN $bind__' . $next . ' + ', $taken);
+        $placeholder = $query->bind('third');
+
+        $this->assertArrayNotHasKey(substr($placeholder, 1), $taken);
+        $this->assertSame([...$taken, substr($placeholder, 1) => 'third'], $query->bindings);
+    }
 }

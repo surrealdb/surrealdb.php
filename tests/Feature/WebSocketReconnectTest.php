@@ -209,6 +209,87 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testNotificationsReceivedBeforeAReconnectAreStillYielded(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+
+            // Delivered to the feed (while waiting for the next call's
+            // reply), but not iterated before the socket drops.
+            $db->create(new RecordId('person', 'before'))->execute();
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            $db->create(new RecordId('person', 'after'))->execute();
+
+            $records = [];
+
+            foreach ($live as $message) {
+                $records[] = (string) $message->record;
+
+                if (count($records) === 2) {
+                    break;
+                }
+            }
+
+            self::assertSame(['person:before', 'person:after'], $records);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testLiveQueriesAreReplayedBeforeConnectedIsAnnounced(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $db->subscribe('connected', static function () use ($db): void {
+                $db->create(new RecordId('person', 'on_connected'))->execute();
+            });
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            $db->create(new RecordId('person', 'later'))->execute();
+
+            $records = [];
+
+            foreach ($live as $message) {
+                $records[] = (string) $message->record;
+
+                if (count($records) === 2) {
+                    break;
+                }
+            }
+
+            self::assertSame(['person:on_connected', 'person:later'], $records);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAnUnmanagedSubscriptionIsNotAliveAfterAReconnect(): void
+    {
+        $db = $this->connect();
+
+        try {
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $live = $db->liveOf($id);
+            self::assertTrue($live->isAlive());
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            // The new socket does not carry the query, and the SDK did not
+            // start it, so it cannot re-issue it.
+            self::assertFalse($live->isAlive());
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testLiveIterationEndsWhenTheConnectionCannotBeRestored(): void
     {
         $db = $this->connect(['attempts' => 1, 'retryDelay' => 0.001]);

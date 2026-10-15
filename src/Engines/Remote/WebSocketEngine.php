@@ -44,6 +44,9 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
      */
     private bool $loopRunning = false;
 
+    /** Incremented on every successful open, identifying the active transport. */
+    private int $generation = 0;
+
     /** @var array<string,Deferred<RpcResponse<mixed>>> */
     private array $calls = [];
 
@@ -55,18 +58,25 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
     /** Notifications kept for live queries nobody has subscribed to yet. */
     private const int MAX_UNCLAIMED_LIVE = 1000;
 
-    /** @var array<string,list<LiveMessage<mixed>>> */
+    /**
+     * Keyed by query id, then by arrival sequence (global FIFO order).
+     *
+     * @var array<string,array<int,LiveMessage<mixed>>>
+     */
     private array $unclaimedLive = [];
 
     private int $unclaimedCount = 0;
 
     /**
-     * Live feeds bound to the current socket. A new socket does not carry the
-     * old one's live queries, so they end when it is lost.
+     * Live feeds bound to the current socket, held weakly so a subscription
+     * dropped without kill() can still be destroyed. A new socket does not
+     * carry the old one's live queries, so they end when it is lost.
      *
-     * @var array<int,LiveFeed>
+     * @var array<int,\WeakReference<LiveFeed>>
      */
     private array $feeds = [];
+
+    private int $unclaimedSequence = 0;
 
     public function features(): FeatureSet
     {
@@ -144,12 +154,20 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             fn (): bool => $this->active && !$this->terminated,
         );
 
+        // Hold the feed weakly so a subscription dropped without kill() is
+        // destroyed, which closes the feed and unsubscribes it.
         $key = spl_object_id($feed);
-        $unsubscribe = $this->subscribeLive($id, $feed->push(...));
-        $this->feeds[$key] = $feed;
-        $feed->onClose(function () use ($unsubscribe, $key): void {
+        $weak = \WeakReference::create($feed);
+        $unsubscribe = $this->subscribeLive($id, static function (LiveMessage $message) use ($weak): void {
+            $weak->get()?->push($message);
+        });
+        $this->feeds[$key] = $weak;
+        $feed->onClose(function () use ($unsubscribe, $key, $weak): void {
             $unsubscribe();
-            unset($this->feeds[$key]);
+
+            if (($this->feeds[$key] ?? null) === $weak) {
+                unset($this->feeds[$key]);
+            }
         });
 
         return $feed;
@@ -164,13 +182,17 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             throw new ConnectionUnavailableException();
         }
 
+        // A value the codec cannot encode is the caller's error, not a lost
+        // connection, so serialize before the transport-failure handling.
+        $payload = $this->context->codec->serialize($request->toWire());
+
         $id = (string) $request->id;
         /** @var Deferred<RpcResponse<mixed>> $deferred */
         $deferred = $this->context->scheduler->defer(fn () => $this->readAndDispatchOnce());
         $this->calls[$id] = $deferred;
 
         try {
-            $this->transport->sendFrame($this->context->codec->serialize($request->toWire()));
+            $this->transport->sendFrame($payload);
         } catch (\Throwable $error) {
             unset($this->calls[$id]);
             $this->connectionLost();
@@ -214,6 +236,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         try {
             $this->transport->open();
             $this->active = true;
+            $this->generation++;
             $this->state?->reconnect->reset();
 
             return true;
@@ -242,7 +265,14 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             // This loop is the only reader, so it cannot itself wait on the
             // RPCs that restore the session: announce from a separate task.
             if (!$this->active && $this->connectOnce()) {
-                $this->context->scheduler->spawn(fn () => $this->publisher->publish('connected'));
+                $generation = $this->generation;
+                $this->context->scheduler->spawn(function () use ($generation): void {
+                    // The socket may have dropped (and a retry begun) before
+                    // this task ran; announcing then would answer a dead link.
+                    if ($this->active && !$this->terminated && $this->generation === $generation) {
+                        $this->publisher->publish('connected');
+                    }
+                });
             }
 
             while ($this->active && !$this->terminated) {
@@ -343,8 +373,10 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         $this->unclaimedLive = [];
         $this->unclaimedCount = 0;
 
-        foreach ($feeds as $feed) {
-            $feed->close();
+        // Ended rather than closed: what they already received is still
+        // yielded.
+        foreach ($feeds as $weak) {
+            $weak->get()?->end();
         }
     }
 
@@ -508,19 +540,30 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
      */
     private function holdUnclaimed(LiveMessage $message): void
     {
-        $this->unclaimedLive[$message->queryId][] = $message;
+        $this->unclaimedLive[$message->queryId][$this->unclaimedSequence++] = $message;
         $this->unclaimedCount++;
 
-        // Bound the buffer: drop the oldest messages (live queries nobody
-        // subscribes to, e.g. ones another client attached to this session).
+        // Bound the buffer: drop the globally oldest message (live queries
+        // nobody subscribes to, e.g. ones another client attached to this
+        // session).
         while ($this->unclaimedCount > self::MAX_UNCLAIMED_LIVE) {
-            $oldest = array_key_first($this->unclaimedLive);
+            $oldest = null;
+            $oldestSequence = PHP_INT_MAX;
+
+            foreach ($this->unclaimedLive as $queryId => $held) {
+                $sequence = array_key_first($held);
+
+                if ($sequence !== null && $sequence < $oldestSequence) {
+                    $oldest = $queryId;
+                    $oldestSequence = $sequence;
+                }
+            }
 
             if ($oldest === null) {
                 break;
             }
 
-            array_shift($this->unclaimedLive[$oldest]);
+            unset($this->unclaimedLive[$oldest][$oldestSequence]);
             $this->unclaimedCount--;
 
             if ($this->unclaimedLive[$oldest] === []) {

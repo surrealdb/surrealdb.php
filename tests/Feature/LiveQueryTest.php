@@ -64,10 +64,6 @@ final class LiveQueryTest extends TestCase
     public function testFieldsWhereAndDiffShapeTheNotifications(): void
     {
         $db = $this->connect();
-        // SurrealDB 2.x evaluates a LIVE query's parameters per notification,
-        // after the request's bindings are gone, so `type::fields($param)`
-        // fails there.
-        $this->requireV3($db);
 
         try {
             $adults = $db->live('person')->fields('name')->where('age >= 18')->execute();

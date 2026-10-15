@@ -482,17 +482,17 @@ final class ConnectionController
 
             $this->requireEngine()->ready();
 
+            // Before announcing the connection, so a listener that writes in
+            // response already has the live queries listening.
+            $this->replayLiveQueries();
+
             $this->status = ConnectionStatus::Connected;
             $this->events->publish('connected', $version);
             $this->context->events->dispatch(new Connected($version));
         } catch (\Throwable $error) {
             $this->onError($error);
             $this->engine?->close();
-
-            return;
         }
-
-        $this->replayLiveQueries();
     }
 
     /**
@@ -501,9 +501,18 @@ final class ConnectionController
      */
     private function replayLiveQueries(): void
     {
+        $subscriptions = [];
+
         foreach ($this->managedLive as $subscription => $_) {
+            $subscriptions[] = $subscription;
+        }
+
+        foreach ($subscriptions as $subscription) {
+            // Its session is gone (or it was killed): end it, which also
+            // releases an iteration waiting for the replay.
             if (!$subscription->isAlive()) {
                 unset($this->managedLive[$subscription]);
+                $subscription->connectionClosed();
 
                 continue;
             }
