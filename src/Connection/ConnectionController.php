@@ -7,6 +7,7 @@ use SurrealDB\SDK\Auth\Credentials;
 use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Auth\Tokens;
 use SurrealDB\SDK\Contracts\AuthProviderInterface;
+use SurrealDB\SDK\Contracts\Deferred;
 use SurrealDB\SDK\Contracts\ConnectionProbeInterface;
 use SurrealDB\SDK\Contracts\Counter;
 use SurrealDB\SDK\Contracts\EngineInterface;
@@ -99,9 +100,10 @@ final class ConnectionController
     private array $renewAt = [];
 
     /**
-     * Sessions whose renewal is in flight, keyed like {@see self::$renewAt}.
+     * Renewals in flight, keyed like {@see self::$renewAt}: the task doing
+     * each, and a deferred other tasks wait on.
      *
-     * @var array<string,true>
+     * @var array<string,array{task: object|int|null, done: Deferred<mixed>}>
      */
     private array $renewing = [];
 
@@ -247,6 +249,7 @@ final class ConnectionController
 
     public function use(?NamespaceDatabase $what, ?string $session = null): NamespaceDatabase
     {
+        $this->renewIfDue($session);
         $result = $this->requireEngine()->use($what, $session);
         $sessionState = $this->requireSession($session);
 
@@ -455,6 +458,8 @@ final class ConnectionController
     {
         $this->assertFeature(Features::sessions());
 
+        $this->renewIfDue(null);
+
         return $this->requireEngine()->sessions();
     }
 
@@ -554,6 +559,7 @@ final class ConnectionController
     {
         $epoch = $this->connectionEpoch;
         $subscriptions = [];
+        $replayed = [];
 
         foreach ($this->managedLive as $subscription => $_) {
             $subscriptions[] = $subscription;
@@ -571,6 +577,7 @@ final class ConnectionController
 
             try {
                 $subscription->replay();
+                $replayed[] = $subscription;
             } catch (\Throwable $error) {
                 // The new socket was lost too: the subscriptions stay
                 // tracked and waiting, for the next connection to replay.
@@ -581,10 +588,30 @@ final class ConnectionController
                 unset($this->managedLive[$subscription]);
                 $subscription->connectionClosed();
                 $this->onError($error);
+
+                // An error listener closed the connection.
+                if (!$this->isCurrentConnection($epoch)) {
+                    return false;
+                }
             }
         }
 
+        // Only now, so a consumer that writes as soon as it resumes does not
+        // miss a change a query still being replayed would have caught.
+        foreach ($replayed as $subscription) {
+            $subscription->resumeIteration();
+        }
+
         return true;
+    }
+
+    /**
+     * Whether the socket a callback started on is still the live one: not
+     * lost since, and the connection not closed.
+     */
+    private function isCurrentConnection(int $epoch): bool
+    {
+        return $this->engine !== null && $this->connectionEpoch === $epoch;
     }
 
     private function onDisconnected(): void
@@ -616,6 +643,11 @@ final class ConnectionController
         // a counter increment rather than a span (which would activate a scope
         // in one callback and close it in another).
         $this->connections->add(1, ['db.system.name' => 'surrealdb', 'outcome' => 'reconnect']);
+        // The lost socket took its transactions with it.
+        foreach ($this->state?->allSessions() ?? [] as $session) {
+            $session->transactions = [];
+        }
+
         $this->status = ConnectionStatus::Reconnecting;
         $this->connectionEpoch++;
 
@@ -713,11 +745,30 @@ final class ConnectionController
         $key = $session ?? '';
         $at = $this->renewalDeadline($key);
 
-        if ($at === null || time() < $at || isset($this->renewing[$key])) {
+        if ($at === null || time() < $at) {
             return;
         }
 
-        $this->renewing[$key] = true;
+        $renewal = $this->renewing[$key] ?? null;
+
+        if ($renewal !== null) {
+            // Another task is renewing: wait for its token rather than send
+            // the old one. The renewing task itself (an auth provider that
+            // queries, say) goes ahead.
+            if ($renewal['task'] !== self::currentTask()) {
+                try {
+                    $renewal['done']->await();
+                } catch (\Throwable) {
+                    // The renewing task reports its own failure.
+                }
+            }
+
+            return;
+        }
+
+        /** @var Deferred<mixed> $done */
+        $done = $this->context->scheduler->defer();
+        $this->renewing[$key] = ['task' => self::currentTask(), 'done' => $done];
 
         try {
             // A new token schedules the next deadline, and signing out clears
@@ -746,7 +797,29 @@ final class ConnectionController
             $this->onError(new AuthenticationException('Token renewal failed', $error));
         } finally {
             unset($this->renewing[$key]);
+            $done->resolve(true);
         }
+    }
+
+    /**
+     * The fiber or coroutine running now, or null outside one (where nothing
+     * else can run at the same time).
+     */
+    private static function currentTask(): object|int|null
+    {
+        $fiber = \Fiber::getCurrent();
+
+        if ($fiber !== null) {
+            return $fiber;
+        }
+
+        if (class_exists(\OpenSwoole\Coroutine::class)) {
+            $id = \OpenSwoole\Coroutine::getCid();
+
+            return $id > 0 ? $id : null;
+        }
+
+        return null;
     }
 
     /**
@@ -878,14 +951,16 @@ final class ConnectionController
         $this->requireEngine()->attach($id);
 
         // A new session is authenticated by the configured auth provider, if
-        // any; a fork reuses its source's tokens.
+        // any; a fork reuses its source's access token. Not its refresh token:
+        // the server revokes one when it is used, so two sessions renewing
+        // with the same one would leave the slower of them signed out.
         $session = $source === null ? new SessionState(id: $id) : new SessionState(
             id: $id,
             namespace: $source->namespace,
             database: $source->database,
             auth: new AuthState(
                 $source->auth->accessToken,
-                $source->auth->refreshToken,
+                null,
                 $source->auth->overridden,
             ),
         );
@@ -910,10 +985,6 @@ final class ConnectionController
         return $id;
     }
 
-    /**
-     * @param bool $fork whether the session's tokens were copied from another
-     *                   session, which still holds them
-     */
     /**
      * Run a commit or cancel. Once the server has answered, even with an
      * error (a commit that hit a conflict is gone too), the transaction is
@@ -961,6 +1032,10 @@ final class ConnectionController
         }
     }
 
+    /**
+     * @param bool $fork whether the session's tokens were copied from another
+     *                   session, which still holds them
+     */
     private function restoreSession(SessionState $session, bool $fork = false): void
     {
         // Authenticate first: a server that refuses guests (the SurrealDB 2.x

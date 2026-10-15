@@ -20,9 +20,9 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
 
     /**
      * Called with each outgoing payload before it is sent; it may sever the
-     * connection to fail that send.
+     * connection to fail that send, or return a payload to send instead.
      *
-     * @var (\Closure(string): void)|null
+     * @var (\Closure(string): ?string)|null
      */
     public ?\Closure $beforeSend = null;
 
@@ -57,7 +57,7 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
     public function send(string $payload, bool $binary = false): void
     {
         if ($this->beforeSend !== null) {
-            ($this->beforeSend)($payload);
+            $payload = ($this->beforeSend)($payload) ?? $payload;
         }
 
         if ($this->severed) {
