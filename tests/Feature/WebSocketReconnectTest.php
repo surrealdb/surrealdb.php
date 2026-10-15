@@ -17,6 +17,7 @@ use SurrealDB\SDK\Support\Jwt;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use SurrealDB\SDK\Types\Uuid;
 use SurrealDB\Tests\Fakes\SeverableWebSocketClient;
 use function count;
 
@@ -360,6 +361,74 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testAKilledFeedBehindAnEarlierSocketsIsStillDrained(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $db->create(new RecordId('person', 'one'))->execute();
+            $db->create(new RecordId('person', 'two'))->execute();
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            $received = [];
+
+            foreach ($live as $message) {
+                $received[] = $message->action === LiveAction::Killed ? 'killed' : (string) $message->record;
+
+                // Still draining the first socket's feed: the replayed query
+                // receives a record, then is killed on the server.
+                if (count($received) === 1) {
+                    $db->create(new RecordId('person', 'three'))->execute();
+                    $db->run('KILL ' . Uuid::from($live->id())->escape());
+                    $db->run('RETURN 1');
+                    self::assertFalse($live->isAlive());
+                }
+            }
+
+            self::assertSame(['person:one', 'person:two', 'person:three', 'killed'], $received);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testLosingTheSocketWhileKillingAReleasedSubscriptionStopsTheStaleReplay(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $released = $db->live(new Table('person'))->execute();
+            $kept = $db->live(new Table('person'))->execute();
+            $client = $this->client;
+
+            // Let go of the first while it replays, and lose the socket while
+            // its new query is being killed.
+            $client->beforeSend = static function (string $payload) use ($client, &$released): ?string {
+                if ($released !== null && str_contains($payload, 'LIVE SELECT')) {
+                    $released = null;
+                } elseif (str_contains($payload, 'KILL')) {
+                    $client->beforeSend = null;
+                    $client->sever();
+                }
+
+                return null;
+            };
+
+            $client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            self::assertSame(
+                [$kept->id()],
+                array_keys($db->run('INFO FOR TABLE person')[0]['lives']),
+            );
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testLiveQueriesAreReplayedBeforeConnectedIsAnnounced(): void
     {
         $db = $this->connect();
@@ -685,6 +754,44 @@ final class WebSocketReconnectTest extends TestCase
             self::assertSame([1], $db->run('RETURN 1'));
             self::assertNotNull($token);
             self::assertSame($token, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testARenewalWhileSigningOutDoesNotSignBackIn(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+
+        try {
+            $db->use($this->namespace, 'db');
+            // Renewal falls due one second after sign-in.
+            sleep(2);
+
+            // A call that would renew, made while the sign-out waits for its
+            // reply.
+            $client = $this->client;
+            $client->afterSend = static function (string $payload) use ($client, $db): void {
+                if (str_contains($payload, 'invalidate')) {
+                    $client->afterSend = null;
+
+                    try {
+                        $db->run('RETURN 1');
+                    } catch (SurrealException) {
+                    }
+                }
+            };
+
+            $db->invalidate();
+
+            self::assertNull($db->accessToken());
+
+            try {
+                $db->run('INFO FOR NS');
+                self::fail('Expected the signed-out session to be refused.');
+            } catch (SurrealException) {
+            }
         } finally {
             $db->close();
         }

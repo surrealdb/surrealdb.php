@@ -26,6 +26,13 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
      */
     public ?\Closure $beforeSend = null;
 
+    /**
+     * Called with each payload once it is sent, before its reply is read.
+     *
+     * @var (\Closure(string): void)|null
+     */
+    public ?\Closure $afterSend = null;
+
     public function __construct(
         private readonly StreamWebSocketClient $inner = new StreamWebSocketClient(),
     ) {}
@@ -65,6 +72,10 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
         }
 
         $this->inner->send($payload, $binary);
+
+        if ($this->afterSend !== null) {
+            ($this->afterSend)($payload);
+        }
     }
 
     public function receive(?float $timeout = null): ?string
