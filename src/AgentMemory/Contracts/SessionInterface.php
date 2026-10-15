@@ -55,6 +55,8 @@ interface SessionInterface
      * Retried like a read, with an `Idempotency-Key`, as the JS client does.
      *
      * @return SessionContextResponseJson
+     *
+     * @throws InvalidArgumentException when the query is blank, before any request is sent
      */
     public function context(string $query): array;
 }

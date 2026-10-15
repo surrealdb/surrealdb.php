@@ -43,7 +43,12 @@ interface ScopesInterface
      */
     public function register(ScopeRegisterOptions $options): array;
 
-    /** Deletes (tombstones) a scope node by path; the root scope cannot be deleted. */
+    /**
+     * Deletes (tombstones) a scope node by path; the root scope cannot be deleted.
+     *
+     * @throws InvalidArgumentException when the path is blank, which would address the root scope, before any
+     *                                  request is sent
+     */
     public function delete(string $path): void;
 
     /**

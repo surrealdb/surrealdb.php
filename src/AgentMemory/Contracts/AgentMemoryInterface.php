@@ -133,6 +133,8 @@ interface AgentMemoryInterface
      * retry after a lost response can record one more retrieval trace.
      *
      * @return QueryMemoryResponseJson
+     *
+     * @throws InvalidArgumentException when the query is blank, before any request is sent
      */
     public function recall(string $query, ?RecallOptions $options = null): array;
 
@@ -149,6 +151,8 @@ interface AgentMemoryInterface
      * retry after a lost response can record one more retrieval trace.
      *
      * @return LookupResponseJson
+     *
+     * @throws InvalidArgumentException when the query is blank and no `subject` is given, before any request is sent
      */
     public function lookup(string $query, ?LookupOptions $options = null): array;
 
@@ -157,6 +161,8 @@ interface AgentMemoryInterface
      * `dryRun` to preview the count first.
      *
      * @return ForgetResponseJson
+     *
+     * @throws InvalidArgumentException when the query is blank, before any request is sent
      */
     public function forget(string $query, ?ForgetOptions $options = null): array;
 
@@ -165,6 +171,8 @@ interface AgentMemoryInterface
      * and the memory updates. For incremental tokens use {@see chatStream()}.
      *
      * @return ChatResponseJson
+     *
+     * @throws InvalidArgumentException when the message is blank, before any request is sent
      */
     public function chat(string $message, ?ChatOptions $options = null): array;
 
@@ -199,6 +207,8 @@ interface AgentMemoryInterface
      * retry after a lost response can record one more retrieval trace.
      *
      * @return ContextQueryResponseJson
+     *
+     * @throws InvalidArgumentException when the query is blank, before any request is sent
      */
     public function context(string $query, ?ContextOptions $options = null): array;
 
@@ -207,6 +217,8 @@ interface AgentMemoryInterface
      * (`POST /reflect`).
      *
      * @return ReflectResponseJson
+     *
+     * @throws InvalidArgumentException when the query is blank, before any request is sent
      */
     public function reflect(string $query, ?ReflectOptions $options = null): array;
 

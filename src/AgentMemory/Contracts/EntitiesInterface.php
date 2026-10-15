@@ -56,6 +56,8 @@ interface EntitiesInterface
      * same-named candidates can be told apart.
      *
      * @return list<EntityMatchJson> the `matches`
+     *
+     * @throws InvalidArgumentException when the query is blank, before any request is sent
      */
     public function search(string $query, ?EntitySearchOptions $options = null): array;
 

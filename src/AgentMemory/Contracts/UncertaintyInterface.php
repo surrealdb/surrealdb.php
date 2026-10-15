@@ -54,8 +54,9 @@ interface UncertaintyInterface
      *
      * @return UncertaintyJson the settled `uncertainty` row
      *
-     * @throws NotFoundException when no such flag is visible to the caller
-     * @throws ScopeException    when the flag reaches beyond the caller's `memory:write` region
+     * @throws InvalidArgumentException when the accepted value is blank, before any request is sent
+     * @throws NotFoundException        when no such flag is visible to the caller
+     * @throws ScopeException           when the flag reaches beyond the caller's `memory:write` region
      */
     public function resolve(string $uncertaintyId, string $acceptedValue, ?string $note = null): array;
 }
