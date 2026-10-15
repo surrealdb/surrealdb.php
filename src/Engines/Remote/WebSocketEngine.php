@@ -113,7 +113,21 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         // An eager scheduler may already have run the read loop, which can
         // have lost this socket (and announced its replacement itself).
         if ($connected && $this->isCurrent($generation)) {
-            $this->publisher->publish('connected');
+            $this->announceConnected($generation);
+        }
+    }
+
+    /**
+     * Announce a newly opened socket. The reconnect strategy starts over
+     * only once the session is restored on it: a socket that keeps dropping
+     * half way through still uses up the attempts.
+     */
+    private function announceConnected(int $generation): void
+    {
+        $this->publisher->publish('connected');
+
+        if ($this->isCurrent($generation)) {
+            $this->state?->reconnect->reset();
         }
     }
 
@@ -249,7 +263,6 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             $this->transport->open();
             $this->active = true;
             $this->generation++;
-            $this->state?->reconnect->reset();
 
             return true;
         } catch (\Throwable $error) {
@@ -282,7 +295,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
                     // The socket may have dropped (and a retry begun) before
                     // this task ran; announcing then would answer a dead link.
                     if ($this->isCurrent($generation)) {
-                        $this->publisher->publish('connected');
+                        $this->announceConnected($generation);
                     }
                 });
             }
@@ -354,7 +367,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             $this->replaceTransport();
 
             if ($this->connectOnce()) {
-                $this->publisher->publish('connected');
+                $this->announceConnected($this->generation);
 
                 return true;
             }
