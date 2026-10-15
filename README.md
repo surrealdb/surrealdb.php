@@ -230,7 +230,7 @@ $db->connect('wss://example.com/rpc', new ConnectOptions(
 ));
 
 $db->subscribe('reconnecting', fn () => $logger->warning('Reconnecting to SurrealDB'));
-$db->status();          // ConnectionStatus::Connected, Reconnecting or Disconnected
+$db->status();          // ConnectionStatus::Connecting, Connected, Reconnecting or Disconnected
 $db->version();
 ```
 
