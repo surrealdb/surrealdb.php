@@ -4,6 +4,7 @@ namespace SurrealDB\AgentMemory\Options;
 
 use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\EntityRef;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Payload;
 
 /** Options for {@see AgentMemory::elaborate()}: name one entity, or sweep. */
@@ -22,7 +23,7 @@ final readonly class ElaborateOptions
         public bool $dryRun = false,
     ) {
         if ($this->entityRef === null && !$this->sweep) {
-            throw new \InvalidArgumentException('ElaborateOptions needs an entityRef to elaborate from, or sweep: true.');
+            throw new InvalidArgumentException('ElaborateOptions needs an entityRef to elaborate from, or sweep: true.');
         }
     }
 

@@ -5,6 +5,7 @@ namespace SurrealDB\Tests\Unit\AgentMemory;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\AgentMemory\AgentMemoryOptions;
 use SurrealDB\AgentMemory\Enum\Verb;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\DocumentQueryOptions;
 use SurrealDB\AgentMemory\Options\EffectiveGrantsOptions;
 use SurrealDB\AgentMemory\Options\ElaborateOptions;
@@ -73,7 +74,7 @@ final class OptionsValidationTest extends TestCase
             try {
                 $build();
                 $this->fail('An elaboration without a target should be rejected');
-            } catch (\InvalidArgumentException) {
+            } catch (InvalidArgumentException) {
                 $this->addToAssertionCount(1);
             }
         }
@@ -99,7 +100,7 @@ final class OptionsValidationTest extends TestCase
             try {
                 $build();
                 $this->fail("A blank {$name} should be rejected");
-            } catch (\InvalidArgumentException) {
+            } catch (InvalidArgumentException) {
                 $this->addToAssertionCount(1);
             }
         }

@@ -3,6 +3,7 @@
 namespace SurrealDB\AgentMemory\Components;
 
 use SurrealDB\AgentMemory;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\SessionCreateOptions;
 use SurrealDB\AgentMemory\Paths;
 use SurrealDB\AgentMemory\Transport;
@@ -35,7 +36,7 @@ final class Sessions
     public function attach(string $sessionId): Session
     {
         if (trim($sessionId) === '') {
-            throw new \InvalidArgumentException('Sessions::attach() requires a session id.');
+            throw new InvalidArgumentException('Sessions::attach() requires a session id.');
         }
 
         return new Session($this->transport, $this->contextId, ['id' => $sessionId]);

@@ -3,6 +3,7 @@
 namespace SurrealDB\AgentMemory\Options;
 
 use SurrealDB\AgentMemory\Components\Entities;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Payload;
 
 /** Options for {@see Entities::neighbourhood()}. */
@@ -22,7 +23,7 @@ final readonly class NeighbourhoodOptions
         public bool $count = false,
     ) {
         if ($this->count && $this->minFacts !== null && $this->minFacts > 0) {
-            throw new \InvalidArgumentException('NeighbourhoodOptions cannot combine count with a positive minFacts.');
+            throw new InvalidArgumentException('NeighbourhoodOptions cannot combine count with a positive minFacts.');
         }
     }
 

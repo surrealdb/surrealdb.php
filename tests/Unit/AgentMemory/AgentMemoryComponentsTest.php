@@ -11,6 +11,7 @@ use SurrealDB\AgentMemory\Enum\GraphEdgeKind;
 use SurrealDB\AgentMemory\Enum\QueryMode;
 use SurrealDB\AgentMemory\Enum\Verb;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\DocumentListOptions;
 use SurrealDB\AgentMemory\Options\DocumentQueryOptions;
 use SurrealDB\AgentMemory\Options\DocumentUploadOptions;
@@ -382,7 +383,7 @@ final class AgentMemoryComponentsTest extends TestCase
             try {
                 $call();
                 $this->fail("A blank {$name} should be rejected");
-            } catch (\InvalidArgumentException) {
+            } catch (InvalidArgumentException) {
                 $this->addToAssertionCount(1);
             }
         }

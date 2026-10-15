@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Enum\MemoryCategory;
 use SurrealDB\AgentMemory\Enum\TurnRole;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Message;
 use SurrealDB\AgentMemory\MimeType;
 use SurrealDB\AgentMemory\Options\AttributeListOptions;
@@ -31,7 +32,7 @@ final class ValueObjectsTest extends TestCase
             try {
                 EntityRef::parse($ref);
                 $this->fail("Expected '{$ref}' to be rejected");
-            } catch (\InvalidArgumentException) {
+            } catch (InvalidArgumentException) {
                 $this->addToAssertionCount(1);
             }
         }
@@ -118,7 +119,7 @@ final class ValueObjectsTest extends TestCase
             try {
                 $build();
                 $this->fail("Case {$i} should be rejected");
-            } catch (\InvalidArgumentException) {
+            } catch (InvalidArgumentException) {
                 $this->addToAssertionCount(1);
             }
         }

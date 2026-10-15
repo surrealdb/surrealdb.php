@@ -2,6 +2,8 @@
 
 namespace SurrealDB\AgentMemory;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+
 /**
  * Builds a `multipart/form-data` request body. Parts are emitted in insertion
  * order. The server accepts the `metadata` and `file` parts in either order;
@@ -41,7 +43,7 @@ final class MultipartFormData
     public function addFile(string $name, string $filename, string $contents, ?string $contentType): void
     {
         if ($contentType !== null && strpbrk($contentType, "\r\n") !== false) {
-            throw new \InvalidArgumentException('A multipart Content-Type cannot contain line breaks.');
+            throw new InvalidArgumentException('A multipart Content-Type cannot contain line breaks.');
         }
 
         $this->parts[] = 'Content-Disposition: form-data; name="' . self::quote($name) . '"; filename="'

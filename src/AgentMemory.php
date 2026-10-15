@@ -16,6 +16,7 @@ use SurrealDB\AgentMemory\Components\Traces;
 use SurrealDB\AgentMemory\Components\Uncertainty;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\StreamException;
 use SurrealDB\AgentMemory\Message;
 use SurrealDB\AgentMemory\Options\AuditOptions;
@@ -151,7 +152,7 @@ final class AgentMemory
     public function onBehalfOf(string $principalId): self
     {
         if ($principalId === '') {
-            throw new \InvalidArgumentException('onBehalfOf requires a principal id.');
+            throw new InvalidArgumentException('onBehalfOf requires a principal id.');
         }
 
         return new self($this->options, $this->connection, $principalId);

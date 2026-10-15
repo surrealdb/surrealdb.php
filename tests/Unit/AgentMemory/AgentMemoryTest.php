@@ -19,6 +19,7 @@ use SurrealDB\AgentMemory\Enum\TraceKind;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\AuthException;
 use SurrealDB\AgentMemory\Exceptions\ConflictException;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Exceptions\RateLimitException;
 use SurrealDB\AgentMemory\Exceptions\ScopeException;
@@ -40,9 +41,12 @@ use SurrealDB\AgentMemory\Options\RememberOptions;
 use SurrealDB\AgentMemory\Options\StateOptions;
 use SurrealDB\AgentMemory\Triple;
 use SurrealDB\Exceptions\HttpConnectionException;
+use SurrealDB\Exceptions\InvalidValueException;
+use SurrealDB\Exceptions\SurrealExceptionInterface;
 use SurrealDB\Tests\Fakes\RecordingHttpConnection;
 use SurrealDB\Tests\Fakes\RecordingScheduler;
 use SurrealDB\Tests\Fakes\SequenceHttpConnection;
+use SurrealDB\Types\Duration;
 
 final class AgentMemoryTest extends TestCase
 {
@@ -358,6 +362,31 @@ final class AgentMemoryTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
 
         new AgentMemoryOptions('https://memory.example.com', '', 'secret');
+    }
+
+    public function testOneCatchCoversEverySdkException(): void
+    {
+        $connection = new SequenceHttpConnection([
+            new HttpConnectionException('nope', 404, 'Nope', '{"message":"not found"}'),
+        ]);
+        $client = $this->retryingClient($connection, maxRetries: 0);
+        $cases = [
+            NotFoundException::class => static fn () => $client->state(),
+            InvalidArgumentException::class => static fn () => $client->sessions->attach(' '),
+            InvalidValueException::class => static fn () => Duration::fromString('nope'),
+        ];
+
+        foreach ($cases as $exceptionClass => $call) {
+            try {
+                $call();
+                $this->fail("Expected {$exceptionClass}");
+            } catch (SurrealExceptionInterface $e) {
+                $this->assertSame($exceptionClass, $e::class);
+            }
+        }
+
+        // Argument errors still satisfy a catch written for PHP's own class.
+        $this->assertInstanceOf(\InvalidArgumentException::class, new InvalidArgumentException('x'));
     }
 
     public function testFailedStatusesMapToTypedExceptions(): void

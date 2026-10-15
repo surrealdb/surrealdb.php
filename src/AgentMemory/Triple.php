@@ -4,6 +4,7 @@ namespace SurrealDB\AgentMemory;
 
 use SurrealDB\AgentMemory\Enum\InferMode;
 use SurrealDB\AgentMemory\Enum\MemoryCategory;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\RememberOptions;
 
 /**
@@ -41,15 +42,15 @@ final readonly class Triple
         public ?string $sourceClause = null,
     ) {
         if ($this->occurredAt !== null && $this->temporalHint !== null) {
-            throw new \InvalidArgumentException('A triple states its time once: pass occurredAt or temporalHint, not both.');
+            throw new InvalidArgumentException('A triple states its time once: pass occurredAt or temporalHint, not both.');
         }
 
         if ($this->validFrom !== null && ($this->occurredAt !== null || $this->temporalHint !== null)) {
-            throw new \InvalidArgumentException('validFrom states when a relation starts; it cannot be combined with occurredAt or temporalHint.');
+            throw new InvalidArgumentException('validFrom states when a relation starts; it cannot be combined with occurredAt or temporalHint.');
         }
 
         if ($this->confidence !== null && ($this->confidence < 0.0 || $this->confidence > 1.0)) {
-            throw new \InvalidArgumentException("Triple confidence must lie in [0, 1], got {$this->confidence}.");
+            throw new InvalidArgumentException("Triple confidence must lie in [0, 1], got {$this->confidence}.");
         }
     }
 
@@ -183,7 +184,7 @@ final readonly class Triple
     private static function required(string $field, string $value): string
     {
         if (trim($value) === '') {
-            throw new \InvalidArgumentException("A triple's {$field} must be non-empty.");
+            throw new InvalidArgumentException("A triple's {$field} must be non-empty.");
         }
 
         return $value;

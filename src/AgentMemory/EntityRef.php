@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use function strlen;
 
 /**
@@ -23,11 +24,11 @@ final readonly class EntityRef implements \Stringable
         public string $name,
     ) {
         if (trim($this->type) === '' || str_contains($this->type, '/')) {
-            throw new \InvalidArgumentException("EntityRef type must be a non-empty segment without '/', got \"{$this->type}\".");
+            throw new InvalidArgumentException("EntityRef type must be a non-empty segment without '/', got \"{$this->type}\".");
         }
 
         if (trim($this->name) === '') {
-            throw new \InvalidArgumentException('EntityRef requires a non-empty name.');
+            throw new InvalidArgumentException('EntityRef requires a non-empty name.');
         }
     }
 
@@ -41,7 +42,7 @@ final readonly class EntityRef implements \Stringable
         $slash = strpos($bare, '/');
 
         if ($slash === false) {
-            throw new \InvalidArgumentException("Entity refs have the form `<type>/<name>`, got \"{$ref}\".");
+            throw new InvalidArgumentException("Entity refs have the form `<type>/<name>`, got \"{$ref}\".");
         }
 
         return new self(substr($bare, 0, $slash), substr($bare, $slash + 1));

@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Options\EntityGetOptions;
 use SurrealDB\AgentMemory\Options\EntityHistoryOptions;
@@ -42,7 +43,7 @@ final class Entities
     public function search(string $name, ?EntitySearchOptions $options = null): array
     {
         if (trim($name) === '') {
-            throw new \InvalidArgumentException('Entity search requires a non-empty name.');
+            throw new InvalidArgumentException('Entity search requires a non-empty name.');
         }
 
         $query = ['q' => $name] + ($options?->toQuery() ?? []);

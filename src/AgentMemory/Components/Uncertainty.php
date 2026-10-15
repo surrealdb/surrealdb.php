@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Exceptions\ScopeException;
 use SurrealDB\AgentMemory\Options\UncertaintyListOptions;
@@ -43,7 +44,7 @@ final class Uncertainty
     public function resolve(string $uncertaintyId, string $acceptedValue, ?string $note = null): array
     {
         if (trim($acceptedValue) === '') {
-            throw new \InvalidArgumentException('Resolving an uncertainty requires a non-empty accepted value.');
+            throw new InvalidArgumentException('Resolving an uncertainty requires a non-empty accepted value.');
         }
 
         $body = ['acceptedValue' => $acceptedValue] + ($note === null ? [] : ['note' => $note]);

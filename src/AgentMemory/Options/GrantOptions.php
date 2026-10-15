@@ -4,6 +4,7 @@ namespace SurrealDB\AgentMemory\Options;
 
 use SurrealDB\AgentMemory\Components\Principals;
 use SurrealDB\AgentMemory\Enum\Verb;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 
 /** Options for {@see Principals::grant()} and {@see Principals::revoke()}. */
 final readonly class GrantOptions
@@ -19,11 +20,11 @@ final readonly class GrantOptions
         public array $verbs,
     ) {
         if (trim($this->path) === '') {
-            throw new \InvalidArgumentException('GrantOptions requires a non-empty path.');
+            throw new InvalidArgumentException('GrantOptions requires a non-empty path.');
         }
 
         if ($this->verbs === []) {
-            throw new \InvalidArgumentException('GrantOptions requires at least one verb.');
+            throw new InvalidArgumentException('GrantOptions requires at least one verb.');
         }
     }
 

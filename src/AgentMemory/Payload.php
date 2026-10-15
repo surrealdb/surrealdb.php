@@ -2,6 +2,8 @@
 
 namespace SurrealDB\AgentMemory;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+
 /** Small helpers shared by the options classes when building wire payloads. */
 final class Payload
 {
@@ -44,7 +46,7 @@ final class Payload
      * `entity:<type>/<name>` that responses carry is accepted, and a string
      * that is no entity ref at all fails here instead of matching nothing.
      *
-     * @throws \InvalidArgumentException when a string is not of the form `<type>/<name>`
+     * @throws InvalidArgumentException when a string is not of the form `<type>/<name>`
      */
     public static function ref(EntityRef|string|null $ref): ?string
     {
