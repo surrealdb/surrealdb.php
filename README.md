@@ -157,7 +157,7 @@ foreach ($db->statements('RETURN 1; THROW "boom"')->responses() as $response) {
 
 ### Data types
 
-SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions, except `Bytes`: it is sent as a byte string, which comes back as a plain PHP `string`. `Set`, `Range` and `RecordIdRange` need SurrealDB 3.0 or later, and `File` also needs a server with the experimental files capability enabled. `Future` is only for SurrealDB 2.x, since 3.0 removed futures.
+SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions, with two exceptions. `Bytes` is sent as a byte string, which comes back as a plain PHP `string`. A `StringRecordId` comes back as a `RecordId`, because the server never returns the string form. `Set`, `Range` and `RecordIdRange` need SurrealDB 3.0 or later, and `File` also needs a server with the experimental files capability enabled. `Future` is only for SurrealDB 2.x, since 3.0 removed futures.
 
 ## Sessions and transactions
 
@@ -273,6 +273,7 @@ $db->graphql('query Person($id: ID!) { person(id: $id) { name } }', ['id' => 'to
 
 // Export SurrealQL, then import it into another, empty database.
 $surql = $db->export();
+$db->run('DEFINE DATABASE IF NOT EXISTS copy');   // strict servers don't create it on use()
 $db->use('test', 'copy');
 $db->import($surql);
 ```
