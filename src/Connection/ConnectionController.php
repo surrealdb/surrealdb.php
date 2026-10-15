@@ -833,6 +833,14 @@ final class ConnectionController
 
                 if ($expiry !== null && $expiry > $at) {
                     $this->renewAt[$key] = $expiry;
+
+                    // Under an async scheduler, check at expiry even if no
+                    // call comes along: that signs the session out (and ends
+                    // its live queries) unless something can replace it.
+                    $this->context->scheduler->spawn(function () use ($expiry, $session): void {
+                        $this->context->scheduler->delay((float) max($expiry - time(), 0));
+                        $this->renewIfDue($session);
+                    });
                 } else {
                     unset($this->renewAt[$key]);
                 }
