@@ -35,6 +35,9 @@ final class WebSocketEngine extends AbstractRpcEngine
     private bool $active = false;
     private bool $terminated = false;
 
+    /** Incremented on every successful open, identifying the active transport. */
+    private int $generation = 0;
+
     /** @var array<string,Deferred<RpcResponse<mixed>>> */
     private array $calls = [];
 
@@ -190,6 +193,7 @@ final class WebSocketEngine extends AbstractRpcEngine
         try {
             $this->transport?->open();
             $this->active = true;
+            $this->generation++;
             $this->state?->reconnect->reset();
 
             return true;
@@ -207,7 +211,14 @@ final class WebSocketEngine extends AbstractRpcEngine
             // This loop is the only reader, so it cannot itself wait on the
             // RPCs that restore the session: announce from a separate task.
             if (!$this->active && $this->connectOnce()) {
-                $this->context->scheduler->spawn(fn () => $this->publisher->publish('connected'));
+                $generation = $this->generation;
+                $this->context->scheduler->spawn(function () use ($generation): void {
+                    // The socket may have dropped (and a retry begun) before
+                    // this task ran; announcing then would answer a dead link.
+                    if ($this->active && !$this->terminated && $this->generation === $generation) {
+                        $this->publisher->publish('connected');
+                    }
+                });
             }
 
             while ($this->active && !$this->terminated) {
