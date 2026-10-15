@@ -94,7 +94,12 @@ abstract class LiveSubscription implements \IteratorAggregate
     public function sessionEnded(): void
     {
         $this->ended = true;
-        $this->closeFeed();
+
+        // Drop what was queued too: it was delivered to whoever the session
+        // was signed in as before.
+        if ($this->feed instanceof LiveFeed) {
+            $this->feed->discard();
+        }
     }
 
     /**
