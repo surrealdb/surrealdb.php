@@ -42,11 +42,19 @@ View the SDK documentation [here](https://surrealdb.com/docs/integration/librari
 
 ## Installation
 
+v2 is in alpha, so ask Composer for it explicitly (a plain `composer require` installs 1.x):
+
 ```sh
-composer require surrealdb/surrealdb.php
+composer require surrealdb/surrealdb.php:^2.0@alpha
 ```
 
-Requires PHP 8.4 or later. The HTTP engine needs a PSR-18 client and PSR-17 factories (for example `composer require guzzlehttp/guzzle`, found automatically through `php-http/discovery`). The WebSocket engine needs nothing extra.
+Requires PHP 8.4 or later. The WebSocket engine needs nothing extra. The HTTP engine, and `import()` / `export()` on any connection, need a PSR-18 client and PSR-17 factories, found through `php-http/discovery`:
+
+```sh
+composer require guzzlehttp/guzzle php-http/discovery
+```
+
+Without discovery, pass the implementations yourself through `DriverOptions` (`httpClient`, `requestFactory`, `streamFactory`).
 
 The SDK supports SurrealDB 2.x and 3.x, and accepts 4.x servers. Sessions, transactions, `api()` and refresh tokens need SurrealDB 3.0, and `gql()` / `graphql()` need 3.2.
 
@@ -116,14 +124,14 @@ Every builder runs with `execute()`; `compile()` returns the SurrealQL and bindi
 ```php
 use SurrealDB\SDK\Enum\Output;
 
-$db->select(new Table('person'))->fields('name', 'age')->where('age > 18')->start(20)->limit(10)->fetch('friends');
-$db->create(new Table('person'))->content(['name' => 'Jaime'])->output(Output::AFTER);
-$db->update(new Table('person'))->merge(['active' => true])->where('last_seen > time::now() - 1w');
-$db->upsert(new RecordId('person', 'tobie'))->replace(['name' => 'Tobie']);
-$db->delete(new RecordId('person', 'tobie'));
-$db->insert(new Table('person'), [['name' => 'A'], ['name' => 'B']])->ignore();
-$db->relate(new RecordId('person', 'tobie'), new Table('knows'), new RecordId('person', 'jaime'), ['since' => 2020]);
-$db->call('fn::greet', args: ['Tobie']);
+$db->select(new Table('person'))->fields('name', 'age')->where('age > 18')->start(20)->limit(10)->fetch('friends')->execute();
+$db->create(new Table('person'))->content(['name' => 'Jaime'])->output(Output::AFTER)->execute();
+$db->update(new Table('person'))->merge(['active' => true])->where('last_seen > time::now() - 1w')->execute();
+$db->upsert(new RecordId('person', 'tobie'))->replace(['name' => 'Tobie'])->execute();
+$db->delete(new RecordId('person', 'tobie'))->execute();
+$db->insert(new Table('person'), [['name' => 'A'], ['name' => 'B']])->ignore()->execute();
+$db->relate(new RecordId('person', 'tobie'), new Table('knows'), new RecordId('person', 'jaime'), ['since' => 2020])->execute();
+$db->call('fn::greet', args: ['Tobie'])->execute();
 ```
 
 Multi-statement SurrealQL can be streamed, or inspected without throwing on failed statements:
@@ -155,12 +163,12 @@ SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdR
 On a WebSocket connection, `Surreal` is the default session. Open more sessions on the same connection, each with its own namespace, database, variables and authentication; every builder works on them.
 
 ```php
-$session = $db->newSession();               // authenticated like the connection
+$session = $db->newSession();               // signed in only by ConnectOptions::$authentication
 $session->use('test', 'other');
 $session->let('tenant', 'acme');
 $session->select(new Table('person'))->execute();
 
-$fork = $session->forkSession();            // copies ns, db, variables and tokens
+$fork = $db->forkSession();                 // copies ns, db, variables and tokens, e.g. after signin()
 $db->sessions();                            // ids of the attached sessions
 $fork->closeSession();
 ```
@@ -189,22 +197,25 @@ use SurrealDB\SDK\Live\LiveAction;
 
 $live = $db->live(new Table('person'))->where('age >= 18')->execute();
 
+// Iteration waits for the next notification, so stop from inside the loop.
 foreach ($live as $message) {
     match ($message->action) {
         LiveAction::Create, LiveAction::Update => handle($message->value),
         LiveAction::Delete => forget($message->record),
         LiveAction::Killed => null, // the last message
     };
-}
 
-$live->kill();
+    if (shouldStop()) {
+        $live->kill();              // ends the iteration
+    }
+}
 ```
 
 Live queries the SDK started are re-issued after a reconnect, and iteration carries on across it. `liveOf($id)` attaches to a live query started elsewhere (for example by `LIVE SELECT` in `run()`), and `kill($id)` stops one by id.
 
 ## Connections
 
-`ConnectOptions::$reconnect` (on by default) reconnects with exponential backoff and restores every session's namespace, database, variables and authentication. Under the default synchronous scheduler the SDK notices a dropped connection on the next call or `status()` check: that call fails, and the next one runs on the new connection.
+`ConnectOptions::$reconnect` (on by default) reconnects with exponential backoff and restores every session's namespace, database, variables and authentication. Under the default synchronous scheduler the SDK notices a dropped connection when it next uses it. A call that finds the socket dead fails, and the next one runs on the new connection; `status()` checks the socket and reconnects on the spot, so it reports `Connected` once that has worked.
 
 ```php
 $db->connect('wss://example.com/rpc', new ConnectOptions(
@@ -220,13 +231,18 @@ Connection events are also dispatched as PSR-14 events (`SurrealDB\SDK\Events\*`
 
 ### Async runtimes
 
-The default runtime is blocking. For long-running workers, use a runtime preset:
+The default runtime is blocking. For long-running workers, use a runtime preset. Each needs its own packages:
+
+```sh
+composer require openswoole/core                     # Runtime::swoole(), plus the openswoole extension
+composer require revolt/event-loop amphp/websocket-client amphp/http-client   # Runtime::amp()
+```
 
 ```php
 use SurrealDB\SDK\Runtime\Runtime;
 
-$db = new Surreal(Runtime::swoole());   // OpenSwoole coroutines
-$db = new Surreal(Runtime::amp());      // Revolt/Amp fibers, e.g. FrankenPHP worker mode
+$db = new Surreal(Runtime::swoole());   // inside a coroutine, e.g. Co\run() or an OpenSwoole server
+$db = new Surreal(Runtime::amp());      // inside the Revolt event loop, e.g. FrankenPHP worker mode
 ```
 
 These run a background read loop, keepalive pings and token renewal timers.
