@@ -176,12 +176,16 @@ final class LiveQueryTest extends TestCase
 
             try {
                 $live = $db->live(new Table('person'))->execute();
+                // Received (the next call reads it off the socket) but not
+                // yet iterated: it belongs to the previous principal.
+                $db->create(new RecordId('person', 'before'))->execute();
+                $db->run('RETURN 1');
                 $change($db);
 
                 self::assertFalse($live->isAlive(), "{$call}() should end the live query");
 
                 foreach ($live as $message) {
-                    self::assertSame(LiveAction::Killed, $message->action);
+                    self::assertSame(LiveAction::Killed, $message->action, "{$call}() should drop queued notifications");
                 }
             } finally {
                 $db->close();
