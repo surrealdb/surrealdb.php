@@ -55,6 +55,50 @@ final class StreamWebSocketClientCloseTest extends TestCase
         }
     }
 
+    public function testABufferedPingDoesNotBlockTheCheck(): void
+    {
+        $url = $this->startServer(<<<'PHP'
+            fwrite($conn, chr(0x89) . chr(0));
+            PHP);
+
+        $client = new StreamWebSocketClient(connectTimeout: 5.0);
+        $client->connect($url);
+
+        try {
+            usleep(300_000);
+            $start = microtime(true);
+
+            self::assertTrue($client->isConnected());
+            self::assertLessThan(1.0, microtime(true) - $start);
+        } finally {
+            $client->close();
+        }
+    }
+
+    public function testAPartlyArrivedFrameDoesNotBlockTheCheckAndIsStillRead(): void
+    {
+        // The header and part of the payload, then the rest a little later.
+        $url = $this->startServer(<<<'PHP'
+            fwrite($conn, chr(0x81) . chr(5) . 'he');
+            usleep(800_000);
+            fwrite($conn, 'llo');
+            PHP);
+
+        $client = new StreamWebSocketClient(connectTimeout: 5.0);
+        $client->connect($url);
+
+        try {
+            usleep(300_000);
+            $start = microtime(true);
+
+            self::assertTrue($client->isConnected());
+            self::assertLessThan(0.5, microtime(true) - $start);
+            self::assertSame('hello', $client->receive(5.0));
+        } finally {
+            $client->close();
+        }
+    }
+
     public function testAnIdleOpenConnectionIsConnected(): void
     {
         $url = $this->startServer('');
