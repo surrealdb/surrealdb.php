@@ -473,6 +473,11 @@ final class ConnectionController
         // a counter increment rather than a span (which would activate a scope
         // in one callback and close it in another).
         $this->connections->add(1, ['db.system.name' => 'surrealdb', 'outcome' => 'reconnect']);
+        // The lost socket took its transactions with it.
+        foreach ($this->state?->allSessions() ?? [] as $session) {
+            $session->transactions = [];
+        }
+
         $this->status = ConnectionStatus::Reconnecting;
         $this->events->publish('reconnecting');
         $this->context->events->dispatch(new Reconnecting());
@@ -666,14 +671,16 @@ final class ConnectionController
         $this->requireEngine()->attach($id);
 
         // A new session is authenticated by the configured auth provider, if
-        // any; a fork reuses its source's tokens.
+        // any; a fork reuses its source's access token. Not its refresh token:
+        // the server revokes one when it is used, so two sessions renewing
+        // with the same one would leave the slower of them signed out.
         $session = $source === null ? new SessionState(id: $id) : new SessionState(
             id: $id,
             namespace: $source->namespace,
             database: $source->database,
             auth: new AuthState(
                 $source->auth->accessToken,
-                $source->auth->refreshToken,
+                null,
                 $source->auth->overridden,
             ),
         );
@@ -698,10 +705,6 @@ final class ConnectionController
         return $id;
     }
 
-    /**
-     * @param bool $fork whether the session's tokens were copied from another
-     *                   session, which still holds them
-     */
     /**
      * Run a commit or cancel. Once the server has answered, even with an
      * error (a commit that hit a conflict is gone too), the transaction is
@@ -749,6 +752,10 @@ final class ConnectionController
         }
     }
 
+    /**
+     * @param bool $fork whether the session's tokens were copied from another
+     *                   session, which still holds them
+     */
     private function restoreSession(SessionState $session, bool $fork = false): void
     {
         // Authenticate first: a server that refuses guests (the SurrealDB 2.x
