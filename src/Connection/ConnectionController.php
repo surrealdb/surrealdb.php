@@ -632,22 +632,6 @@ final class ConnectionController
 
             try {
                 $subscription->replay();
-                $replayed[] = $weak;
-
-                // The application may have let go of it while its query was
-                // in flight. Once this loop lets go too, nothing would stop
-                // the new query on the server.
-                $id = $subscription->id();
-                $owner = $subscription->session();
-                unset($subscription);
-
-                if ($weak->get() === null && $id !== '') {
-                    try {
-                        LiveSubscription::killOnServer($this, $id, $owner);
-                    } catch (\Throwable) {
-                        // Best effort: it is gone on this side either way.
-                    }
-                }
             } catch (\Throwable $error) {
                 // The new socket was lost too: the subscriptions stay
                 // tracked and waiting, for the next connection to replay.
@@ -662,6 +646,25 @@ final class ConnectionController
                 // An error listener closed the connection.
                 if (!$this->isCurrentConnection($epoch)) {
                     return false;
+                }
+
+                continue;
+            }
+
+            $replayed[] = $weak;
+
+            // The application may have let go of it while its query was in
+            // flight. Once this loop lets go too, nothing would stop the new
+            // query on the server.
+            $id = $subscription->id();
+            $owner = $subscription->session();
+            unset($subscription);
+
+            if ($weak->get() === null && $id !== '') {
+                try {
+                    LiveSubscription::killOnServer($this, $id, $owner);
+                } catch (\Throwable) {
+                    // Best effort: it is gone on this side either way.
                 }
             }
         }
@@ -816,6 +819,9 @@ final class ConnectionController
     /**
      * Whether nothing changed the session's authentication since `$generation`
      * began: no explicit sign-in or sign-out, and still the same connection.
+     * Other tasks change that while this one waits.
+     *
+     * @phpstan-impure
      */
     private function isCurrentAuth(?string $session, AuthState $auth, int $generation): bool
     {
