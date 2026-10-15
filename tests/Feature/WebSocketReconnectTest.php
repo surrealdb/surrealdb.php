@@ -507,12 +507,13 @@ final class WebSocketReconnectTest extends TestCase
         $db = $this->connect(auth: $provider, define: false);
 
         try {
-            $db->use($this->namespace, 'db');
+            // Before use(), which renews too if the second has already turned.
             $first = $db->accessToken();
             $errors = 0;
             $db->subscribe('error', static function () use (&$errors): void {
                 $errors++;
             });
+            $db->use($this->namespace, 'db');
 
             sleep(2);
             self::assertSame([1], $db->run('RETURN 1'));
