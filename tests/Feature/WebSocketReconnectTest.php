@@ -161,6 +161,34 @@ final class WebSocketReconnectTest extends TestCase
         self::assertSame(1, $this->client->connects);
     }
 
+    public function testAThrowingReconnectingListenerDoesNotStopTheReconnect(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $errors = [];
+            $db->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+                $errors[] = $error->getMessage();
+            });
+            $db->subscribe('reconnecting', static function (): void {
+                throw new \RuntimeException('listener failed');
+            });
+
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame([[1]], [$db->run('RETURN 1')]);
+            self::assertContains('listener failed', $errors);
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testManagedLiveQueriesAreReplayedAfterAReconnect(): void
     {
         $db = $this->connect();
@@ -411,6 +439,40 @@ final class WebSocketReconnectTest extends TestCase
             self::assertSame(ConnectionStatus::Disconnected, $db->status());
             self::assertSame(['disconnected'], $events);
             self::assertFalse($live->isAlive());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testASubscriptionReleasedDuringTheReplayIsNotReplayed(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $kept = $db->live(new Table('person'))->execute();
+            $released = $db->live(new Table('person'))->execute();
+            $replays = 0;
+
+            // Let go of the second subscription while the first is replaying.
+            $this->client->beforeSend = static function (string $payload) use (&$replays, &$released): ?string {
+                if (str_contains($payload, 'LIVE SELECT')) {
+                    $replays++;
+                    $released = null;
+                    gc_collect_cycles();
+                }
+
+                return null;
+            };
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            $this->client->beforeSend = null;
+
+            self::assertSame(1, $replays);
+            self::assertSame(
+                [$kept->id()],
+                array_keys($db->run('INFO FOR TABLE person')[0]['lives']),
+            );
         } finally {
             $db->close();
         }
