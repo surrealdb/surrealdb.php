@@ -189,7 +189,13 @@ abstract class LiveSubscription implements \IteratorAggregate
      */
     public function sessionEnded(): void
     {
-        $this->connectionClosed();
+        $this->ended = true;
+
+        // Drop what was queued too, the backlog included: it was delivered
+        // to whoever the session was signed in as before.
+        $this->closeFeed();
+        $this->stopped();
+        $this->resume();
     }
 
     /**
