@@ -48,7 +48,7 @@ v2 is in alpha, so ask Composer for it explicitly (a plain `composer require` in
 composer require surrealdb/surrealdb.php:^2.0@alpha
 ```
 
-Requires PHP 8.4 or later. The WebSocket engine needs nothing extra for queries. The HTTP engine, `health()`, `import()` and `export()` on any connection, and OpenTelemetry export under `Runtime::sync()` or `Runtime::swoole()` need a PSR-18 client and PSR-17 factories, found through `php-http/discovery`:
+Requires PHP 8.4 or later. The WebSocket engine needs nothing extra for queries. The HTTP engine, `health()`, `import()` and `export()` on any connection, and OpenTelemetry export need a PSR-18 client and PSR-17 factories (under `Runtime::amp()`, only the factories), found through `php-http/discovery`:
 
 ```sh
 composer require guzzlehttp/guzzle php-http/discovery
@@ -302,7 +302,7 @@ $db = new Surreal(Runtime::swoole(observability: $observability));
 $db = new Surreal(Runtime::amp(observability: $observability));
 ```
 
-Requires `open-telemetry/sdk` and `open-telemetry/exporter-otlp`, plus `amphp/http-client-psr7` for the Amp runtime, or a PSR-18 client and PSR-17 factories (see [Installation](#installation)) for the others.
+Requires `open-telemetry/sdk`, `open-telemetry/exporter-otlp` and discoverable PSR-17 factories (see [Installation](#installation)). The Amp runtime also needs `amphp/http-client-psr7` as its PSR-18 client; the other runtimes need a PSR-18 client from that installation.
 
 ### Flushing after the response in a framework
 
