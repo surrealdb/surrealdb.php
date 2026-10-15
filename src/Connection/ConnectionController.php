@@ -2,6 +2,7 @@
 
 namespace SurrealDB\SDK\Connection;
 
+use SurrealDB\SDK\Auth\AuthState;
 use SurrealDB\SDK\Auth\Credentials;
 use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Auth\Tokens;
@@ -12,6 +13,7 @@ use SurrealDB\SDK\Contracts\EngineInterface;
 use SurrealDB\SDK\Engines\EngineRegistry;
 use SurrealDB\SDK\Enum\SpanKind;
 use SurrealDB\SDK\Enum\SpanStatus;
+use SurrealDB\SDK\Enum\CodecEnum;
 use SurrealDB\SDK\Events\AuthChanged;
 use SurrealDB\SDK\Events\Connected;
 use SurrealDB\SDK\Events\Connecting;
@@ -20,6 +22,7 @@ use SurrealDB\SDK\Events\Disconnected;
 use SurrealDB\SDK\Events\NamespaceDatabaseSelected;
 use SurrealDB\SDK\Events\Reconnecting;
 use SurrealDB\SDK\Exceptions\AuthenticationException;
+use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Exceptions\InvalidSessionException;
 use SurrealDB\SDK\Exceptions\ServerException;
@@ -309,6 +312,15 @@ final class ConnectionController
     {
         $this->assertFeature(Features::transactions());
 
+        // Committing sends the transaction id as a UUID value, which JSON
+        // cannot express; refuse up front rather than leave it open.
+        if ($this->context->format === CodecEnum::JSON) {
+            throw new ConfigurationException(
+                'Configuration',
+                'Interactive transactions need the CBOR format: SurrealDB only accepts the transaction id as a UUID.',
+            );
+        }
+
         return $this->requireEngine()->begin($session);
     }
 
@@ -367,23 +379,17 @@ final class ConnectionController
 
     public function createSession(?string $clone = null): string
     {
-        $state = $this->requireState();
-        $this->assertFeature(Features::sessions());
+        return $this->attachSession($clone === null ? null : $this->requireSession($clone));
+    }
 
-        $id = Uuid::v4()->toRfc4122();
-        $this->requireEngine()->attach($id);
-
-        if ($clone === null) {
-            $state->sessions[$id] = new SessionState(id: $id);
-        } else {
-            $source = $this->requireSession($clone);
-            $session = new SessionState(id: $id, namespace: $source->namespace, database: $source->database);
-            $session->variables = $source->variables;
-            $state->sessions[$id] = $session;
-            $this->restoreSession($session);
-        }
-
-        return $id;
+    /**
+     * Create a session that starts with a copy of another session's namespace,
+     * database, variables and authentication. Unlike {@see self::createSession()},
+     * the source may be the default session (null).
+     */
+    public function forkSession(?string $source): string
+    {
+        return $this->attachSession($this->requireSession($source));
     }
 
     public function destroySession(?string $session): void
@@ -634,6 +640,33 @@ final class ConnectionController
     // =================================================================== //
     //  Session restore + helpers                                          //
     // =================================================================== //
+
+    private function attachSession(?SessionState $source): string
+    {
+        $state = $this->requireState();
+        $this->assertFeature(Features::sessions());
+
+        $id = Uuid::v4()->toRfc4122();
+        $this->requireEngine()->attach($id);
+
+        // A new session is authenticated by the configured auth provider, if
+        // any; a fork reuses its source's tokens.
+        $session = $source === null ? new SessionState(id: $id) : new SessionState(
+            id: $id,
+            namespace: $source->namespace,
+            database: $source->database,
+            auth: new AuthState(
+                $source->auth->accessToken,
+                $source->auth->refreshToken,
+                $source->auth->overridden,
+            ),
+        );
+        $session->variables = $source->variables ?? [];
+        $state->sessions[$id] = $session;
+        $this->restoreSession($session);
+
+        return $id;
+    }
 
     private function restoreSession(SessionState $session): void
     {
