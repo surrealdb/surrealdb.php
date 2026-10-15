@@ -113,6 +113,31 @@ final class StreamAndGraphQueryTest extends TestCase
         }
     }
 
+    #[DataProvider('protocols')]
+    public function testGqlSeesSessionVariables(string $url): void
+    {
+        $db = $this->connect($url);
+        $this->requireFeature($db, Features::gql());
+
+        try {
+            $db->run('CREATE person:a SET name = "A"; CREATE person:b SET name = "B"; RELATE person:a->knows->person:b');
+            $db->let('name', 'A');
+
+            self::assertSame(
+                [[['friend' => 'B']]],
+                $db->gql('MATCH (a:person)-[:knows]->(b:person) WHERE a.name = $name RETURN b.name AS friend'),
+            );
+
+            // An explicit variable wins over the session's.
+            self::assertSame(
+                [[]],
+                $db->gql('MATCH (a:person)-[:knows]->(b:person) WHERE a.name = $name RETURN b.name AS friend', ['name' => 'B']),
+            );
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testGqlRunsInsideATransaction(): void
     {
         $db = $this->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
