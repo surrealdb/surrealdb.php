@@ -31,6 +31,9 @@ abstract class LiveSubscription implements \IteratorAggregate
      */
     protected array $backlog = [];
 
+    /** The backlog feed being iterated, no longer in {@see self::$backlog}. */
+    private ?LiveFeed $draining = null;
+
     protected bool $killed = false;
 
     protected bool $serverKilled = false;
@@ -115,6 +118,7 @@ abstract class LiveSubscription implements \IteratorAggregate
 
         while (true) {
             $feed = $this->backlog !== [] ? array_shift($this->backlog) : $this->feed;
+            $this->draining = $feed instanceof LiveFeed && $feed !== $this->feed ? $feed : null;
 
             foreach ($feed ?? [] as $message) {
                 if ($message->action === LiveAction::Killed) {
@@ -185,6 +189,13 @@ abstract class LiveSubscription implements \IteratorAggregate
     {
         $this->ended = true;
         $this->endFeed();
+
+        // Behind feeds of earlier sockets, as a replay would put it, so it is
+        // still drained once they are.
+        if ($this->backlog !== [] && $this->feed instanceof LiveFeed) {
+            $this->backlog[] = $this->feed;
+            $this->feed = null;
+        }
         $this->stopped();
         $this->resume();
     }
@@ -272,7 +283,13 @@ abstract class LiveSubscription implements \IteratorAggregate
      */
     protected function closeFeed(): void
     {
+        foreach ($this->backlog as $feed) {
+            $feed->close();
+        }
+
         $this->backlog = [];
+        $this->draining?->close();
+        $this->draining = null;
 
         if ($this->feed instanceof LiveFeed) {
             $this->feed->close();
