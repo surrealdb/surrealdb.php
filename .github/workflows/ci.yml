@@ -73,7 +73,7 @@ jobs:
       run: composer install --no-interaction --prefer-dist
 
     - name: SurrealDB in Github Actions
-      uses: surrealdb/setup-surreal@7c103070ba4f544240cd287432ba70d6f50163a5 # v2.0.1
+      uses: surrealdb/setup-surreal@5795ce3773d2fec644ef5ce6b549f4872d4b33be # v3.0.0
       with:
         surrealdb_version: ${{ matrix.version }}
         surrealdb_auth: true
@@ -95,4 +95,17 @@ jobs:
     - name: Run OpenSwoole runtime tests
       env:
         SURREALDB_REQUIRE_LOCAL: '1'
-      run: composer test:openswoole
+      # The OpenSwoole build setup-php installs can crash (SIGSEGV) while PHP
+      # shuts down, after PHPUnit has reported. Judge the run by its JUnit
+      # report, and forgive only that exit code, with a warning.
+      run: |
+        set +e
+        vendor/bin/phpunit --testsuite openswoole --log-junit "$RUNNER_TEMP/openswoole.xml"
+        status=$?
+        set -e
+        if [ "$status" -eq 139 ] && [ -s "$RUNNER_TEMP/openswoole.xml" ] \
+          && ! grep -qE '(failures|errors)="[1-9]' "$RUNNER_TEMP/openswoole.xml"; then
+          echo "::warning::OpenSwoole crashed during PHP shutdown after every test passed"
+          exit 0
+        fi
+        exit "$status"
