@@ -31,11 +31,15 @@ final class BoundQuery
 
     /**
      * Bind a value, returning its generated `$placeholder`. Placeholder names
-     * are unique for the lifetime of the process.
+     * are unique for the lifetime of the process and never reuse a key already
+     * present in this fragment's bindings.
      */
     public function bind(mixed $value): string
     {
-        $name = 'bind__' . self::$counter++;
+        do {
+            $name = 'bind__' . self::$counter++;
+        } while (array_key_exists($name, $this->bindings));
+
         $this->bindings[$name] = $value;
 
         return '$' . $name;
