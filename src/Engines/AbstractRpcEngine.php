@@ -185,6 +185,32 @@ abstract class AbstractRpcEngine implements EngineInterface
         $bindings = $query->bindings !== [] ? $query->bindings : null;
         $responses = $this->dispatch(new RpcRequest('query', [$query->query, $bindings], $session, $txn));
 
+        yield from self::chunks($responses);
+    }
+
+    public function gql(string $query, array $variables, ?string $session, ?string $txn = null): iterable
+    {
+        $params = $variables !== [] ? [$query, $variables] : [$query];
+
+        yield from self::chunks($this->dispatch(new RpcRequest('gql', $params, $session, $txn)));
+    }
+
+    public function graphql(string $query, array $variables, ?string $operation, ?string $session): mixed
+    {
+        $params = [$query, $variables !== [] ? $variables : null];
+
+        if ($operation !== null) {
+            $params[] = $operation;
+        }
+
+        return $this->dispatch(new RpcRequest('graphql', $params, $session));
+    }
+
+    /**
+     * @return \Generator<int, QueryChunk<mixed>>
+     */
+    private static function chunks(mixed $responses): \Generator
+    {
         if (!is_array($responses)) {
             return;
         }

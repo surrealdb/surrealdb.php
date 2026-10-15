@@ -6,6 +6,7 @@ use SurrealDB\SDK\Auth\Credentials;
 use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Auth\Tokens;
 use SurrealDB\SDK\Exceptions\InvalidSessionException;
+use SurrealDB\SDK\GraphQl\GraphQlResponse;
 use SurrealDB\SDK\Live\LiveSubscription;
 use SurrealDB\SDK\Live\UnmanagedLiveSubscription;
 use SurrealDB\SDK\Protocol\Features;
@@ -97,6 +98,21 @@ class SurrealSession extends SurrealQueryable
             $this->connection,
             $this->sessionId,
             $this->connection->begin($this->sessionId),
+        );
+    }
+
+    /**
+     * Run a GraphQL request against the selected namespace and database
+     * (SurrealDB 3.2 or later; the database needs `DEFINE CONFIG GRAPHQL`).
+     * GraphQL runs its own transactions, so it is not offered on a
+     * {@see SurrealTransaction}.
+     *
+     * @param array<string,mixed> $variables
+     */
+    public function graphql(string $query, array $variables = [], ?string $operationName = null): GraphQlResponse
+    {
+        return GraphQlResponse::fromResult(
+            $this->connection->graphql($query, $variables, $operationName, $this->sessionId),
         );
     }
 

@@ -112,4 +112,20 @@ interface EngineInterface
 
     /** @return iterable<LiveMessage<mixed>> */
     public function liveQuery(string $id): iterable;
+
+    /**
+     * Run an ISO GQL query. Results arrive per statement, as for {@see self::query()}.
+     *
+     * @param array<string,mixed> $variables
+     *
+     * @return iterable<\SurrealDB\SDK\Protocol\QueryChunk<mixed>>
+     */
+    public function gql(string $query, array $variables, ?string $session, ?string $txn = null): iterable;
+
+    /**
+     * Run a GraphQL request, returning the `{ data, errors }` envelope.
+     *
+     * @param array<string,mixed> $variables
+     */
+    public function graphql(string $query, array $variables, ?string $operation, ?string $session): mixed;
 }
