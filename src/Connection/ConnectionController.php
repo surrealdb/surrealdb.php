@@ -30,6 +30,7 @@ use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedVersionException;
+use SurrealDB\SDK\Live\LiveSubscription;
 use SurrealDB\SDK\Live\ManagedLiveSubscription;
 use SurrealDB\SDK\Protocol\Feature;
 use SurrealDB\SDK\Protocol\Features;
@@ -249,9 +250,9 @@ final class ConnectionController
 
     public function use(?NamespaceDatabase $what, ?string $session = null): NamespaceDatabase
     {
+        $sessionState = $this->requireSession($session);
         $this->renewIfDue($session);
         $result = $this->requireEngine()->use($what, $session);
-        $sessionState = $this->requireSession($session);
 
         if ($result->namespace !== null) {
             $sessionState->namespace = $result->namespace;
@@ -319,16 +320,18 @@ final class ConnectionController
 
     public function set(string $name, mixed $value, ?string $session = null): void
     {
+        $sessionState = $this->requireSession($session);
         $this->renewIfDue($session);
         $this->requireEngine()->set($name, $value, $session);
-        $this->requireSession($session)->variables[$name] = $value;
+        $sessionState->variables[$name] = $value;
     }
 
     public function unset(string $name, ?string $session = null): void
     {
+        $sessionState = $this->requireSession($session);
         $this->renewIfDue($session);
         $this->requireEngine()->unset($name, $session);
-        unset($this->requireSession($session)->variables[$name]);
+        unset($sessionState->variables[$name]);
     }
 
     public function invalidate(?string $session = null): void
@@ -344,8 +347,15 @@ final class ConnectionController
         $sessionState->namespace = null;
         $sessionState->database = null;
         $sessionState->variables = [];
-        // Resetting the session cancels its transactions on the server.
+        // Resetting the session cancels its transactions and live queries
+        // on the server (SurrealDB 2.x sends no KILLED notification for them).
         $sessionState->transactions = [];
+
+        foreach ($sessionState->live as $subscription => $_) {
+            $subscription->sessionReset();
+        }
+
+        $sessionState->live = new \WeakMap();
         $this->handleAuthInvalidate($session);
 
         $payload = new NamespaceDatabase();
@@ -367,8 +377,9 @@ final class ConnectionController
             );
         }
 
+        $sessionState = $this->requireSession($session);
         $txn = $this->requireEngine()->begin($session);
-        $this->requireSession($session)->transactions[$txn] = true;
+        $sessionState->transactions[$txn] = true;
 
         return $txn;
     }
@@ -413,7 +424,10 @@ final class ConnectionController
      */
     public function query(BoundQuery $query, ?string $session = null, ?string $txn = null): iterable
     {
+        // A closed session's handle fails here rather than on the server.
+        $this->requireSession($session);
         $this->renewIfDue($session);
+
         return $this->requireEngine()->query($query, $session, $txn);
     }
 
@@ -449,6 +463,19 @@ final class ConnectionController
         $this->assertFeature(Features::liveQueries());
 
         return $this->requireEngine()->liveQuery($id);
+    }
+
+    /**
+     * @internal a subscription on the session, which ends if the session is
+     * reset
+     */
+    public function registerLive(LiveSubscription $subscription, ?string $session): void
+    {
+        $sessionState = $this->state?->session($session);
+
+        if ($sessionState !== null) {
+            $sessionState->live[$subscription] = true;
+        }
     }
 
     /**
@@ -512,6 +539,8 @@ final class ConnectionController
 
     private function onConnected(): void
     {
+        $epoch = $this->connectionEpoch;
+
         try {
             $version = $this->requireEngine()->version()->version;
             $this->cachedVersion = $version;
@@ -544,6 +573,13 @@ final class ConnectionController
             $this->events->publish('connected', $version);
             $this->context->events->dispatch(new Connected($version));
         } catch (\Throwable $error) {
+            // This socket was lost while restoring: the engine is already
+            // reconnecting (or has reconnected), and a later socket announces
+            // itself.
+            if (!$this->isCurrentConnection($epoch)) {
+                return;
+            }
+
             $this->onError($error);
             $this->engine?->close();
         }

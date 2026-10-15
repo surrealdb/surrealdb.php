@@ -315,6 +315,41 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testLosingTheSocketWhileRestoringTheSessionReconnectsAgain(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->let('greeting', 'hello');
+            $events = [];
+
+            foreach (['reconnecting', 'connected', 'disconnected'] as $event) {
+                $db->subscribe($event, static function () use (&$events, $event): void {
+                    $events[] = $event;
+                });
+            }
+
+            // Drop the first replacement socket as it restores the variable.
+            $client = $this->client;
+            $client->beforeSend = static function (string $payload) use ($client): ?string {
+                if (str_contains($payload, 'greeting')) {
+                    $client->beforeSend = null;
+                    $client->sever();
+                }
+
+                return null;
+            };
+
+            $client->sever();
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame(['reconnecting', 'reconnecting', 'connected'], $events);
+            self::assertSame(['hello'], $db->run('RETURN $greeting'));
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testClosingFromAReplayErrorListenerLeavesTheConnectionClosed(): void
     {
         $db = $this->connect();
