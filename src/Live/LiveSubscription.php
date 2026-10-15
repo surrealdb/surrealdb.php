@@ -40,11 +40,12 @@ abstract class LiveSubscription implements \IteratorAggregate
      */
     public function isAlive(): bool
     {
-        return !$this->killed && !$this->serverKilled && $this->connection->state()?->session($this->session) !== null;
+        return !$this->killed && !$this->killedByServer() && $this->connection->state()?->session($this->session) !== null;
     }
 
     /**
-     * Stop the live query on the server and end iteration.
+     * Stop the live query on the server and end iteration. If `KILL` fails
+     * the subscription is left as it was, so the call can be retried.
      */
     public function kill(): void
     {
@@ -52,12 +53,12 @@ abstract class LiveSubscription implements \IteratorAggregate
             return;
         }
 
-        $this->killed = true;
-        $this->closeFeed();
-
-        if (!$this->serverKilled) {
+        if (!$this->killedByServer()) {
             self::killOnServer($this->connection, $this->id(), $this->session);
         }
+
+        $this->killed = true;
+        $this->closeFeed();
     }
 
     /**
@@ -89,6 +90,19 @@ abstract class LiveSubscription implements \IteratorAggregate
         foreach ($connection->query(new BoundQuery('KILL ' . $uuid->escape()), $session) as $chunk) {
             $chunk->resultOrThrow();
         }
+    }
+
+    /**
+     * Whether the server ended the live query. The feed records a `KILLED`
+     * notification as soon as it arrives, before anything iterates it.
+     */
+    protected function killedByServer(): bool
+    {
+        if (!$this->serverKilled && $this->feed instanceof LiveFeed && $this->feed->isKilled()) {
+            $this->serverKilled = true;
+        }
+
+        return $this->serverKilled;
     }
 
     protected function closeFeed(): void

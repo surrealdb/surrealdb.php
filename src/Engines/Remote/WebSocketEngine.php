@@ -58,10 +58,16 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
     /** Notifications kept for live queries nobody has subscribed to yet. */
     private const int MAX_UNCLAIMED_LIVE = 1000;
 
-    /** @var array<string,list<LiveMessage<mixed>>> */
+    /**
+     * Keyed by query id, then by arrival sequence (global FIFO order).
+     *
+     * @var array<string,array<int,LiveMessage<mixed>>>
+     */
     private array $unclaimedLive = [];
 
     private int $unclaimedCount = 0;
+
+    private int $unclaimedSequence = 0;
 
     public function features(): FeatureSet
     {
@@ -138,7 +144,12 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             fn (): bool => $this->active && !$this->terminated,
         );
 
-        $feed->onClose($this->subscribeLive($id, $feed->push(...)));
+        // Hold the feed weakly so a subscription dropped without kill() is
+        // destroyed, which closes the feed and unsubscribes it.
+        $weak = \WeakReference::create($feed);
+        $feed->onClose($this->subscribeLive($id, static function (LiveMessage $message) use ($weak): void {
+            $weak->get()?->push($message);
+        }));
 
         return $feed;
     }
@@ -419,19 +430,30 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
      */
     private function holdUnclaimed(LiveMessage $message): void
     {
-        $this->unclaimedLive[$message->queryId][] = $message;
+        $this->unclaimedLive[$message->queryId][$this->unclaimedSequence++] = $message;
         $this->unclaimedCount++;
 
-        // Bound the buffer: drop the oldest messages (live queries nobody
-        // subscribes to, e.g. ones another client attached to this session).
+        // Bound the buffer: drop the globally oldest message (live queries
+        // nobody subscribes to, e.g. ones another client attached to this
+        // session).
         while ($this->unclaimedCount > self::MAX_UNCLAIMED_LIVE) {
-            $oldest = array_key_first($this->unclaimedLive);
+            $oldest = null;
+            $oldestSequence = PHP_INT_MAX;
+
+            foreach ($this->unclaimedLive as $queryId => $held) {
+                $sequence = array_key_first($held);
+
+                if ($sequence !== null && $sequence < $oldestSequence) {
+                    $oldest = $queryId;
+                    $oldestSequence = $sequence;
+                }
+            }
 
             if ($oldest === null) {
                 break;
             }
 
-            array_shift($this->unclaimedLive[$oldest]);
+            unset($this->unclaimedLive[$oldest][$oldestSequence]);
             $this->unclaimedCount--;
 
             if ($this->unclaimedLive[$oldest] === []) {
