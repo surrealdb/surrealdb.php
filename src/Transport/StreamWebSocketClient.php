@@ -111,11 +111,13 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         }
 
         $message = '';
+        $started = false;
 
         while (true) {
-            // Only the first byte of a message may time out: once a frame has
-            // started, the rest of it is read to completion.
-            $frame = $this->readFrame($message === '' ? $timeout : null);
+            // Only the first byte of a message may time out: once a data frame
+            // has started (even an empty first fragment), the rest of the
+            // message is read to completion.
+            $frame = $this->readFrame($started ? null : $timeout);
 
             if ($frame === null) {
                 return null;
@@ -136,6 +138,7 @@ final class StreamWebSocketClient implements WebSocketClientInterface
                 case 0x0: // continuation
                 case 0x1: // text
                 case 0x2: // binary
+                    $started = true;
                     $message .= $data;
 
                     break;
