@@ -19,6 +19,24 @@ final class SurrealHttp
      */
     public function request(string $url, string $method, ?string $body, array $headers): ResponseInterface
     {
+        $response = $this->send($url, $method, $body, $headers);
+        $status = $response->getStatusCode();
+
+        if ($status < 200 || $status >= 300) {
+            throw self::failure($response);
+        }
+
+        return $response;
+    }
+
+    /**
+     * Perform the exchange and return the response whatever its status, for
+     * callers that read error details from the body themselves.
+     *
+     * @param array<string,string> $headers
+     */
+    public function send(string $url, string $method, ?string $body, array $headers): ResponseInterface
+    {
         $request = $this->resolver->requestFactory()->createRequest($method, $url);
 
         foreach ($headers as $name => $value) {
@@ -29,20 +47,22 @@ final class SurrealHttp
             $request = $request->withBody($this->resolver->streamFactory()->createStream($body));
         }
 
-        $response = $this->resolver->client()->sendRequest($request);
-        $status = $response->getStatusCode();
+        return $this->resolver->client()->sendRequest($request);
+    }
 
-        if ($status < 200 || $status >= 300) {
-            $content = (string) $response->getBody();
+    /**
+     * @param string|null $content the response body, when the caller has
+     *                             already consumed it from the stream
+     */
+    public static function failure(ResponseInterface $response, ?string $message = null, ?string $content = null): HttpConnectionException
+    {
+        $content ??= (string) $response->getBody();
 
-            throw new HttpConnectionException(
-                $content !== '' ? $content : $response->getReasonPhrase(),
-                $status,
-                $response->getReasonPhrase(),
-                $content,
-            );
-        }
-
-        return $response;
+        return new HttpConnectionException(
+            $message ?? ($content !== '' ? $content : $response->getReasonPhrase()),
+            $response->getStatusCode(),
+            $response->getReasonPhrase(),
+            $content,
+        );
     }
 }

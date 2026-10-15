@@ -11,6 +11,8 @@ use SurrealDB\SDK\Contracts\EngineInterface;
 use SurrealDB\SDK\Events\RpcRequestSent;
 use SurrealDB\SDK\Events\RpcResponseReceived;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
+use SurrealDB\SDK\Exceptions\HttpConnectionException;
+use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Middleware\LoggingMiddleware;
 use SurrealDB\SDK\Middleware\MiddlewarePipeline;
 use SurrealDB\SDK\Middleware\TelemetryMiddleware;
@@ -193,23 +195,65 @@ abstract class AbstractRpcEngine implements EngineInterface
         }
     }
 
+    /**
+     * Run a SurrealQL import through the HTTP `/import` endpoint. The server
+     * reports a failing statement in the response body (with HTTP 422 on 3.x,
+     * and 200 on older servers), so the body is always checked.
+     *
+     * @throws ServerException for the first statement that failed
+     * @throws HttpConnectionException when the import was rejected outright
+     */
     public function importSql(string $data): void
     {
         $state = $this->requireState();
         $url = $state->endpoint->httpUriWithPath($state->endpoint->basePath() . '/import');
 
-        $this->http()->request($url, 'POST', $data, $this->httpHeaders($state->rootSession, accept: 'application/json'));
+        $response = $this->http()->send($url, 'POST', $data, $this->httpHeaders($state->rootSession, accept: 'application/json'));
+        $status = $response->getStatusCode();
+        // Read once: a non-seekable stream would be empty on a second read.
+        $content = (string) $response->getBody();
+
+        try {
+            $body = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            $body = null;
+        }
+
+        if (is_array($body) && array_is_list($body)) {
+            foreach ($body as $index => $result) {
+                $chunk = is_array($result) ? QueryChunk::fromResult($index, $result) : null;
+
+                if ($chunk?->error !== null) {
+                    $error = $chunk->error;
+
+                    throw ServerException::create(
+                        $error->kind,
+                        "Import failed at statement {$index}: {$error->getMessage()}",
+                        $error->getCode(),
+                        $error->details,
+                    );
+                }
+            }
+        }
+
+        if ($status < 200 || $status >= 300) {
+            $information = is_array($body) ? ($body['information'] ?? $body['description'] ?? null) : null;
+
+            throw SurrealHttp::failure($response, is_string($information) ? $information : null, $content);
+        }
     }
 
     public function exportSql(array $options): string
     {
         $state = $this->requireState();
         $url = $state->endpoint->httpUriWithPath($state->endpoint->basePath() . '/export');
-        $body = $this->context->codec->serialize($options !== [] ? $options : null);
+        // The options are always sent as a JSON object: SurrealDB 3.x rejects a
+        // null body, and an empty PHP array would encode as a CBOR array.
+        $body = json_encode($options === [] ? new \stdClass() : $options, JSON_THROW_ON_ERROR);
 
         $response = $this->http()->request($url, 'POST', $body, $this->httpHeaders(
             $state->rootSession,
-            contentType: $this->context->format->contentType(),
+            contentType: 'application/json',
             accept: 'text/plain',
         ));
 
