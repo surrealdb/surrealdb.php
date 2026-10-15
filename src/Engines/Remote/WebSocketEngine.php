@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK\Engines\Remote;
 
 use SurrealDB\SDK\Connection\ConnectionState;
+use SurrealDB\SDK\Contracts\ConnectionProbeInterface;
 use SurrealDB\SDK\Contracts\Deferred;
 use SurrealDB\SDK\Contracts\DuplexTransportInterface;
 use SurrealDB\SDK\Engines\AbstractRpcEngine;
@@ -29,11 +30,17 @@ use function is_string;
  * messages. Under the synchronous scheduler the loop is driven on demand by the
  * awaiting deferred; under an async scheduler it runs as a background task.
  */
-final class WebSocketEngine extends AbstractRpcEngine
+final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbeInterface
 {
     private ?DuplexTransportInterface $transport = null;
     private bool $active = false;
     private bool $terminated = false;
+
+    /**
+     * Whether the background read loop is running. Under the synchronous
+     * scheduler it never is, so the engine itself reports a lost connection.
+     */
+    private bool $loopRunning = false;
 
     /** @var array<string,Deferred<RpcResponse<mixed>>> */
     private array $calls = [];
@@ -90,6 +97,13 @@ final class WebSocketEngine extends AbstractRpcEngine
         // Calls are dispatched immediately once active; nothing to flush.
     }
 
+    public function probe(): void
+    {
+        if ($this->active && !$this->loopRunning && $this->transport?->isConnected() !== true) {
+            $this->connectionLost();
+        }
+    }
+
     public function liveQuery(string $id): iterable
     {
         /** @var list<LiveMessage<mixed>> $queue */
@@ -144,12 +158,23 @@ final class WebSocketEngine extends AbstractRpcEngine
             throw new ConnectionUnavailableException();
         }
 
+        // A value the codec cannot encode is the caller's error, not a lost
+        // connection, so serialize before the transport-failure handling.
+        $payload = $this->context->codec->serialize($request->toWire());
+
         $id = (string) $request->id;
         /** @var Deferred<RpcResponse<mixed>> $deferred */
         $deferred = $this->context->scheduler->defer(fn () => $this->readAndDispatchOnce());
         $this->calls[$id] = $deferred;
 
-        $this->transport->sendFrame($this->context->codec->serialize($request->toWire()));
+        try {
+            $this->transport->sendFrame($payload);
+        } catch (\Throwable $error) {
+            unset($this->calls[$id]);
+            $this->connectionLost();
+
+            throw $error;
+        }
 
         /** @var RpcResponse<mixed> $response */
         $response = $deferred->await();
@@ -186,6 +211,17 @@ final class WebSocketEngine extends AbstractRpcEngine
     }
 
     private function runLoop(): void
+    {
+        $this->loopRunning = true;
+
+        try {
+            $this->readLoop();
+        } finally {
+            $this->loopRunning = false;
+        }
+    }
+
+    private function readLoop(): void
     {
         while (!$this->terminated) {
             if (!$this->active) {
@@ -247,8 +283,7 @@ final class WebSocketEngine extends AbstractRpcEngine
         $frame = $this->transport->receiveFrame();
 
         if ($frame === null) {
-            $this->active = false;
-            $this->failAllCalls(new CallTerminatedException());
+            $this->connectionLost();
 
             return false;
         }
@@ -327,6 +362,27 @@ final class WebSocketEngine extends AbstractRpcEngine
                 unset($this->liveSubscribers[$id]);
             }
         };
+    }
+
+    /**
+     * The socket closed or failed. Pending calls fail; when a background loop
+     * is running it owns reconnection, otherwise (synchronous scheduler) the
+     * connection is closed and `disconnected` is published so the controller's
+     * status no longer reports it as connected.
+     */
+    private function connectionLost(): void
+    {
+        $this->active = false;
+        $this->failAllCalls(new CallTerminatedException());
+
+        if ($this->loopRunning || $this->terminated) {
+            return;
+        }
+
+        $this->terminated = true;
+        $this->transport?->close();
+        $this->transport = null;
+        $this->publisher->publish('disconnected');
     }
 
     private function failAllCalls(\Throwable $error): void
