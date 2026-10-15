@@ -80,7 +80,16 @@ abstract class LiveSubscription implements \IteratorAggregate
         }
 
         if (!$this->killedByServer() && !$this->ended) {
-            self::killOnServer($this->connection, $this->id(), $this->session);
+            $id = $this->id();
+            self::killOnServer($this->connection, $id, $this->session);
+
+            // A reconnect may have replayed the query under a new id while
+            // KILL was in flight: stop that one too. Once the flag below is
+            // set, a replay still in flight stops its own query.
+            while ($this->id() !== $id && $this->id() !== '') {
+                $id = $this->id();
+                self::killOnServer($this->connection, $id, $this->session);
+            }
         }
 
         $this->killed = true;
