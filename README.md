@@ -54,7 +54,7 @@ Requires PHP 8.4 or later. The WebSocket engine needs nothing extra for queries.
 composer require guzzlehttp/guzzle php-http/discovery
 ```
 
-Without discovery, pass the implementations yourself through `DriverOptions` (`httpClient`, `requestFactory`, `streamFactory`).
+Without discovery, pass the implementations for the HTTP engine, `health()`, `import()` and `export()` through `DriverOptions` (`httpClient`, `requestFactory`, `streamFactory`). OpenTelemetry export doesn't read those, so it still needs discovery unless you pass your own span and metric exporters to `OtelObservability`.
 
 The SDK supports SurrealDB 2.x and 3.x, and accepts 4.x servers. Sessions, transactions, `api()` and refresh tokens need SurrealDB 3.0, and `gql()` / `graphql()` need 3.2.
 
