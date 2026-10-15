@@ -13,6 +13,7 @@ use SurrealDB\SDK\Live\ManagedLiveSubscription;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use function count;
 
 /**
  * Live queries against a real server over WebSocket, under the default
@@ -63,6 +64,10 @@ final class LiveQueryTest extends TestCase
     public function testFieldsWhereAndDiffShapeTheNotifications(): void
     {
         $db = $this->connect();
+        // SurrealDB 2.x evaluates a LIVE query's parameters per notification,
+        // after the request's bindings are gone, so `type::fields($param)`
+        // fails there.
+        $this->requireV3($db);
 
         try {
             $adults = $db->live('person')->fields('name')->where('age >= 18')->execute();
@@ -112,6 +117,8 @@ final class LiveQueryTest extends TestCase
     public function testRemovingTheTableEndsTheSubscription(): void
     {
         $db = $this->connect();
+        // SurrealDB 2.x sends no KILLED notification when the table goes.
+        $this->requireV3($db);
 
         try {
             $live = $db->live(new Table('person'))->execute();
@@ -164,6 +171,14 @@ final class LiveQueryTest extends TestCase
         self::assertCount($count, $messages);
 
         return $messages;
+    }
+
+    private function requireV3(Surreal $db): void
+    {
+        if ((int) preg_replace('/^surrealdb-/', '', $db->version()) < 3) {
+            $db->close();
+            self::markTestSkipped('Needs SurrealDB 3.0 or later.');
+        }
     }
 
     private function connect(): Surreal
