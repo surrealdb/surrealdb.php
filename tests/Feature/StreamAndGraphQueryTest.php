@@ -39,7 +39,7 @@ final class StreamAndGraphQueryTest extends TestCase
 
         try {
             $frames = iterator_to_array($db->statements(
-                'CREATE person:a SET n = 1; CREATE person:b SET n = 2; SELECT n FROM person ORDER BY n; SELECT * FROM missing_table; RETURN $x',
+                'CREATE person:a SET n = 1; CREATE person:b SET n = 2; SELECT n FROM person ORDER BY n; THROW "boom"; RETURN $x',
                 ['x' => 'last'],
             )->stream(), false);
 
