@@ -166,6 +166,29 @@ final class LiveQueryTest extends TestCase
         }
     }
 
+    public function testSigningOutOrInAsSomeoneElseEndsLiveQueries(): void
+    {
+        foreach ([
+            'invalidate' => static fn (Surreal $db) => $db->invalidate(),
+            'signin' => static fn (Surreal $db) => $db->signin(new RootAuth('root', 'root')),
+        ] as $call => $change) {
+            $db = $this->connect();
+
+            try {
+                $live = $db->live(new Table('person'))->execute();
+                $change($db);
+
+                self::assertFalse($live->isAlive(), "{$call}() should end the live query");
+
+                foreach ($live as $message) {
+                    self::assertSame(LiveAction::Killed, $message->action);
+                }
+            } finally {
+                $db->close();
+            }
+        }
+    }
+
     public function testRemovingTheTableEndsTheSubscription(): void
     {
         $db = $this->connect();
