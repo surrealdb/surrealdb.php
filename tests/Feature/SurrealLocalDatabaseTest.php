@@ -8,10 +8,12 @@ use SurrealDB\SDK\Api\ApiResponse;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use function sprintf;
 
 /**
  * Database-backed coverage for the public SDK surface.
@@ -137,6 +139,11 @@ final class SurrealLocalDatabaseTest extends TestCase
     public function testApiInvokesUserDefinedEndpoints(string $protocol): void
     {
         $db = $this->connect($protocol);
+
+        if (!$db->isFeatureSupported(Features::api())) {
+            $db->close();
+            self::markTestSkipped('DEFINE API needs SurrealDB 3.0 or later.');
+        }
 
         try {
             $db->run(<<<'SURQL'
