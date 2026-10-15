@@ -13,6 +13,7 @@ use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use function sprintf;
 
 /**
  * Database-backed coverage for the public SDK surface.
