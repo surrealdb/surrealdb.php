@@ -38,6 +38,18 @@ final class ManagedLiveSubscription extends LiveSubscription
             throw new SurrealException('The LIVE query did not return a live query id.');
         }
 
+        // Killed while the query was in flight (another task, during a
+        // replay): don't start receiving, and stop the query just issued.
+        if ($this->killed) {
+            try {
+                self::killOnServer($this->connection, (string) $result, $this->session);
+            } catch (\Throwable) {
+                // The caller already considers it stopped.
+            }
+
+            return;
+        }
+
         $this->id = (string) $result;
         $this->feed = $this->connection->liveQuery($this->id);
         $this->connection->trackLive($this);
@@ -50,7 +62,14 @@ final class ManagedLiveSubscription extends LiveSubscription
     public function replay(): void
     {
         try {
-            $this->closeFeed();
+            // Keep what the lost socket already delivered: iteration yields it
+            // before the replayed query's notifications.
+            if ($this->feed instanceof LiveFeed) {
+                $this->feed->end();
+                $this->backlog[] = $this->feed;
+                $this->feed = null;
+            }
+
             $this->start();
         } catch (\Throwable $error) {
             $this->ended = true;

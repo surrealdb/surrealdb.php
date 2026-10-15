@@ -10,6 +10,7 @@ use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\RecordIdRange;
 use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
+use SurrealDB\SDK\Types\Value;
 use function is_string;
 
 /**
@@ -91,9 +92,12 @@ final class LiveSelectQuery extends QueryBuilder
     {
         $query = new BoundQuery('LIVE SELECT');
 
+        // Field names are inlined as string literals, not bound: SurrealDB
+        // 2.x evaluates the projection and FETCH per notification, after the
+        // request's bindings are gone.
         match ($this->selection) {
-            'fields' => $query->append(' type::fields(' . $query->bind($this->fields) . ')'),
-            'value' => $query->append(' VALUE type::field(' . $query->bind($this->fields[0]) . ')'),
+            'fields' => $query->append(' type::fields(' . Value::toSurql($this->fields) . ')'),
+            'value' => $query->append(' VALUE type::field(' . Value::toSurql($this->fields[0]) . ')'),
             'diff' => $query->append(' DIFF'),
             default => $query->append(' *'),
         };
@@ -103,7 +107,7 @@ final class LiveSelectQuery extends QueryBuilder
         $this->applyWhere($query);
 
         if ($this->fetch !== []) {
-            $query->append(' FETCH type::fields(' . $query->bind($this->fetch) . ')');
+            $query->append(' FETCH type::fields(' . Value::toSurql($this->fetch) . ')');
         }
 
         return $query;

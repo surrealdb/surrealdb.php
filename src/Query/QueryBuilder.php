@@ -82,6 +82,11 @@ abstract class QueryBuilder
      * {@see DoneFrame}, or an {@see ErrorFrame} if it failed. A failing
      * statement does not stop the stream. Mirrors the JS SDK's `stream()`.
      *
+     * An empty object decodes to an empty PHP array, which cannot be told
+     * apart from an empty list, so a statement returning `{}` yields only its
+     * {@see DoneFrame}, like one returning `[]`. Use {@see self::responses()}
+     * when that difference matters.
+     *
      * @return \Generator<int, ValueFrame<TResult>|ErrorFrame<TResult>|DoneFrame<TResult>>
      */
     public function stream(): \Generator

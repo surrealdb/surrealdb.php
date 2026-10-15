@@ -239,9 +239,11 @@ abstract class AbstractRpcEngine implements EngineInterface
 
         $response = $this->http()->send($url, 'POST', $data, $this->httpHeaders($state->rootSession, accept: 'application/json'));
         $status = $response->getStatusCode();
+        // Read once: a non-seekable stream would be empty on a second read.
+        $content = (string) $response->getBody();
 
         try {
-            $body = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+            $body = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
             $body = null;
         }
@@ -266,7 +268,7 @@ abstract class AbstractRpcEngine implements EngineInterface
         if ($status < 200 || $status >= 300) {
             $information = is_array($body) ? ($body['information'] ?? $body['description'] ?? null) : null;
 
-            throw SurrealHttp::failure($response, is_string($information) ? $information : null);
+            throw SurrealHttp::failure($response, is_string($information) ? $information : null, $content);
         }
     }
 

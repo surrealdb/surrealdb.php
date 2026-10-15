@@ -23,6 +23,14 @@ abstract class LiveSubscription implements \IteratorAggregate
     /** @var iterable<LiveMessage<mixed>>|null */
     protected ?iterable $feed = null;
 
+    /**
+     * Feeds of lost sockets whose queued messages have not been yielded yet:
+     * iteration drains them before moving on to the current feed.
+     *
+     * @var list<LiveFeed>
+     */
+    protected array $backlog = [];
+
     protected bool $killed = false;
 
     protected bool $serverKilled = false;
@@ -46,18 +54,22 @@ abstract class LiveSubscription implements \IteratorAggregate
 
     /**
      * Whether notifications can still arrive: not killed by the client or the
-     * server, and the session still exists.
+     * server, the connection not closed (for an unmanaged subscription, not
+     * lost: a new socket does not carry its query), and the session still
+     * exists.
      */
     public function isAlive(): bool
     {
         return !$this->killed
-            && !$this->serverKilled
+            && !$this->killedByServer()
             && !$this->ended
+            && ($this->isManaged() || !$this->feedEnded())
             && $this->connection->state()?->session($this->session) !== null;
     }
 
     /**
-     * Stop the live query on the server and end iteration.
+     * Stop the live query on the server and end iteration. If `KILL` fails
+     * the subscription is left as it was, so the call can be retried.
      */
     public function kill(): void
     {
@@ -65,14 +77,14 @@ abstract class LiveSubscription implements \IteratorAggregate
             return;
         }
 
+        if (!$this->killedByServer() && !$this->ended) {
+            self::killOnServer($this->connection, $this->id(), $this->session);
+        }
+
         $this->killed = true;
         $this->closeFeed();
         $this->stopped();
         $this->resume();
-
-        if (!$this->serverKilled) {
-            self::killOnServer($this->connection, $this->id(), $this->session);
-        }
     }
 
     /**
@@ -85,7 +97,7 @@ abstract class LiveSubscription implements \IteratorAggregate
         }
 
         while (true) {
-            $feed = $this->feed;
+            $feed = $this->backlog !== [] ? array_shift($this->backlog) : $this->feed;
 
             foreach ($feed ?? [] as $message) {
                 if ($message->action === LiveAction::Killed) {
@@ -96,7 +108,15 @@ abstract class LiveSubscription implements \IteratorAggregate
                 yield $message;
             }
 
-            if ($this->finished()) {
+            if ($this->killed || $this->serverKilled) {
+                return;
+            }
+
+            if ($this->backlog !== []) {
+                continue;
+            }
+
+            if ($this->ended) {
                 return;
             }
 
@@ -112,7 +132,7 @@ abstract class LiveSubscription implements \IteratorAggregate
                 }
             }
 
-            if ($this->finished() || $this->feed === $feed) {
+            if ($this->finished() || ($this->feed === $feed && $this->backlog === [])) {
                 return;
             }
         }
@@ -132,13 +152,28 @@ abstract class LiveSubscription implements \IteratorAggregate
     }
 
     /**
-     * @internal the connection closed for good
+     * @internal the connection closed for good, or the subscription cannot
+     * be carried over to a new one
      */
     public function connectionClosed(): void
     {
         $this->ended = true;
-        $this->closeFeed();
+        $this->endFeed();
+        $this->stopped();
         $this->resume();
+    }
+
+    /**
+     * Run `KILL` for a live query id. The id is validated as a UUID and inlined,
+     * because the server does not accept a parameter in `KILL`.
+     */
+    public static function killOnServer(ConnectionController $connection, Uuid|string $id, ?string $session = null): void
+    {
+        $uuid = Uuid::from($id);
+
+        foreach ($connection->query(new BoundQuery('KILL ' . $uuid->escape()), $session) as $chunk) {
+            $chunk->resultOrThrow();
+        }
     }
 
     /**
@@ -149,7 +184,7 @@ abstract class LiveSubscription implements \IteratorAggregate
      */
     private function finished(): bool
     {
-        return $this->killed || $this->serverKilled || $this->ended;
+        return $this->killed || $this->killedByServer() || $this->ended;
     }
 
     protected function resume(): void
@@ -167,22 +202,46 @@ abstract class LiveSubscription implements \IteratorAggregate
     protected function stopped(): void {}
 
     /**
-     * Run `KILL` for a live query id. The id is validated as a UUID and inlined,
-     * because the server does not accept a parameter in `KILL`.
+     * Whether the server ended the live query. The feed records a `KILLED`
+     * notification as soon as it arrives, before anything iterates it.
      */
-    public static function killOnServer(ConnectionController $connection, Uuid|string $id, ?string $session = null): void
+    protected function killedByServer(): bool
     {
-        $uuid = Uuid::from($id);
+        if (!$this->serverKilled && $this->feed instanceof LiveFeed && $this->feed->isKilled()) {
+            $this->serverKilled = true;
+        }
 
-        foreach ($connection->query(new BoundQuery('KILL ' . $uuid->escape()), $session) as $chunk) {
-            $chunk->resultOrThrow();
+        return $this->serverKilled;
+    }
+
+    /**
+     * Whether the current feed stopped receiving (its socket was lost).
+     */
+    protected function feedEnded(): bool
+    {
+        return $this->feed instanceof LiveFeed && !$this->feed->isReceiving();
+    }
+
+    /**
+     * Stop receiving and drop anything queued: after {@see kill()}, nothing
+     * more is yielded.
+     */
+    protected function closeFeed(): void
+    {
+        $this->backlog = [];
+
+        if ($this->feed instanceof LiveFeed) {
+            $this->feed->close();
         }
     }
 
-    protected function closeFeed(): void
+    /**
+     * Stop receiving, but still yield what was already received.
+     */
+    protected function endFeed(): void
     {
         if ($this->feed instanceof LiveFeed) {
-            $this->feed->close();
+            $this->feed->end();
         }
     }
 }

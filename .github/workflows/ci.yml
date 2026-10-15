@@ -96,16 +96,18 @@ jobs:
       env:
         SURREALDB_REQUIRE_LOCAL: '1'
       # The OpenSwoole build setup-php installs can crash (SIGSEGV) while PHP
-      # shuts down, after PHPUnit has reported. Judge the run by its JUnit
-      # report, and forgive only that exit code, with a warning.
+      # shuts down, after PHPUnit has reported. PHPUnit logs the exit code it
+      # meant to use (failures, errors, and the warnings and risky tests that
+      # phpunit.xml fails on) as its last event, so forgive the crash, with a
+      # warning, only when that exit code was 0.
       run: |
+        events="$RUNNER_TEMP/openswoole-events.txt"
         set +e
-        vendor/bin/phpunit --testsuite openswoole --log-junit "$RUNNER_TEMP/openswoole.xml"
+        vendor/bin/phpunit --testsuite openswoole --log-events-text "$events"
         status=$?
         set -e
-        if [ "$status" -eq 139 ] && [ -s "$RUNNER_TEMP/openswoole.xml" ] \
-          && ! grep -qE '(failures|errors)="[1-9]' "$RUNNER_TEMP/openswoole.xml"; then
-          echo "::warning::OpenSwoole crashed during PHP shutdown after every test passed"
+        if [ "$status" -eq 139 ] && grep -qsF 'PHPUnit Finished (Shell Exit Code: 0)' "$events"; then
+          echo "::warning::OpenSwoole crashed during PHP shutdown after PHPUnit reported success"
           exit 0
         fi
         exit "$status"

@@ -6,6 +6,7 @@ use SurrealDB\SDK\Api\ApiResponse;
 use SurrealDB\SDK\Contracts\QueryExecutor;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
+use SurrealDB\SDK\Types\None;
 use function is_array;
 
 /**
@@ -16,6 +17,9 @@ use function is_array;
  * `execute()` returns the full {@see ApiResponse}; after {@see self::value()}
  * it returns only the body and throws {@see UnsuccessfulApiException} on a
  * non-2xx status.
+ *
+ * A {@see None} body (the default) is left out of the request; `null` is sent
+ * as an explicit SurrealQL `NULL`.
  *
  * @template TBody
  * @extends QueryBuilder<ApiResponse<TBody>|TBody>
@@ -32,7 +36,7 @@ final class ApiQuery extends QueryBuilder
         ?QueryExecutor $executor,
         public private(set) string $path,
         public private(set) string $method = 'get',
-        public private(set) mixed $body = null,
+        public private(set) mixed $body = new None(),
         public private(set) array $headers = [],
         public private(set) array $query = [],
     ) {
@@ -101,7 +105,7 @@ final class ApiQuery extends QueryBuilder
             $request['query'] = $this->query;
         }
 
-        if ($this->body !== null) {
+        if (!$this->body instanceof None) {
             $request['body'] = $this->body;
         }
 
