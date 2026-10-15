@@ -8,12 +8,15 @@ use SurrealDB\SDK\Api\ApiResponse;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Exceptions\AlreadyExistsException;
+use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\ThrownException;
 use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use function sprintf;
 
 /**
  * Database-backed coverage for the public SDK surface.
@@ -145,6 +148,8 @@ final class SurrealLocalDatabaseTest extends TestCase
             $db->create(new RecordId('person', 'tobie'))->content(['name' => 'Tobie'])->execute();
 
             $hostile = 'person; DELETE person; SELECT * FROM person';
+            // Strict servers only write to defined tables.
+            $db->run('DEFINE TABLE ' . Table::escapeIdent($hostile) . '; DEFINE TABLE ' . Table::escapeIdent('trailing\\'));
             $created = $db->create($hostile)->content(['name' => 'Hostile'])->execute();
 
             self::assertIsArray($created);
@@ -225,22 +230,32 @@ SURQL);
         $db = $this->connect($protocol);
 
         try {
-            $db->import("OPTION IMPORT;\nCREATE person:tobie SET name = 'Tobie';");
+            // Strict servers only write to defined tables.
+            $db->import("OPTION IMPORT;\nDEFINE TABLE person;\nCREATE person:tobie SET name = 'Tobie';");
             self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
 
             try {
                 $db->import("OPTION IMPORT;\nCREATE person:jaime SET name = 'Jaime';\nTHROW 'boom';");
                 self::fail('Expected the import to fail.');
-            } catch (ThrownException $error) {
+            } catch (ServerException $error) {
                 self::assertStringContainsString('Import failed at statement', $error->getMessage());
                 self::assertStringContainsString('boom', $error->getMessage());
+
+                // SurrealDB 2.x reports no error kind, so only 3.x is typed.
+                if ($this->serverMajor($db) >= 3) {
+                    self::assertInstanceOf(ThrownException::class, $error);
+                }
             }
 
             try {
                 $db->import("OPTION IMPORT;\nCREATE person:tobie SET name = 'Again';");
                 self::fail('Expected the duplicate record to fail the import.');
-            } catch (AlreadyExistsException $error) {
-                self::assertSame('AlreadyExists', $error->kind);
+            } catch (ServerException $error) {
+                self::assertStringContainsString('already exists', $error->getMessage());
+
+                if ($this->serverMajor($db) >= 3) {
+                    self::assertInstanceOf(AlreadyExistsException::class, $error);
+                }
             }
 
             $export = $db->export();
@@ -260,6 +275,11 @@ SURQL);
     public function testApiInvokesUserDefinedEndpoints(string $protocol): void
     {
         $db = $this->connect($protocol);
+
+        if (!$db->isFeatureSupported(Features::api())) {
+            $db->close();
+            self::markTestSkipped('DEFINE API needs SurrealDB 3.0 or later.');
+        }
 
         try {
             $db->run(<<<'SURQL'
@@ -307,6 +327,11 @@ SURQL);
     /**
      * @param 'http'|'ws' $protocol
      */
+    private function serverMajor(Surreal $db): int
+    {
+        return (int) preg_replace('/^surrealdb-/', '', $db->version());
+    }
+
     private function connect(string $protocol): Surreal
     {
         $db = new Surreal();
