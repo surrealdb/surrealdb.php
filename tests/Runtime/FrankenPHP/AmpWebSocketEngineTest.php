@@ -135,6 +135,49 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame([true, true], $result);
     }
 
+    public function testATokenCloseToExpiryIsKeptWhileStillValid(): void
+    {
+        $result = $this->inLoop(function (): ?array {
+            $db = new Surreal(Runtime::amp());
+            $this->connect($db);
+
+            try {
+                if (!$db->isFeatureSupported(Features::sessions())) {
+                    return null;
+                }
+
+                $user = 'brief_' . bin2hex(random_bytes(4));
+                $db->run("DEFINE USER {$user} ON ROOT PASSWORD 'secret' ROLES OWNER DURATION FOR TOKEN 30s, FOR SESSION 1h");
+                $db->signin(new RootAuth($user, 'secret'));
+                $token = $db->accessToken();
+                $fork = $db->forkSession();
+
+                // Renewal is due at once, and nothing can renew these tokens:
+                // let the timers run, then check both are still signed in.
+                $this->delay(0.2);
+
+                return [
+                    $token,
+                    $db->accessToken(),
+                    $fork->accessToken(),
+                    $fork->run("RETURN 'ok'"),
+                ];
+            } finally {
+                $db->close();
+            }
+        });
+
+        if ($result === null) {
+            $this->markTestSkipped('Sessions need SurrealDB 3.0 or later.');
+        }
+
+        [$token, $source, $fork, $ran] = $result;
+        $this->assertNotNull($token);
+        $this->assertSame($token, $source);
+        $this->assertSame($token, $fork);
+        $this->assertSame(['ok'], $ran);
+    }
+
     private function connect(Surreal $db): void
     {
         $url = getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc';
