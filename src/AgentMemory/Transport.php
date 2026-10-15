@@ -23,8 +23,6 @@ use function strlen;
  */
 final class Transport
 {
-    private const string USER_AGENT = 'surrealdb-agent-memory-php';
-
     /**
      * Delegation header. The wire name predates the Agent Memory rebrand and is
      * what the server still reads.
@@ -257,7 +255,7 @@ final class Transport
     {
         $headers = [
             'Accept' => $accept,
-            'User-Agent' => self::USER_AGENT,
+            'User-Agent' => UserAgent::value(),
             'Authorization' => 'Bearer ' . $this->apiKey,
         ];
 

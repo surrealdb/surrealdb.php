@@ -40,6 +40,7 @@ use SurrealDB\AgentMemory\Options\RememberOptions;
 use SurrealDB\AgentMemory\Options\StateOptions;
 use SurrealDB\AgentMemory\Transport;
 use SurrealDB\AgentMemory\Triple;
+use SurrealDB\AgentMemory\UserAgent;
 use SurrealDB\Exceptions\HttpConnectionException;
 use SurrealDB\Exceptions\InvalidValueException;
 use SurrealDB\Exceptions\SurrealExceptionInterface;
@@ -89,7 +90,8 @@ final class AgentMemoryTest extends TestCase
         $this->assertSame('Bearer secret', $connection->headers['Authorization']);
         $this->assertSame('application/json', $connection->headers['Content-Type']);
         $this->assertSame('application/json', $connection->headers['Accept']);
-        $this->assertSame('surrealdb-agent-memory-php', $connection->headers['User-Agent']);
+        $this->assertSame(UserAgent::value(), $connection->headers['User-Agent']);
+        $this->assertMatchesRegularExpression('#^surrealdb-memory-php/[0-9A-Za-z.+_-]+$#', $connection->headers['User-Agent']);
         $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $connection->headers['Idempotency-Key']);
         $this->assertSame(
             '{"text":"I just got promoted to CTO","infer":"full","session_id":"s-1","scopes":[["user/tobie"]]}',
