@@ -48,6 +48,12 @@ abstract class LiveSubscription implements \IteratorAggregate
         $connection->registerLive($this, $session);
     }
 
+    /** @internal the session the query runs in */
+    public function session(): ?string
+    {
+        return $this->session;
+    }
+
     /** The live query id the server assigned. */
     abstract public function id(): string;
 

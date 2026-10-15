@@ -10,6 +10,7 @@ use SurrealDB\SDK\Connection\ConnectionState;
 use SurrealDB\SDK\Connection\ConnectionStatus;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverContext;
+use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Runtime\Runtime;
 use SurrealDB\SDK\Surreal;
@@ -310,6 +311,66 @@ final class AmpWebSocketEngineTest extends TestCase
         });
 
         $this->assertLessThan(0.5, $elapsed);
+    }
+
+    public function testSigningOutDuringARenewalKeepsTheSessionSignedOut(): void
+    {
+        $result = $this->inLoop(function (): array {
+            $namespace = 'amp_renew_' . bin2hex(random_bytes(4));
+            $setup = new Surreal(Runtime::amp());
+            $this->connect($setup);
+
+            try {
+                // Renewal is due 60 seconds before expiry: about a second in.
+                $setup->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace};"
+                    . " DEFINE USER renew ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 61s, FOR SESSION 1h");
+            } finally {
+                $setup->close();
+            }
+
+            $calls = 0;
+            $renewing = false;
+            $renewed = false;
+            $provider = function () use (&$calls, &$renewing, &$renewed, $namespace): NamespaceAuth {
+                // The renewal timer's call takes a while.
+                if (++$calls > 1) {
+                    $renewing = true;
+                    $this->delay(0.5);
+                    $renewed = true;
+                }
+
+                return new NamespaceAuth($namespace, 'renew', 'secret');
+            };
+
+            $db = new Surreal(Runtime::amp());
+            $this->connect($db, $provider);
+
+            try {
+                $this->waitFor(static function () use (&$renewing): bool {
+                    return $renewing;
+                });
+
+                $db->invalidate();
+
+                $this->waitFor(static function () use (&$renewed): bool {
+                    return $renewed;
+                });
+                $this->delay(0.2);
+
+                try {
+                    $db->run('INFO FOR NS');
+                    $refused = false;
+                } catch (SurrealException) {
+                    $refused = true;
+                }
+
+                return [$db->accessToken(), $refused];
+            } finally {
+                $db->close();
+            }
+        });
+
+        $this->assertSame([null, true], $result);
     }
 
     public function testATokenCloseToExpiryIsKeptWhileStillValid(): void
