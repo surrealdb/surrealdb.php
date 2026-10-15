@@ -61,23 +61,18 @@ final class ManagedLiveSubscription extends LiveSubscription
      */
     public function replay(): void
     {
-        try {
-            // Keep what the lost socket already delivered: iteration yields it
-            // before the replayed query's notifications.
-            if ($this->feed instanceof LiveFeed) {
-                $this->feed->end();
-                $this->backlog[] = $this->feed;
-                $this->feed = null;
-            }
-
-            $this->start();
-        } catch (\Throwable $error) {
-            $this->ended = true;
-
-            throw $error;
-        } finally {
-            $this->resume();
+        // Keep what the lost socket already delivered: iteration yields it
+        // before the replayed query's notifications.
+        if ($this->feed instanceof LiveFeed) {
+            $this->feed->end();
+            $this->backlog[] = $this->feed;
+            $this->feed = null;
         }
+
+        // On failure the connection decides: wait for the next socket, or
+        // end the subscription.
+        $this->start();
+        $this->resume();
     }
 
     public function id(): string

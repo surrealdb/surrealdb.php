@@ -3,6 +3,8 @@
 namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\TestCase;
+use SurrealDB\SDK\Auth\DatabaseAuth;
+use SurrealDB\SDK\Auth\NamespaceAuth;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverOptions;
@@ -212,13 +214,16 @@ final class SessionTransactionTest extends TestCase
         $db = $this->connect();
 
         try {
+            $db->run('CREATE person:contested SET n = 0');
+            $first = $db->beginTransaction();
             $txn = $db->beginTransaction();
-            // End it behind the handle's back, so the server no longer knows it.
-            $db->connection()->cancel($txn->id());
+            $first->run('UPDATE person:contested SET n = 1');
+            $txn->run('UPDATE person:contested SET n = 2');
+            $first->commit();
 
             try {
                 $txn->commit();
-                self::fail('Committing an unknown transaction should fail.');
+                self::fail('The second commit should hit a write conflict.');
             } catch (ServerException) {
             }
 
@@ -228,6 +233,51 @@ final class SessionTransactionTest extends TestCase
             // than raising a second server error.
             $this->expectException(TransactionFinishedException::class);
             $txn->cancel();
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testResettingASessionFinishesItsTransaction(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $txn = $db->beginTransaction();
+            $db->reset();
+
+            self::assertTrue($txn->isFinished());
+
+            $this->expectException(TransactionFinishedException::class);
+            $txn->run('RETURN 1');
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testSigningInWithCredentialsSelectsTheirNamespaceAndDatabase(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->run("DEFINE USER ns_owner ON NAMESPACE PASSWORD 'secret' ROLES OWNER");
+            $db->use($this->namespace, 'other');
+            $db->run("DEFINE USER db_owner ON DATABASE PASSWORD 'secret' ROLES OWNER");
+            $db->use($this->namespace, 'db');
+
+            $db->signin(new DatabaseAuth($this->namespace, 'other', 'db_owner', 'secret'));
+            self::assertSame($this->namespace, $db->namespace());
+            self::assertSame('other', $db->database());
+            self::assertSame([[$this->namespace, 'other']], $db->run('RETURN [session::ns(), session::db()]'));
+
+            // A namespace sign-in selects the namespace and keeps the database.
+            $db->signin(new NamespaceAuth($this->namespace, 'ns_owner', 'secret'));
+            self::assertSame([[$db->namespace(), $db->database()]], $db->run('RETURN [session::ns(), session::db()]'));
+
+            // A fork restores what the server has selected.
+            $fork = $db->forkSession();
+            self::assertSame([[$this->namespace, 'other']], $fork->run('RETURN [session::ns(), session::db()]'));
+            $fork->closeSession();
         } finally {
             $db->close();
         }

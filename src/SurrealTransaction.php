@@ -3,7 +3,6 @@
 namespace SurrealDB\SDK;
 
 use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\TransactionFinishedException;
 
 /**
@@ -41,10 +40,14 @@ final class SurrealTransaction extends SurrealQueryable
         return $this->sessionId;
     }
 
-    /** Whether the transaction has been committed or cancelled. */
+    /**
+     * Whether the transaction is over: committed or cancelled, or ended on
+     * the server by resetting or closing its session, or by losing the
+     * connection.
+     */
     public function isFinished(): bool
     {
-        return $this->finished;
+        return $this->finished || !$this->connection->isTransactionOpen($this->transactionId, $this->sessionId);
     }
 
     /**
@@ -52,7 +55,9 @@ final class SurrealTransaction extends SurrealQueryable
      */
     public function commit(): void
     {
-        $this->finish(fn (string $id) => $this->connection->commit($id, $this->sessionId));
+        // A server error ends the transaction too; the connection tracks that.
+        $this->connection->commit($this->transactionId(), $this->sessionId);
+        $this->finished = true;
     }
 
     /**
@@ -60,32 +65,13 @@ final class SurrealTransaction extends SurrealQueryable
      */
     public function cancel(): void
     {
-        $this->finish(fn (string $id) => $this->connection->cancel($id, $this->sessionId));
-    }
-
-    /**
-     * Once the server has answered, the transaction is over even if the
-     * answer is an error (a commit that hit a conflict is gone too). Only a
-     * call that may not have reached the server leaves it open.
-     *
-     * @param \Closure(string): void $end
-     */
-    private function finish(\Closure $end): void
-    {
-        try {
-            $end($this->transactionId());
-        } catch (ServerException $error) {
-            $this->finished = true;
-
-            throw $error;
-        }
-
+        $this->connection->cancel($this->transactionId(), $this->sessionId);
         $this->finished = true;
     }
 
     protected function transactionId(): string
     {
-        if ($this->finished) {
+        if ($this->isFinished()) {
             throw new TransactionFinishedException($this->transactionId);
         }
 
