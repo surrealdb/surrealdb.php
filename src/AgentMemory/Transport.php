@@ -181,8 +181,10 @@ final class Transport
     }
 
     /**
-     * Sends a multipart request (e.g. document upload) and decodes the JSON
-     * response. Multipart writes are never retried.
+     * Sends a multipart request (a document upload) and decodes the JSON
+     * response. Like every request it is retried on a `503`, which the server
+     * sends only when it did no work (see {@see RetryPolicy}). It is never
+     * marked idempotent, so no other failure is retried.
      *
      * @internal used by the document uploads
      *
@@ -197,9 +199,10 @@ final class Transport
     }
 
     /**
-     * Opens a server-sent-event exchange (e.g. streaming `chat`). Streams are
-     * not retried; the returned response carries the raw SSE body for the
-     * caller to parse.
+     * Opens a server-sent-event exchange (streaming `chat`) and returns the
+     * unread response for the caller to parse. Opening the stream is retried
+     * on a `503`, like every request; once the response has started, nothing
+     * is retried.
      *
      * @param array<mixed> $body
      */

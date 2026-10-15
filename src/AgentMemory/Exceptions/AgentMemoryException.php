@@ -3,12 +3,16 @@
 namespace SurrealDB\AgentMemory\Exceptions;
 
 use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Exceptions\SurrealExceptionInterface;
 
 /**
- * Base class for every error raised by the Agent Memory client. Failed HTTP
- * statuses surface as the status-specific subclasses ({@see AuthException},
- * {@see ValidationException}, ...); encode/decode failures use this base class
- * directly with the offending status.
+ * Base class for every error the Agent Memory client raises for a request.
+ * Failed HTTP statuses surface as the status-specific subclasses
+ * ({@see AuthException}, {@see ValidationException}, ...); encode/decode
+ * failures use this base class directly with the offending status. Invalid
+ * input is refused before any request with {@see InvalidArgumentException},
+ * which extends `\InvalidArgumentException` instead; both implement
+ * {@see SurrealExceptionInterface}.
  *
  * The API reports errors as `{"message": "…"}`, which becomes the `title`;
  * RFC 7807 problem-details members (`title`, `detail`, `type`, `instance`) are

@@ -7,7 +7,11 @@ use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see AgentMemory::elaborate()}: name one entity, or sweep. */
+/**
+ * Options for {@see AgentMemory::elaborate()}: name one entity, or sweep.
+ * `elaborate()` requires them, unlike `@surrealdb/memory`, and the constructor
+ * rejects options with neither: the server answers such a request with `400`.
+ */
 final readonly class ElaborateOptions
 {
     /**

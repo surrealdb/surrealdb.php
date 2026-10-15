@@ -3,14 +3,16 @@
 namespace SurrealDB\AgentMemory;
 
 /**
- * Media types for document uploads that declare none, keyed by file extension.
+ * Infers the media type of an upload that declares none, from its filename's
+ * extension.
  *
- * The server refuses a media type it has no parser for (`415`) and refuses
- * undeclared bytes that do not look like text, so sending
- * `application/octet-stream` fails for anything binary. Only the extensions
- * the server ingests appear here (mirroring the reference JS client); anything
- * else falls through to `application/octet-stream`, which the server rejects
- * with a clear error rather than misparsing.
+ * The server refuses a media type it has no parser for (`415`), and sniffs a
+ * file part that declares no type: text is ingested as `text/plain`, and
+ * other bytes are refused. So only the extensions the server ingests are
+ * listed. For any other filename, {@see fromFilename()} returns `null`, the
+ * part is sent without a `Content-Type`, and the server sniffs the bytes.
+ * Declaring `application/octet-stream` instead would make the server refuse
+ * even plain text. `@surrealdb/memory` does not infer types.
  *
  * @internal
  */

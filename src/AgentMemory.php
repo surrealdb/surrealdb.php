@@ -51,11 +51,12 @@ use SurrealDB\Http\PsrHttpClientProvider;
  * and key administration.
  *
  * The client is pinned to a single `context`; every call targets
- * `/api/v1/{context}/…`. Options are readonly classes constructed with named
- * arguments, so `memory.recall(query, { k: 5 })` in the JS SDK becomes
+ * `/api/v1/{context}/…`. It follows the namespaces and method names of
+ * `@surrealdb/memory`, with options as readonly classes built with named
+ * arguments, so `memory.recall(query, { k: 5 })` becomes
  * `$memory->recall($query, new RecallOptions(k: 5))`. Collections come back as
- * a cursor-paginated {@see Page}; the `listAll()` and `all*()` collectors
- * return every row.
+ * a cursor-paginated {@see Page}; `listAll()` and the `all*()` collectors walk
+ * every page.
  *
  * The methods are documented on {@see AgentMemoryInterface}, which code can
  * type against to substitute a test double or a decorator.

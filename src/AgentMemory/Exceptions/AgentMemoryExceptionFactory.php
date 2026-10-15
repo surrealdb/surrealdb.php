@@ -9,8 +9,11 @@ use function is_string;
 
 /**
  * Builds the typed {@see AgentMemoryException} for a failed API response,
- * parsing the error body and choosing the subclass by HTTP status (the PHP port
- * of the JS client's `errorForStatus`).
+ * parsing the error body and choosing the subclass by HTTP status. This is the
+ * equivalent of `errorFromResponse()` in `@surrealdb/memory`. It differs in
+ * two ways: `409` and `415` get {@see ConflictException} and
+ * {@see UnsupportedMediaTypeException} rather than the base class, and
+ * `Retry-After` is read for every status, not only `429`.
  */
 final class AgentMemoryExceptionFactory
 {

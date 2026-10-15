@@ -169,7 +169,9 @@ interface AgentMemoryInterface
     public function chat(string $message, ?ChatOptions $options = null): array;
 
     /**
-     * Streaming chat round trip (`POST /chat` with `stream: true`): yields
+     * Streaming chat round trip (`POST /chat` with `stream: true`), the PHP
+     * form of `chat(message, { stream: true })` in `@surrealdb/memory`, since
+     * PHP cannot vary a return type on an option. It yields
      * {@see ChatChunk}s as the server emits them, each tagged with its
      * {@see ChatEvent}: `meta` carries the trace and session ids, each `chunk`
      * a `delta` of reply text, and the terminal `done` chunk the full `reply`,
@@ -183,7 +185,9 @@ interface AgentMemoryInterface
      * @return \Generator<int,ChatChunk>
      *
      * @throws InvalidArgumentException when the message is blank
-     * @throws StreamException          when the server reports a failure mid-stream
+     * @throws AgentMemoryException     when the request fails, on the first iteration
+     * @throws StreamException          when the server sends an `error` event, or the stream ends before its
+     *                                  `done` frame
      */
     public function chatStream(string $message, ?ChatOptions $options = null): \Generator;
 
@@ -215,8 +219,12 @@ interface AgentMemoryInterface
     public function consolidate(?ConsolidateOptions $options = null): array;
 
     /**
-     * Infers and emits new relation edges between entities (`POST /elaborate`),
-     * from one named entity or across a sweep of the low-relation ones.
+     * Infers new relation edges (`POST /elaborate`), from one entity
+     * (`entityRef`) or across a sweep of low-relation entities (`sweep: true`).
+     *
+     * Unlike `elaborate(options?)` in `@surrealdb/memory`, the options are
+     * required: the server rejects a body with neither field with a `400`, so
+     * {@see ElaborateOptions} rejects it before sending.
      *
      * @return ElaborateResponseJson
      */
