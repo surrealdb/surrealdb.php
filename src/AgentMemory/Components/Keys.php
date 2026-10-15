@@ -2,7 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
-use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Contracts\KeysInterface;
 use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\KeyCreateOptions;
 use SurrealDB\AgentMemory\Options\KeyRotateOptions;
@@ -11,20 +11,14 @@ use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
 use SurrealDB\AgentMemory\Transport;
 
-/** Self-service API keys for this context (requires the `manage` grant). */
-final class Keys
+/** Implements {@see KeysInterface} over the Agent Memory HTTP API. */
+final class Keys implements KeysInterface
 {
     public function __construct(
         private readonly Transport $transport,
         private readonly string $contextId,
     ) {}
 
-    /**
-     * Mints a new key. The full bearer secret (`sp-{id}-{secret}`) is returned
-     * once in the `key` field and cannot be retrieved again.
-     *
-     * @return array<int|string,mixed>
-     */
     public function create(?KeyCreateOptions $options = null): array
     {
         $payload = $options?->toPayload() ?? [];
@@ -37,19 +31,11 @@ final class Keys
         ) ?? [];
     }
 
-    /** A page of key metadata for the context (secrets are never included). */
     public function list(?PageOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'keys', $options?->toQuery() ?? []);
     }
 
-    /**
-     * Every key the caller can see, walking the pages in order (`GET /keys`).
-     *
-     * @return list<array<string,mixed>>
-     *
-     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
-     */
     public function listAll(?PageOptions $options = null): array
     {
         Guard::collectable('Keys::listAll()', 'Keys::list()', $options?->cursor, $options->count ?? false);
@@ -57,17 +43,11 @@ final class Keys
         return $this->list($options)->collect();
     }
 
-    /** Revokes a key by name. */
     public function delete(string $keyName): void
     {
         $this->transport->requestJson('DELETE', $this->base() . '/' . Paths::encodeSegment($keyName));
     }
 
-    /**
-     * Rotates a key, returning a fresh secret in the `key` field.
-     *
-     * @return array<int|string,mixed>
-     */
     public function rotate(string $keyName, ?KeyRotateOptions $options = null): array
     {
         return $this->transport->requestJson(

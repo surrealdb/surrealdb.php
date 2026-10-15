@@ -2,7 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
-use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Contracts\PrincipalsInterface;
 use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\EffectiveGrantsOptions;
 use SurrealDB\AgentMemory\Options\GrantOptions;
@@ -11,28 +11,19 @@ use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
 use SurrealDB\AgentMemory\Transport;
 
-/** Principals and their scope grants (requires the `grant:manage` grant). */
-final class Principals
+/** Implements {@see PrincipalsInterface} over the Agent Memory HTTP API. */
+final class Principals implements PrincipalsInterface
 {
     public function __construct(
         private readonly Transport $transport,
         private readonly string $contextId,
     ) {}
 
-    /** A page of the context's principals. */
     public function list(?PageOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'principals', $options?->toQuery() ?? []);
     }
 
-    /**
-     * Every principal in the context, walking the pages in order
-     * (`GET /principals`).
-     *
-     * @return list<array<string,mixed>>
-     *
-     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
-     */
     public function listAll(?PageOptions $options = null): array
     {
         Guard::collectable('Principals::listAll()', 'Principals::list()', $options?->cursor, $options->count ?? false);
@@ -40,21 +31,11 @@ final class Principals
         return $this->list($options)->collect();
     }
 
-    /**
-     * Fetches a single principal and its declared grants.
-     *
-     * @return array<int|string,mixed>
-     */
     public function get(string $principalId): array
     {
         return $this->transport->requestJson('GET', $this->path($principalId)) ?? [];
     }
 
-    /**
-     * Resolves the verbs a principal effectively holds at a scope path.
-     *
-     * @return array<int|string,mixed>
-     */
     public function effective(string $principalId, EffectiveGrantsOptions $options): array
     {
         return $this->transport->requestJson(
@@ -64,11 +45,6 @@ final class Principals
         ) ?? [];
     }
 
-    /**
-     * Grants a principal a set of verbs over a scope pattern.
-     *
-     * @return array<int|string,mixed>
-     */
     public function grant(string $principalId, GrantOptions $options): array
     {
         return $this->transport->requestJson(
@@ -78,11 +54,6 @@ final class Principals
         ) ?? [];
     }
 
-    /**
-     * Revokes a set of verbs from a principal over a scope pattern.
-     *
-     * @return array<int|string,mixed>
-     */
     public function revoke(string $principalId, GrantOptions $options): array
     {
         return $this->transport->requestJson(

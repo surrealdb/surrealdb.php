@@ -2,35 +2,26 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
-use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Contracts\TracesInterface;
 use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
 use SurrealDB\AgentMemory\Transport;
 
-/** Retrieval decision traces for a context. */
-final class Traces
+/** Implements {@see TracesInterface} over the Agent Memory HTTP API. */
+final class Traces implements TracesInterface
 {
     public function __construct(
         private readonly Transport $transport,
         private readonly string $contextId,
     ) {}
 
-    /** A page of recent trace records, newest first. */
     public function list(?PageOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'traces', $options?->toQuery() ?? []);
     }
 
-    /**
-     * Every trace record, newest first, walking the pages in order
-     * (`GET /traces`).
-     *
-     * @return list<array<string,mixed>>
-     *
-     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
-     */
     public function listAll(?PageOptions $options = null): array
     {
         Guard::collectable('Traces::listAll()', 'Traces::list()', $options?->cursor, $options->count ?? false);
@@ -38,22 +29,11 @@ final class Traces
         return $this->list($options)->collect();
     }
 
-    /**
-     * Fetches one trace by id.
-     *
-     * @return array<int|string,mixed>
-     */
     public function get(string $traceId): array
     {
         return $this->transport->requestJson('GET', $this->base() . '/' . Paths::encodeSegment($traceId)) ?? [];
     }
 
-    /**
-     * Aggregate trace statistics over the server's trailing window; the
-     * response's `windowHours` says which.
-     *
-     * @return array<int|string,mixed>
-     */
     public function stats(): array
     {
         return $this->transport->requestJson('GET', $this->base() . '/stats') ?? [];
