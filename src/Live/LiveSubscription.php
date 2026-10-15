@@ -35,7 +35,7 @@ abstract class LiveSubscription implements \IteratorAggregate
 
     protected bool $serverKilled = false;
 
-    /** The connection closed for good. */
+    /** The connection closed for good, or the session was reset. */
     protected bool $ended = false;
 
     /** @var Deferred<bool>|null settled once a reconnect's replay is done */
@@ -44,7 +44,9 @@ abstract class LiveSubscription implements \IteratorAggregate
     public function __construct(
         protected readonly ConnectionController $connection,
         protected readonly ?string $session = null,
-    ) {}
+    ) {
+        $connection->registerLive($this, $session);
+    }
 
     /** The live query id the server assigned. */
     abstract public function id(): string;
@@ -55,8 +57,8 @@ abstract class LiveSubscription implements \IteratorAggregate
     /**
      * Whether notifications can still arrive: not killed by the client or the
      * server, the connection not closed (for an unmanaged subscription, not
-     * lost: a new socket does not carry its query), and the session still
-     * exists.
+     * lost: a new socket does not carry its query), the session not reset,
+     * and the session still exists.
      */
     public function isAlive(): bool
     {
@@ -170,6 +172,15 @@ abstract class LiveSubscription implements \IteratorAggregate
         $this->endFeed();
         $this->stopped();
         $this->resume();
+    }
+
+    /**
+     * @internal the session was reset, which stopped the query on the server
+     * without a `KILLED` notification on SurrealDB 2.x
+     */
+    public function sessionReset(): void
+    {
+        $this->connectionClosed();
     }
 
     /**

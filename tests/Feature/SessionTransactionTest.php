@@ -182,6 +182,21 @@ final class SessionTransactionTest extends TestCase
         }
     }
 
+    public function testAClosedSessionIsRejectedWithoutAskingTheServer(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $session = $db->newSession();
+            $session->closeSession();
+
+            $this->expectException(InvalidSessionException::class);
+            $session->run('RETURN 1');
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testTheDefaultSessionCannotBeClosed(): void
     {
         $db = $this->connect();
