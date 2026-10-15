@@ -963,6 +963,12 @@ final class ConnectionController
                 }
             }
         } catch (\Throwable $error) {
+            // The connection it renewed for was closed meanwhile: its failure
+            // is not the current connection's to report.
+            if (!$this->ownsRenewal($key, $guard)) {
+                return;
+            }
+
             // Try again shortly rather than carry on with a token about to
             // expire.
             if ($this->renewalDeadline($key) === $at) {
@@ -973,7 +979,7 @@ final class ConnectionController
         } finally {
             // Unless the connection was closed meanwhile, which released the
             // waiters and may have let a new connection start its own.
-            if (($this->renewing[$key]['guard'] ?? null) === $guard) {
+            if ($this->ownsRenewal($key, $guard)) {
                 $waiters = $this->renewing[$key]['waiters'];
                 unset($this->renewing[$key]);
 
@@ -982,6 +988,15 @@ final class ConnectionController
                 }
             }
         }
+    }
+
+    /**
+     * Whether the renewal holding `$guard` is still the one in flight for
+     * `$key`: closing the connection drops the guards while renewals wait.
+     */
+    private function ownsRenewal(string $key, object $guard): bool
+    {
+        return isset($this->renewing[$key]) && $this->renewing[$key]['guard'] === $guard;
     }
 
     /**

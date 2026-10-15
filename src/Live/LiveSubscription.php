@@ -190,9 +190,9 @@ abstract class LiveSubscription implements \IteratorAggregate
         $this->ended = true;
         $this->endFeed();
 
-        // Behind feeds of earlier sockets, as a replay would put it, so it is
-        // still drained once they are.
-        if ($this->backlog !== [] && $this->feed instanceof LiveFeed) {
+        // Behind feeds of earlier sockets (including one being drained), as a
+        // replay would put it, so it is still drained once they are.
+        if (($this->backlog !== [] || $this->draining !== null) && $this->feed instanceof LiveFeed) {
             $this->backlog[] = $this->feed;
             $this->feed = null;
         }
