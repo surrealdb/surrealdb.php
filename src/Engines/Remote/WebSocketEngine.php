@@ -67,6 +67,15 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
     private int $unclaimedCount = 0;
 
+    /**
+     * Live feeds bound to the current socket, held weakly so a subscription
+     * dropped without kill() can still be destroyed. A new socket does not
+     * carry the old one's live queries, so they end when it is lost.
+     *
+     * @var array<int,\WeakReference<LiveFeed>>
+     */
+    private array $feeds = [];
+
     private int $unclaimedSequence = 0;
 
     public function features(): FeatureSet
@@ -78,6 +87,8 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             Features::sessions(),
             Features::transactions(),
             Features::api(),
+            Features::gql(),
+            Features::graphql(),
             Features::exportImportRaw(),
             Features::surrealMl(),
         );
@@ -104,7 +115,21 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         // An eager scheduler may already have run the read loop, which can
         // have lost this socket (and announced its replacement itself).
         if ($connected && $this->isCurrent($generation)) {
-            $this->publisher->publish('connected');
+            $this->announceConnected($generation);
+        }
+    }
+
+    /**
+     * Announce a newly opened socket. The reconnect strategy starts over
+     * only once the session is restored on it: a socket that keeps dropping
+     * half way through still uses up the attempts.
+     */
+    private function announceConnected(int $generation): void
+    {
+        $this->publisher->publish('connected');
+
+        if ($this->isCurrent($generation)) {
+            $this->state?->reconnect->reset();
         }
     }
 
@@ -128,6 +153,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         $this->transport = null;
         $this->failAllCalls(new CallTerminatedException());
         $this->publisher->publish('disconnected');
+        $this->closeFeeds();
     }
 
     public function ready(): void
@@ -158,10 +184,19 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
         // Hold the feed weakly so a subscription dropped without kill() is
         // destroyed, which closes the feed and unsubscribes it.
+        $key = spl_object_id($feed);
         $weak = \WeakReference::create($feed);
-        $feed->onClose($this->subscribeLive($id, static function (LiveMessage $message) use ($weak): void {
+        $unsubscribe = $this->subscribeLive($id, static function (LiveMessage $message) use ($weak): void {
             $weak->get()?->push($message);
-        }));
+        });
+        $this->feeds[$key] = $weak;
+        $feed->onClose(function () use ($unsubscribe, $key, $weak): void {
+            $unsubscribe();
+
+            if (($this->feeds[$key] ?? null) === $weak) {
+                unset($this->feeds[$key]);
+            }
+        });
 
         return $feed;
     }
@@ -222,11 +257,14 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
      */
     private function connectOnce(): bool
     {
+        if ($this->transport === null) {
+            return false;
+        }
+
         try {
-            $this->transport?->open();
+            $this->transport->open();
             $this->active = true;
             $this->generation++;
-            $this->state?->reconnect->reset();
 
             return true;
         } catch (\Throwable $error) {
@@ -259,7 +297,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
                     // The socket may have dropped (and a retry begun) before
                     // this task ran; announcing then would answer a dead link.
                     if ($this->isCurrent($generation)) {
-                        $this->publisher->publish('connected');
+                        $this->announceConnected($generation);
                     }
                 });
             }
@@ -276,16 +314,96 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
                 break;
             }
 
-            $this->publisher->publish('reconnecting');
+            $this->announceReconnecting();
             $this->context->scheduler->delay($reconnect->nextDelay());
 
-            $this->transport = $this->createTransport($this->state);
+            // A listener or another task may have closed the engine meanwhile.
+            if ($this->terminated) {
+                break;
+            }
+
+            $this->replaceTransport();
         }
 
         if (!$this->terminated) {
             $this->active = false;
             $this->failAllCalls(new CallTerminatedException());
             $this->publisher->publish('disconnected');
+            $this->closeFeeds();
+        }
+    }
+
+    /**
+     * Announce a reconnect attempt, then end the live feeds of the lost
+     * socket. Announcing first lets managed live subscriptions know to wait
+     * for their replay instead of ending with their feed.
+     */
+    private function announceReconnecting(): void
+    {
+        $this->publisher->publish('reconnecting');
+        $this->closeFeeds();
+    }
+
+    /**
+     * Reconnect without a background loop (synchronous scheduler): retry
+     * with the reconnect strategy's backoff until a socket opens, then
+     * announce `connected` so the controller restores the sessions and
+     * replays managed live queries.
+     *
+     * @phpstan-impure
+     */
+    private function reconnectInline(): bool
+    {
+        $reconnect = $this->state?->reconnect;
+
+        while (!$this->terminated && $this->state !== null && $reconnect !== null && $reconnect->enabled() && $reconnect->allowed()) {
+            $this->announceReconnecting();
+            $this->context->scheduler->delay($reconnect->nextDelay());
+
+            // A `reconnecting` listener may have closed the engine.
+            if ($this->terminated) {
+                return false;
+            }
+
+            $this->transport?->close();
+            $this->replaceTransport();
+
+            if ($this->connectOnce()) {
+                $this->announceConnected($this->generation);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Create the next transport. A factory that throws counts as a failed
+     * attempt, like a socket that does not open, rather than ending the
+     * reconnect loop half way.
+     */
+    private function replaceTransport(): void
+    {
+        try {
+            $this->transport = $this->state === null ? null : $this->createTransport($this->state);
+        } catch (\Throwable $error) {
+            $this->transport = null;
+            $this->publisher->publish('error', $error);
+        }
+    }
+
+    private function closeFeeds(): void
+    {
+        $feeds = $this->feeds;
+        $this->feeds = [];
+        $this->unclaimedLive = [];
+        $this->unclaimedCount = 0;
+
+        // Ended rather than closed: what they already received is still
+        // yielded.
+        foreach ($feeds as $weak) {
+            $weak->get()?->end();
         }
     }
 
@@ -415,9 +533,10 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
     /**
      * The socket closed or failed. Pending calls fail; when a background loop
-     * is running it owns reconnection, otherwise (synchronous scheduler) the
-     * connection is closed and `disconnected` is published so the controller's
-     * status no longer reports it as connected.
+     * is running it owns reconnection. Otherwise (synchronous scheduler) the
+     * engine reconnects here, and if it cannot, the connection is closed and
+     * `disconnected` is published so the controller's status no longer
+     * reports it as connected.
      */
     private function connectionLost(): void
     {
@@ -428,10 +547,16 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return;
         }
 
+        // Also done if a `reconnecting` listener closed the engine.
+        if ($this->reconnectInline() || $this->terminated) {
+            return;
+        }
+
         $this->terminated = true;
         $this->transport?->close();
         $this->transport = null;
         $this->publisher->publish('disconnected');
+        $this->closeFeeds();
     }
 
     /**

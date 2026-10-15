@@ -14,6 +14,25 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
 {
     private bool $severed = false;
 
+    private bool $refusing = false;
+
+    public int $connects = 0;
+
+    /**
+     * Called with each outgoing payload before it is sent; it may sever the
+     * connection to fail that send, or return a payload to send instead.
+     *
+     * @var (\Closure(string): ?string)|null
+     */
+    public ?\Closure $beforeSend = null;
+
+    /**
+     * Called with each payload once it is sent, before its reply is read.
+     *
+     * @var (\Closure(string): void)|null
+     */
+    public ?\Closure $afterSend = null;
+
     public function __construct(
         private readonly StreamWebSocketClient $inner = new StreamWebSocketClient(),
     ) {}
@@ -24,19 +43,39 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
         $this->inner->close();
     }
 
+    /** Make later connection attempts fail, as if the server were down. */
+    public function refuseConnections(bool $refuse = true): void
+    {
+        $this->refusing = $refuse;
+    }
+
     public function connect(string $url, array $subprotocols = [], array $headers = []): void
     {
+        $this->connects++;
+
+        if ($this->refusing) {
+            throw new SurrealException('Connection refused');
+        }
+
         $this->severed = false;
         $this->inner->connect($url, $subprotocols, $headers);
     }
 
     public function send(string $payload, bool $binary = false): void
     {
+        if ($this->beforeSend !== null) {
+            $payload = ($this->beforeSend)($payload) ?? $payload;
+        }
+
         if ($this->severed) {
             throw new SurrealException('Failed to write to the WebSocket connection');
         }
 
         $this->inner->send($payload, $binary);
+
+        if ($this->afterSend !== null) {
+            ($this->afterSend)($payload);
+        }
     }
 
     public function receive(?float $timeout = null): ?string

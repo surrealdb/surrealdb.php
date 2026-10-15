@@ -72,8 +72,14 @@ final class ApiQuery extends QueryBuilder
      */
     public function execute(): mixed
     {
-        $result = $this->dispatch()[0] ?? null;
+        return $this->result($this->dispatch()[0] ?? null);
+    }
 
+    /**
+     * @return ApiResponse<TBody>|TBody
+     */
+    protected function result(mixed $result): mixed
+    {
         if (!is_array($result) || !isset($result['status'])) {
             throw new SurrealException('The API response is missing its status');
         }
