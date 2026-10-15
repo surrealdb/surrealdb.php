@@ -259,9 +259,11 @@ These run a background read loop, keepalive pings and token renewal timers.
 $response = $db->api('/v1')->post('orders', ['item' => 'book'])->execute();   // ApiResponse
 $body = $db->api('/v1')->get('orders/1')->value()->execute();                   // body, throws on non-2xx
 
-// ISO GQL graph queries, and GraphQL over tables with defined fields
-// (SurrealDB 3.2+; GraphQL needs `DEFINE CONFIG GRAPHQL`).
+// ISO GQL graph queries (SurrealDB 3.3+, or a 3.2 server started with
+// `--allow-experimental gql`).
 $db->gql('MATCH (a:person)-[:knows]->(b:person) WHERE a.name = $name RETURN b.name AS friend', ['name' => 'Tobie']);
+
+// GraphQL over tables with defined fields (SurrealDB 3.2+; needs `DEFINE CONFIG GRAPHQL`).
 $db->graphql('query Person($id: ID!) { person(id: $id) { name } }', ['id' => 'tobie'], 'Person')->dataOrThrow();
 
 // Import and export SurrealQL.
@@ -347,8 +349,15 @@ composer cs
 
 The integration tests connect to `SURREALDB_HTTP_URL` and `SURREALDB_WS_URL` (default `127.0.0.1:8000`, user `root`/`root`) and skip without a server unless `SURREALDB_REQUIRE_LOCAL=1`.
 
+Start a server and leave it running:
+
 ```bash
 surreal start --user root --pass root --allow-all memory
+```
+
+Then, in another terminal:
+
+```bash
 composer test
 composer test:frankenphp   # Amp/Revolt runtime
 composer test:openswoole   # needs the openswoole extension
