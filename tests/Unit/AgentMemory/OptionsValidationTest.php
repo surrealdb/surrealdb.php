@@ -4,6 +4,7 @@ namespace SurrealDB\Tests\Unit\AgentMemory;
 
 use PHPUnit\Framework\TestCase;
 use SurrealDB\AgentMemory\AgentMemoryOptions;
+use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Enum\Verb;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\DocumentQueryOptions;
@@ -14,6 +15,7 @@ use SurrealDB\AgentMemory\Options\KeyCreateOptions;
 use SurrealDB\AgentMemory\Options\KeywordSearchOptions;
 use SurrealDB\AgentMemory\Options\NeighbourhoodOptions;
 use SurrealDB\AgentMemory\Options\RecallOptions;
+use SurrealDB\AgentMemory\Options\ScopeForgetOptions;
 use SurrealDB\AgentMemory\Options\ScopeRegisterOptions;
 
 /** Required members of the options classes are rejected when empty or contradictory. */
@@ -94,6 +96,10 @@ final class OptionsValidationTest extends TestCase
             'endpoint' => static fn () => new AgentMemoryOptions(' ', 'acme_prod', 'secret'),
             'context' => static fn () => new AgentMemoryOptions('https://memory.example.com', ' ', 'secret'),
             'api key' => static fn () => new AgentMemoryOptions('https://memory.example.com', 'acme_prod', ' '),
+            'scope forget path' => static fn () => new ScopeForgetOptions(''),
+            'blank scope forget path' => static fn () => new ScopeForgetOptions(' '),
+            'entity type' => static fn () => new EntityRef(' ', 'a'),
+            'entity name' => static fn () => new EntityRef('person', ' '),
         ];
 
         foreach ($cases as $name => $build) {
@@ -104,6 +110,13 @@ final class OptionsValidationTest extends TestCase
                 $this->addToAssertionCount(1);
             }
         }
+    }
+
+    public function testScopeForgetMayOmitThePath(): void
+    {
+        // Kept optional like the JS client and the spec; the server answers 400 without one.
+        $this->assertSame([], (new ScopeForgetOptions())->toPayload());
+        $this->assertSame(['path' => 'team/eng'], (new ScopeForgetOptions('team/eng'))->toPayload());
     }
 
     public function testNeighbourhoodAllowsCountWithAZeroMinFacts(): void

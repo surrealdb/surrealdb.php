@@ -377,6 +377,10 @@ final class AgentMemoryComponentsTest extends TestCase
             'uncertainty id' => static fn () => $client->uncertainty->resolve(' ', 'CTO'),
             'entity name' => static fn () => $client->entities->get('person', ''),
             'key name' => static fn () => $client->keys->delete(''),
+            // An empty path addresses the root scope.
+            'scope path' => static fn () => $client->scopes->delete(''),
+            'blank scope path' => static fn () => $client->scopes->delete(' '),
+            'session context query' => static fn () => $client->sessions->attach('s1')->context(' '),
         ];
 
         foreach ($calls as $name => $call) {

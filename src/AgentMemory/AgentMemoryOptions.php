@@ -8,7 +8,6 @@ use Psr\Http\Message\StreamFactoryInterface;
 use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\Auth\AuthenticationInterface;
 use SurrealDB\AgentMemory\Auth\BearerToken;
-use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use function is_string;
 
 /**
@@ -46,16 +45,11 @@ final readonly class AgentMemoryOptions
         public ?RequestFactoryInterface $requestFactory = null,
         public ?StreamFactoryInterface $streamFactory = null,
     ) {
-        if (trim($this->endpoint) === '') {
-            throw new InvalidArgumentException('Agent Memory endpoint is required.');
-        }
+        Guard::notBlank($this->endpoint, 'Agent Memory endpoint is required.');
+        Guard::notBlank($this->context, 'Agent Memory context is required.');
 
-        if (trim($this->context) === '') {
-            throw new InvalidArgumentException('Agent Memory context is required.');
-        }
-
-        if (is_string($this->apiKey) && trim($this->apiKey) === '') {
-            throw new InvalidArgumentException('Agent Memory API key is required.');
+        if (is_string($this->apiKey)) {
+            Guard::notBlank($this->apiKey, 'Agent Memory API key is required.');
         }
     }
 

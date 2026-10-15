@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
@@ -58,6 +59,8 @@ final class Session
      */
     public function context(string $query): array
     {
+        Guard::notBlank($query, 'Session::context() requires a non-empty query.');
+
         return $this->transport->requestJson('POST', $this->base() . '/context', body: ['query' => $query]) ?? [];
     }
 

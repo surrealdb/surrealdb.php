@@ -3,7 +3,7 @@
 namespace SurrealDB\AgentMemory\Options;
 
 use SurrealDB\AgentMemory\Components\Principals;
-use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Payload;
 
 /** Options for {@see Principals::effective()}. */
@@ -17,9 +17,7 @@ final readonly class EffectiveGrantsOptions
         public string $path,
         public ?string $asOf = null,
     ) {
-        if (trim($this->path) === '') {
-            throw new InvalidArgumentException('EffectiveGrantsOptions requires a non-empty path.');
-        }
+        Guard::notBlank($this->path, 'EffectiveGrantsOptions requires a non-empty path.');
     }
 
     /**

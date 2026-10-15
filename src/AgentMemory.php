@@ -18,6 +18,7 @@ use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\StreamException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Message;
 use SurrealDB\AgentMemory\Options\AuditOptions;
 use SurrealDB\AgentMemory\Options\ChatOptions;
@@ -148,13 +149,12 @@ final class AgentMemory
      * principal must allow delegation, and requests run with the intersection
      * of the caller's and the target's grants. The original client is left
      * unchanged.
+     *
+     * @throws InvalidArgumentException when the id is blank, alone or after a `principal:` prefix (the
+     *                                  server would run the request as the caller), or holds a control character
      */
     public function onBehalfOf(string $principalId): self
     {
-        if ($principalId === '') {
-            throw new InvalidArgumentException('onBehalfOf requires a principal id.');
-        }
-
         return new self($this->options, $this->connection, $principalId);
     }
 
@@ -209,6 +209,8 @@ final class AgentMemory
      */
     public function recall(string $query, ?RecallOptions $options = null): array
     {
+        Guard::notBlank($query, 'recall() requires a non-empty query.');
+
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
         return $this->transport->requestJson('POST', $this->base() . '/query', body: $payload) ?? [];
@@ -226,6 +228,10 @@ final class AgentMemory
      */
     public function lookup(string $query, ?LookupOptions $options = null): array
     {
+        if ($options?->subject === null) {
+            Guard::notBlank($query, 'lookup() requires a non-empty query unless a subject is given.');
+        }
+
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
         return $this->transport->requestJson('POST', $this->base() . '/lookup', body: $payload) ?? [];
@@ -239,6 +245,8 @@ final class AgentMemory
      */
     public function forget(string $query, ?ForgetOptions $options = null): array
     {
+        Guard::notBlank($query, 'forget() requires a non-empty query.');
+
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
         return $this->transport->requestJson('POST', $this->base() . '/forget', body: $payload) ?? [];
@@ -252,6 +260,8 @@ final class AgentMemory
      */
     public function chat(string $message, ?ChatOptions $options = null): array
     {
+        Guard::notBlank($message, 'chat() requires a non-empty message.');
+
         $payload = ['message' => $message] + ($options?->toPayload() ?? []);
 
         return $this->transport->requestJson('POST', $this->base() . '/chat', body: $payload) ?? [];
@@ -265,17 +275,19 @@ final class AgentMemory
      * `memoryUpdates` in its `raw` payload. Tokens arrive incrementally when
      * the underlying PSR-18 client streams response bodies.
      *
+     * The message and options are checked on the call itself; the request is
+     * sent when the generator is first iterated.
+     *
      * @return \Generator<int,ChatChunk>
      *
-     * @throws StreamException when the server reports a failure mid-stream
+     * @throws InvalidArgumentException when the message is blank
+     * @throws StreamException          when the server reports a failure mid-stream
      */
     public function chatStream(string $message, ?ChatOptions $options = null): \Generator
     {
-        $payload = ['message' => $message] + ($options?->toPayload() ?? []) + ['stream' => true];
+        Guard::notBlank($message, 'chatStream() requires a non-empty message.');
 
-        $response = $this->transport->requestStream('POST', $this->base() . '/chat', $payload);
-
-        yield from (new ChatStreamParser())->parse($response->getBody());
+        return $this->streamChat(['message' => $message] + ($options?->toPayload() ?? []) + ['stream' => true]);
     }
 
     /**
@@ -286,6 +298,8 @@ final class AgentMemory
      */
     public function context(string $query, ?ContextOptions $options = null): array
     {
+        Guard::notBlank($query, 'context() requires a non-empty query.');
+
         $payload = ['query' => $query] + ($options?->toPayload() ?? []);
 
         return $this->transport->requestJson('POST', $this->base() . '/context', body: $payload) ?? [];
@@ -299,6 +313,8 @@ final class AgentMemory
      */
     public function reflect(string $query, ?ReflectOptions $options = null): array
     {
+        Guard::notBlank($query, 'reflect() requires a non-empty query.');
+
         $payload = ['query' => $query] + ($options ?? new ReflectOptions())->toPayload();
 
         return $this->transport->requestJson('POST', $this->base() . '/reflect', body: $payload) ?? [];
@@ -396,6 +412,18 @@ final class AgentMemory
     public function whoami(): array
     {
         return $this->transport->requestJson('GET', $this->base() . '/me') ?? [];
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     *
+     * @return \Generator<int,ChatChunk>
+     */
+    private function streamChat(array $payload): \Generator
+    {
+        $response = $this->transport->requestStream('POST', $this->base() . '/chat', $payload);
+
+        yield from (new ChatStreamParser())->parse($response->getBody());
     }
 
     private function base(): string

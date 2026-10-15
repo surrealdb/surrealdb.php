@@ -3,7 +3,7 @@
 namespace SurrealDB\AgentMemory\Options;
 
 use SurrealDB\AgentMemory\Components\Scopes;
-use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Payload;
 
 /** Options for {@see Scopes::register()}. */
@@ -19,9 +19,7 @@ final readonly class ScopeRegisterOptions
         public ?string $displayName = null,
         public ?string $description = null,
     ) {
-        if (trim($this->path) === '') {
-            throw new InvalidArgumentException('ScopeRegisterOptions requires a non-empty path.');
-        }
+        Guard::notBlank($this->path, 'ScopeRegisterOptions requires a non-empty path.');
     }
 
     /**

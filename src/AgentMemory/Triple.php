@@ -183,10 +183,6 @@ final readonly class Triple
 
     private static function required(string $field, string $value): string
     {
-        if (trim($value) === '') {
-            throw new InvalidArgumentException("A triple's {$field} must be non-empty.");
-        }
-
-        return $value;
+        return Guard::notBlank($value, "A triple's {$field} must be non-empty.");
     }
 }

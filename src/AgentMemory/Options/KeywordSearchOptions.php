@@ -3,7 +3,7 @@
 namespace SurrealDB\AgentMemory\Options;
 
 use SurrealDB\AgentMemory\Components\DocumentKeywords;
-use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Payload;
 use SurrealDB\AgentMemory\Scope;
 
@@ -23,9 +23,7 @@ final readonly class KeywordSearchOptions
         public ?float $threshold = null,
         public string|array|null $lens = null,
     ) {
-        if (trim($this->query) === '') {
-            throw new InvalidArgumentException('KeywordSearchOptions requires a non-empty query.');
-        }
+        Guard::notBlank($this->query, 'KeywordSearchOptions requires a non-empty query.');
     }
 
     /**

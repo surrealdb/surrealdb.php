@@ -23,13 +23,11 @@ final readonly class EntityRef implements \Stringable
         public string $type,
         public string $name,
     ) {
-        if (trim($this->type) === '' || str_contains($this->type, '/')) {
+        if (Guard::isBlank($this->type) || str_contains($this->type, '/')) {
             throw new InvalidArgumentException("EntityRef type must be a non-empty segment without '/', got \"{$this->type}\".");
         }
 
-        if (trim($this->name) === '') {
-            throw new InvalidArgumentException('EntityRef requires a non-empty name.');
-        }
+        Guard::notBlank($this->name, 'EntityRef requires a non-empty name.');
     }
 
     /**

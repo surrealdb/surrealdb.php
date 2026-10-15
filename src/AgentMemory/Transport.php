@@ -8,10 +8,12 @@ use SurrealDB\AgentMemory\Auth\AuthenticationInterface;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryExceptionFactory;
 use SurrealDB\AgentMemory\Exceptions\ConnectionException;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\Contracts\HttpConnectionInterface;
 use SurrealDB\Exceptions\HttpConnectionException;
 use function is_array;
 use function is_bool;
+use function strlen;
 
 /**
  * Performs authenticated Agent Memory HTTP requests over the SDK-wide
@@ -30,8 +32,19 @@ final class Transport
      */
     private const string ON_BEHALF_OF_HEADER = 'X-Spectron-On-Behalf-Of';
 
+    /** The optional kind tag the server strips from a delegation target. */
+    private const string PRINCIPAL_PREFIX = 'principal:';
+
     /**
-     * @param string $endpoint API endpoint origin without trailing slash
+     * Header values are checked before any request: PSR-7 would reject a
+     * control character with an exception of its own, and a blank delegation
+     * target would make the server run requests as the caller.
+     *
+     * @param string      $endpoint   API endpoint origin without trailing slash
+     * @param string|null $onBehalfOf principal id sent as the `X-Spectron-On-Behalf-Of` header
+     *
+     * @throws InvalidArgumentException when `$onBehalfOf` is blank, alone or after a `principal:` prefix,
+     *                                  or it or the API key holds a control character
      */
     public function __construct(
         private readonly HttpConnectionInterface $connection,
@@ -39,11 +52,26 @@ final class Transport
         private readonly AuthenticationInterface $auth,
         private readonly RetryPolicy $retry,
         private readonly ?string $onBehalfOf = null,
-    ) {}
+    ) {
+        foreach ($this->auth->headers() as $value) {
+            self::assertNoControlCharacters($value, 'The Agent Memory API key cannot contain control characters such as line breaks.');
+        }
+
+        if ($this->onBehalfOf !== null) {
+            $principal = trim($this->onBehalfOf);
+            Guard::notBlank(
+                str_starts_with($principal, self::PRINCIPAL_PREFIX) ? substr($principal, strlen(self::PRINCIPAL_PREFIX)) : $principal,
+                'onBehalfOf requires a principal id.',
+            );
+            self::assertNoControlCharacters($this->onBehalfOf, 'onBehalfOf cannot contain control characters such as line breaks.');
+        }
+    }
 
     /**
      * A copy of this transport that issues every request on behalf of
      * `$principalId` (adds the `X-Spectron-On-Behalf-Of` header).
+     *
+     * @throws InvalidArgumentException when the id is blank or holds a control character
      */
     public function withOnBehalfOf(string $principalId): self
     {
@@ -229,6 +257,16 @@ final class Transport
         }
 
         return $headers;
+    }
+
+    /**
+     * @throws InvalidArgumentException with `$message` when `$value` holds a C0 control character or DEL
+     */
+    private static function assertNoControlCharacters(string $value, string $message): void
+    {
+        if (preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
+            throw new InvalidArgumentException($message);
+        }
     }
 
     /**

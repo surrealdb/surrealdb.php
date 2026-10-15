@@ -5,7 +5,7 @@ namespace SurrealDB\AgentMemory\Options;
 use SurrealDB\AgentMemory\Components\Documents;
 use SurrealDB\AgentMemory\Enum\GraphEdgeKind;
 use SurrealDB\AgentMemory\Enum\QueryMode;
-use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Payload;
 use SurrealDB\AgentMemory\Scope;
 
@@ -49,9 +49,7 @@ final readonly class DocumentQueryOptions
         public ?bool $useReranker = null,
         public string|array|null $lens = null,
     ) {
-        if (trim($this->query) === '') {
-            throw new InvalidArgumentException('DocumentQueryOptions requires a non-empty query.');
-        }
+        Guard::notBlank($this->query, 'DocumentQueryOptions requires a non-empty query.');
     }
 
     /**

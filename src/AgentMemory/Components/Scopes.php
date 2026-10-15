@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\ScopeForgetOptions;
 use SurrealDB\AgentMemory\Options\ScopeListOptions;
 use SurrealDB\AgentMemory\Options\ScopeRegisterOptions;
@@ -38,11 +39,15 @@ final class Scopes
     /** Deletes (tombstones) a scope node by path; the root scope cannot be deleted. */
     public function delete(string $path): void
     {
+        Guard::notBlank($path, 'Scopes::delete() requires a scope path; an empty path addresses the root scope, which cannot be deleted.');
+
         $this->transport->requestJson('DELETE', $this->base(), ['path' => $path]);
     }
 
     /**
-     * Forgets (erases) a scope subtree. Returns the number of rows forgotten.
+     * Forgets (erases) the scope subtree at the options' `path`. The server
+     * requires a path and answers 400 without one; it never forgets the whole
+     * context. Returns the number of rows forgotten.
      *
      * @return array<int|string,mixed>
      */

@@ -14,11 +14,7 @@ final class Paths
      */
     public static function encodeSegment(string $value): string
     {
-        if (trim($value) === '') {
-            throw new InvalidArgumentException('Agent Memory path segments (ids and names) must be non-empty.');
-        }
-
-        return rawurlencode($value);
+        return rawurlencode(Guard::notBlank($value, 'Agent Memory path segments (ids and names) must be non-empty.'));
     }
 
     /** The API path prefix for an Agent Memory context: `/api/v1/{contextId}`. */

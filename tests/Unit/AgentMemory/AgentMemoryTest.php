@@ -184,6 +184,16 @@ final class AgentMemoryTest extends TestCase
         $this->assertSame('entity', $answer['resolution']['kind']);
     }
 
+    public function testLookupAcceptsABlankQueryForAKnownSubject(): void
+    {
+        $connection = new RecordingHttpConnection(new Response(200, [], '{"resolution":{"kind":"entity"}}'));
+
+        // The server only needs a query to resolve one; a subject skips resolution.
+        $this->client($connection)->lookup('', new LookupOptions(subject: 'person/alice'));
+
+        $this->assertSame('{"query":"","subject":"person/alice"}', $connection->body);
+    }
+
     public function testForgetOnlySendsFlagsWhenTrue(): void
     {
         $connection = new RecordingHttpConnection(new Response(200, [], '{"deleted":0}'));
@@ -372,7 +382,7 @@ final class AgentMemoryTest extends TestCase
         $client = $this->retryingClient($connection, maxRetries: 0);
         $cases = [
             NotFoundException::class => static fn () => $client->state(),
-            InvalidArgumentException::class => static fn () => $client->sessions->attach(' '),
+            InvalidArgumentException::class => static fn () => $client->recall(' '),
             InvalidValueException::class => static fn () => Duration::fromString('nope'),
         ];
 
@@ -387,6 +397,72 @@ final class AgentMemoryTest extends TestCase
 
         // Argument errors still satisfy a catch written for PHP's own class.
         $this->assertInstanceOf(\InvalidArgumentException::class, new InvalidArgumentException('x'));
+    }
+
+    public function testBlankQueriesAndMessagesAreRejectedBeforeAnyRequest(): void
+    {
+        $connection = new RecordingHttpConnection(new Response(200, [], '{}'));
+        $client = $this->client($connection);
+        $options = new AgentMemoryOptions('https://memory.example.com', 'acme_prod', 'secret');
+        $calls = [
+            'recall' => static fn () => $client->recall(' '),
+            'lookup without a subject' => static fn () => $client->lookup(''),
+            'forget' => static fn () => $client->forget("\t"),
+            'chat' => static fn () => $client->chat(' '),
+            // Raised by the call itself; the generator is never iterated.
+            'chatStream' => static fn () => $client->chatStream(' '),
+            'context' => static fn () => $client->context(' '),
+            'reflect' => static fn () => $client->reflect(' '),
+            // The server ignores a blank delegation target and runs the request as the caller.
+            'empty onBehalfOf' => static fn () => $client->onBehalfOf(''),
+            'blank onBehalfOf' => static fn () => $client->onBehalfOf('  '),
+            'bare principal: prefix' => static fn () => $client->onBehalfOf('principal:'),
+            'blank principal id' => static fn () => $client->onBehalfOf('principal: '),
+            'blank constructor onBehalfOf' => static fn () => new AgentMemory($options, $connection, ' '),
+        ];
+
+        foreach ($calls as $name => $call) {
+            try {
+                $call();
+                $this->fail("A blank {$name} should be rejected");
+            } catch (\InvalidArgumentException $e) {
+                $this->assertSame(InvalidArgumentException::class, $e::class, $name);
+            }
+        }
+
+        $this->assertNull($connection->url, 'no request may be sent');
+    }
+
+    public function testControlCharactersInHeaderValuesAreRejectedBeforeAnyRequest(): void
+    {
+        // PSR-7 would otherwise throw its own \InvalidArgumentException mid-request.
+        $connection = new RecordingHttpConnection(new Response(200, [], '{}'));
+        $client = $this->client($connection);
+        $calls = [
+            'onBehalfOf with CRLF' => static fn () => $client->onBehalfOf("alex\r\nX-Injected: 1"),
+            'onBehalfOf with a trailing LF' => static fn () => $client->onBehalfOf("alex\n"),
+            'onBehalfOf with NUL' => static fn () => $client->onBehalfOf("al\0ex"),
+            'API key with LF' => static fn () => new AgentMemory(
+                new AgentMemoryOptions('https://memory.example.com', 'acme_prod', "sp-key\nX-Injected: 1"),
+                $connection,
+            ),
+            'API key with DEL' => static fn () => new AgentMemory(
+                new AgentMemoryOptions('https://memory.example.com', 'acme_prod', "sp-key\x7F"),
+                $connection,
+            ),
+        ];
+
+        foreach ($calls as $name => $call) {
+            try {
+                $call();
+                $this->fail("{$name} should be rejected");
+            } catch (\InvalidArgumentException $e) {
+                $this->assertSame(InvalidArgumentException::class, $e::class, $name);
+                $this->assertStringNotContainsString('sp-key', $e->getMessage(), 'the key must not leak into the message');
+            }
+        }
+
+        $this->assertNull($connection->url, 'no request may be sent');
     }
 
     public function testFailedStatusesMapToTypedExceptions(): void
@@ -571,5 +647,17 @@ final class AgentMemoryTest extends TestCase
         $this->assertSame('s-9', $chunks[3]->sessionId);
         $this->assertTrue($chunks[3]->done);
         $this->assertSame('Hello', $chunks[3]->raw['reply']);
+    }
+
+    public function testChatStreamSendsNothingUntilIterated(): void
+    {
+        $sse = "event: done\ndata: {\"reply\":\"Hi\"}\n\n";
+        $connection = new RecordingHttpConnection(new Response(200, ['Content-Type' => 'text/event-stream'], $sse));
+
+        $stream = $this->client($connection)->chatStream('Hi');
+        $this->assertNull($connection->url, 'validating the message must not send the request');
+
+        iterator_to_array($stream, false);
+        $this->assertSame(self::BASE . '/chat', $connection->url);
     }
 }
