@@ -5,6 +5,7 @@ namespace SurrealDB\Tests\Feature;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\DatabaseAuth;
 use SurrealDB\SDK\Auth\NamespaceAuth;
+use SurrealDB\SDK\Auth\RecordAccessAuth;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverOptions;
@@ -117,6 +118,39 @@ final class SessionTransactionTest extends TestCase
             self::assertNotEmpty($fork->run('INFO FOR ROOT'));
 
             $fork->closeSession();
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAForkDoesNotShareASingleUseRefreshToken(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->run('DEFINE ACCESS account ON DATABASE TYPE RECORD'
+                . ' SIGNUP (CREATE user SET name = $name)'
+                . ' SIGNIN (SELECT * FROM user WHERE name = $name)'
+                . ' WITH REFRESH');
+
+            $source = $db->newSession();
+            $tokens = $source->signup(new RecordAccessAuth($this->namespace, 'db', 'account', ['name' => 'ada']));
+
+            if ($tokens->refresh === null) {
+                self::markTestSkipped('The server did not issue a refresh token.');
+            }
+
+            $fork = $source->forkSession();
+            $state = $db->connection()->state();
+            self::assertNotNull($state);
+
+            // The server revokes a refresh token once it is used, so only the
+            // source keeps it; the fork shares the access token alone.
+            self::assertSame($tokens->refresh, $state->session($source->id())?->auth->refreshToken);
+            self::assertNotNull($state->session($fork->id()));
+            self::assertNull($state->session($fork->id())->auth->refreshToken);
+            self::assertSame($source->accessToken(), $fork->accessToken());
+            self::assertSame(['ok'], $fork->run("RETURN 'ok'"));
         } finally {
             $db->close();
         }

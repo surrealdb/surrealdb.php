@@ -9,6 +9,7 @@ use SurrealDB\SDK\Connection\ConnectionState;
 use SurrealDB\SDK\Connection\ConnectionStatus;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverContext;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Runtime\Runtime;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Transport\Amp\AmpWebSocketTransport;
@@ -147,6 +148,55 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertTrue($done);
         $this->assertNotSame($before, $after);
         $this->assertSame([$before, $after], $queryIds);
+    }
+
+    public function testATransactionIsFinishedAsSoonAsItsSocketIsLost(): void
+    {
+        $result = $this->inLoop(function (): ?array {
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $options = Runtime::amp();
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+
+            try {
+                if (!$db->isFeatureSupported(Features::transactions())) {
+                    return null;
+                }
+
+                $txn = $db->beginTransaction();
+                $finishedWhileReconnecting = null;
+                $connected = 0;
+                $db->subscribe('reconnecting', static function () use (&$finishedWhileReconnecting, $txn): void {
+                    $finishedWhileReconnecting ??= $txn->isFinished();
+                });
+                $db->subscribe('connected', static function () use (&$connected): void {
+                    $connected++;
+                });
+
+                $transports[0]->close();
+
+                $deadline = microtime(true) + 5;
+
+                while ($connected === 0 && microtime(true) < $deadline) {
+                    $this->delay(0.05);
+                }
+
+                return [$finishedWhileReconnecting, $txn->isFinished()];
+            } finally {
+                $db->close();
+            }
+        });
+
+        if ($result === null) {
+            $this->markTestSkipped('Interactive transactions need SurrealDB 3.0 or later.');
+        }
+
+        $this->assertSame([true, true], $result);
     }
 
     private function connect(Surreal $db): void
