@@ -19,9 +19,9 @@ use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Transport\StreamWebSocketClient;
 use SurrealDB\SDK\Transport\WebSocketTransport;
+use function count;
 use function is_array;
 use function is_string;
-use function count;
 
 /**
  * An engine that maintains a persistent WebSocket connection.
@@ -121,7 +121,6 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         }
     }
 
-    public function liveQuery(string $id): iterable
     /**
      * Start receiving the notifications for a live query. The feed is
      * registered immediately, and any notifications that arrived for this id
@@ -395,6 +394,9 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         $this->transport?->close();
         $this->transport = null;
         $this->publisher->publish('disconnected');
+    }
+
+    /**
      * Keep a notification nobody has subscribed to yet: a LIVE query's first
      * notifications can arrive before its caller starts listening.
      *

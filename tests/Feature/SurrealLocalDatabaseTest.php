@@ -137,9 +137,6 @@ final class SurrealLocalDatabaseTest extends TestCase
 
     #[DataProvider('protocols')]
     public function testStringTargetsCannotInjectSurrealQl(string $protocol): void
-    public function testCallInvokesFunctionsWithAnyNumberOfArguments(string $protocol): void
-    public function testImportReportsFailuresAndRoundTripsAnExport(string $protocol): void
-    public function testApiInvokesUserDefinedEndpoints(string $protocol): void
     {
         $db = $this->connect($protocol);
 
@@ -166,6 +163,17 @@ final class SurrealLocalDatabaseTest extends TestCase
 
             self::assertIsArray($backslash);
             self::assertSame('trailing\\', $backslash[0]['id']->table);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testCallInvokesFunctionsWithAnyNumberOfArguments(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
             $db->run(<<<'SURQL'
 DEFINE FUNCTION fn::zero() { RETURN 'zero' };
 DEFINE FUNCTION fn::greet($name: string, $times: int) { RETURN string::repeat('hi ' + $name + ' ', $times) };
@@ -174,6 +182,49 @@ SURQL);
             self::assertSame('zero', $db->call('fn::zero')->execute());
             self::assertSame('hi Tobie hi Tobie ', $db->call('fn::greet', args: ['Tobie', 2])->execute());
             self::assertSame(3, $db->call('math::max', args: [[1, 3, 2]])->execute());
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testJsonReturnsPlainValuesInsteadOfSurrealTypes(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $person = new RecordId('person', 'tobie');
+            $db->create($person)->content(['name' => 'Tobie', 'born' => new \SurrealDB\SDK\Types\DateTime(0)])->execute();
+
+            $typed = $db->select($person)->execute();
+            $plain = $db->select($person)->json()->execute();
+
+            self::assertIsArray($typed);
+            self::assertInstanceOf(RecordId::class, $typed['id']);
+            self::assertSame(['born' => '1970-01-01T00:00:00Z', 'id' => 'person:tobie', 'name' => 'Tobie'], $this->sorted($plain));
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @return array<array-key,mixed>
+     */
+    private function sorted(mixed $value): array
+    {
+        self::assertIsArray($value);
+        ksort($value);
+
+        return $value;
+    }
+
+    #[DataProvider('protocols')]
+    public function testImportReportsFailuresAndRoundTripsAnExport(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
             $db->import("OPTION IMPORT;\nCREATE person:tobie SET name = 'Tobie';");
             self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
 
@@ -200,6 +251,17 @@ SURQL);
             $db->import($export);
 
             self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testApiInvokesUserDefinedEndpoints(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
             $db->run(<<<'SURQL'
 DEFINE API "/v1/hello/:name" FOR get, post THEN {
     RETURN {
@@ -240,38 +302,6 @@ SURQL);
         } finally {
             $db->close();
         }
-    }
-
-    #[DataProvider('protocols')]
-    public function testJsonReturnsPlainValuesInsteadOfSurrealTypes(string $protocol): void
-    {
-        $db = $this->connect($protocol);
-
-        try {
-            $this->defineTables($db);
-            $person = new RecordId('person', 'tobie');
-            $db->create($person)->content(['name' => 'Tobie', 'born' => new \SurrealDB\SDK\Types\DateTime(0)])->execute();
-
-            $typed = $db->select($person)->execute();
-            $plain = $db->select($person)->json()->execute();
-
-            self::assertIsArray($typed);
-            self::assertInstanceOf(RecordId::class, $typed['id']);
-            self::assertSame(['born' => '1970-01-01T00:00:00Z', 'id' => 'person:tobie', 'name' => 'Tobie'], $this->sorted($plain));
-        } finally {
-            $db->close();
-        }
-    }
-
-    /**
-     * @return array<array-key,mixed>
-     */
-    private function sorted(mixed $value): array
-    {
-        self::assertIsArray($value);
-        ksort($value);
-
-        return $value;
     }
 
     /**
