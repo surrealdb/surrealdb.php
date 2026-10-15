@@ -9,8 +9,8 @@ on:
   workflow_call:
   push:
     branches: ["main"]
+  # Every pull request, including ones stacked on another branch.
   pull_request:
-    branches: ["main"]
 
 jobs:
 
@@ -41,9 +41,15 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Nightly builds can break for reasons unrelated to this repository, so a
+    # failure there is reported without blocking the run.
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     strategy:
+      fail-fast: false
       matrix:
-        version: [v2.6.2]
+        # The oldest supported major, the latest 3.x release, and nightly.
+        version: [v2.6.2, v3.3.4, nightly]
         php_version: ['8.4']
 
     steps:
@@ -80,3 +86,13 @@ jobs:
       env:
         SURREALDB_REQUIRE_LOCAL: '1'
       run: composer test
+
+    - name: Run FrankenPHP (Amp/Revolt) runtime tests
+      env:
+        SURREALDB_REQUIRE_LOCAL: '1'
+      run: composer test:frankenphp
+
+    - name: Run OpenSwoole runtime tests
+      env:
+        SURREALDB_REQUIRE_LOCAL: '1'
+      run: composer test:openswoole
