@@ -197,6 +197,29 @@ final class SessionTransactionTest extends TestCase
         }
     }
 
+    public function testClosingASessionEndsItsLiveQueries(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $session = $db->newSession();
+            $session->use($this->namespace, 'db');
+            $killed = $session->live(new Table('person'))->execute();
+            $iterated = $session->live(new Table('person'))->execute();
+
+            $session->closeSession();
+
+            self::assertFalse($killed->isAlive());
+            // Nothing to stop on the server any more: a no-op, not an error.
+            $killed->kill();
+
+            // Iteration ends instead of waiting on a feed nothing can reach.
+            self::assertSame([], iterator_to_array($iterated, false));
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testAClosedSessionIsRejectedBeforeAnyRequest(): void
     {
         $db = $this->connect();
