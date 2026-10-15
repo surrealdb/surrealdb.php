@@ -60,6 +60,13 @@ function typesThroughTheInterfaces(AgentMemoryInterface $memory): void
 
     foreach ($memory->chatStream('hello') as $chunk) {
         assertType(ChatChunk::class, $chunk);
+        assertType('SurrealDB\\AgentMemory\\Enum\\ChatEvent|null', $chunk->event);
+        assertType('string|null', $chunk->reply);
+
+        if ($chunk->citations !== null && $chunk->memoryUpdates !== null) {
+            assertType('string', $chunk->citations[0]['marker']);
+            assertType('string', $chunk->memoryUpdates['turnId']);
+        }
     }
 }
 

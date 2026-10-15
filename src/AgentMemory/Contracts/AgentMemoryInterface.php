@@ -4,6 +4,7 @@ namespace SurrealDB\AgentMemory\Contracts;
 
 use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\EntityRef;
+use SurrealDB\AgentMemory\Enum\ChatEvent;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\StreamException;
@@ -169,11 +170,12 @@ interface AgentMemoryInterface
 
     /**
      * Streaming chat round trip (`POST /chat` with `stream: true`): yields
-     * {@see ChatChunk}s as the server emits them. The first chunk carries the
-     * trace and session ids, each following chunk a `delta` of reply text, and
-     * the terminal chunk (`done`) the full `reply`, `citations` and
-     * `memoryUpdates` in its `raw` payload. Tokens arrive incrementally when
-     * the underlying PSR-18 client streams response bodies.
+     * {@see ChatChunk}s as the server emits them, each tagged with its
+     * {@see ChatEvent}: `meta` carries the trace and session ids, each `chunk`
+     * a `delta` of reply text, and the terminal `done` chunk the full `reply`,
+     * `citations` and `memoryUpdates`, the members {@see chat()} returns, as
+     * typed properties; its `raw` keeps the payload. Tokens arrive
+     * incrementally when the underlying PSR-18 client streams response bodies.
      *
      * The message and options are checked on the call itself; the request is
      * sent when the generator is first iterated.

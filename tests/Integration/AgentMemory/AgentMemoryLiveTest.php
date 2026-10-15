@@ -2,6 +2,7 @@
 
 namespace SurrealDB\Tests\Integration\AgentMemory;
 
+use SurrealDB\AgentMemory\Enum\ChatEvent;
 use SurrealDB\AgentMemory\Enum\InferMode;
 use SurrealDB\AgentMemory\Enum\LookupSection;
 use SurrealDB\AgentMemory\Enum\ResultFamily;
@@ -106,13 +107,16 @@ final class AgentMemoryLiveTest extends AgentMemoryServerTestCase
         ), false);
 
         $this->assertNotEmpty($chunks);
-        $this->assertSame(ChatChunk::EVENT_META, $chunks[0]->event);
+        $this->assertSame(ChatEvent::META, $chunks[0]->event);
         $this->assertNotNull($chunks[0]->traceId);
 
         $last = $chunks[array_key_last($chunks)];
         $this->assertTrue($last->done);
         $this->assertNotSame('', trim(implode('', array_map(static fn (ChatChunk $c): string => $c->delta, $chunks))));
-        $this->assertIsString($last->raw['reply']);
+        $this->assertSame(ChatEvent::DONE, $last->event);
+        $this->assertIsString($last->reply);
+        $this->assertIsArray($last->citations);
+        $this->assertIsArray($last->memoryUpdates);
     }
 
     public function testUploadedDocumentIsIngestedAndSearchable(): void

@@ -3,6 +3,7 @@
 namespace SurrealDB\AgentMemory\Streaming;
 
 use Psr\Http\Message\StreamInterface;
+use SurrealDB\AgentMemory\Enum\ChatEvent;
 use SurrealDB\AgentMemory\Exceptions\StreamException;
 use function is_array;
 use function is_string;
@@ -14,8 +15,10 @@ use function strlen;
  * The server names each frame with an `event:` line and carries a JSON
  * `data:` payload: `meta` (`traceId`, `sessionId`), `chunk` (`text`), `done`
  * (`reply`, `citations`, `memoryUpdates`), and `error` (`error`), which is
- * raised as a {@see StreamException}. Multi-line `data:` payloads, comment
- * keep-alives, and the `[DONE]` sentinel some proxies append are handled.
+ * raised as a {@see StreamException}. A frame named with an event this client
+ * does not know is still yielded, with a null {@see ChatChunk::$event}.
+ * Multi-line `data:` payloads, comment keep-alives, and the `[DONE]` sentinel
+ * some proxies append are handled.
  * Chunks are yielded as the underlying stream delivers them, so an HTTP client
  * that streams responses surfaces tokens incrementally while a buffering
  * client yields them all at once.
@@ -90,7 +93,7 @@ final class ChatStreamParser
 
     private function toChunk(string $frame, ?string $traceId, ?string $sessionId): ?ChatChunk
     {
-        $event = null;
+        $name = null;
         $dataLines = [];
 
         foreach (preg_split('/\r?\n/', $frame) ?: [] as $line) {
@@ -99,7 +102,7 @@ final class ChatStreamParser
             }
 
             if (str_starts_with($line, 'event:')) {
-                $event = trim(substr($line, 6));
+                $name = trim(substr($line, 6));
             } elseif (str_starts_with($line, 'data:')) {
                 // Per the SSE spec only one space after the colon is syntax.
                 $value = substr($line, 5);
@@ -112,6 +115,7 @@ final class ChatStreamParser
         }
 
         $data = implode("\n", $dataLines);
+        $event = $name === null ? null : ChatEvent::tryFrom($name);
 
         if ($data === '[DONE]') {
             return new ChatChunk('', $traceId, $sessionId, true, [], $event);
@@ -119,14 +123,14 @@ final class ChatStreamParser
 
         $decoded = json_decode($data, true);
 
-        if ($event === self::EVENT_ERROR) {
+        if ($name === self::EVENT_ERROR) {
             $message = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : $data;
 
             throw new StreamException('Chat stream failed', 0, $message, extensions: is_array($decoded) ? $decoded : []);
         }
 
         $payload = is_array($decoded) ? $decoded : ['text' => $data];
-        $done = $event === ChatChunk::EVENT_DONE || ($payload['done'] ?? null) === true;
+        $done = $event === ChatEvent::DONE || ($payload['done'] ?? null) === true;
 
         return ChatChunk::fromFrame($payload, $done, $event, $traceId, $sessionId);
     }

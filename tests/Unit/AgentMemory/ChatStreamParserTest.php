@@ -4,6 +4,7 @@ namespace SurrealDB\Tests\Unit\AgentMemory;
 
 use GuzzleHttp\Psr7\Utils;
 use PHPUnit\Framework\TestCase;
+use SurrealDB\AgentMemory\Enum\ChatEvent;
 use SurrealDB\AgentMemory\Exceptions\StreamException;
 use SurrealDB\AgentMemory\Streaming\ChatChunk;
 use SurrealDB\AgentMemory\Streaming\ChatStreamParser;
@@ -19,11 +20,11 @@ final class ChatStreamParserTest extends TestCase
         . "event: chunk\ndata: {\"text\":\"the CTO [S1].\"}\n\n"
         . "event: done\ndata: {\"reply\":\"Alice is the CTO [S1].\",\"memoryUpdates\":{\"attributes\":[]},\"citations\":[{\"marker\":\"S1\"}]}\n\n";
 
+    private const string DONE = "event: done\ndata: {\"reply\":\"\"}\n\n";
+
     /**
      * @return list<ChatChunk>
      */
-    private const string DONE = "event: done\ndata: {\"reply\":\"\"}\n\n";
-
     private function parse(string $sse, int $bytesPerRead = 8192): array
     {
         return iterator_to_array((new ChatStreamParser())->parse(new TrickleStream($sse, $bytesPerRead)), false);
@@ -33,7 +34,10 @@ final class ChatStreamParserTest extends TestCase
     {
         $chunks = $this->parse(self::SERVER_STREAM);
 
-        $this->assertSame(['meta', 'chunk', 'chunk', 'done'], array_map(static fn (ChatChunk $c): ?string => $c->event, $chunks));
+        $this->assertSame(
+            [ChatEvent::META, ChatEvent::CHUNK, ChatEvent::CHUNK, ChatEvent::DONE],
+            array_map(static fn (ChatChunk $c): ?ChatEvent => $c->event, $chunks),
+        );
         $this->assertSame(['', 'Alice is ', 'the CTO [S1].', ''], array_map(static fn (ChatChunk $c): string => $c->delta, $chunks));
 
         foreach ($chunks as $chunk) {
@@ -43,8 +47,56 @@ final class ChatStreamParserTest extends TestCase
 
         $done = $chunks[3];
         $this->assertTrue($done->done);
-        $this->assertSame('Alice is the CTO [S1].', $done->raw['reply']);
-        $this->assertSame([['marker' => 'S1']], $done->raw['citations']);
+        $this->assertSame('Alice is the CTO [S1].', $done->reply);
+        $this->assertSame([['marker' => 'S1']], $done->citations);
+        $this->assertSame(['attributes' => []], $done->memoryUpdates);
+        $this->assertSame($done->reply, $done->raw['reply'], 'raw keeps the payload');
+
+        foreach (array_slice($chunks, 0, 3) as $chunk) {
+            $this->assertNull($chunk->reply);
+            $this->assertNull($chunk->memoryUpdates);
+            $this->assertNull($chunk->citations);
+        }
+    }
+
+    public function testUnknownEventNamesMapToNull(): void
+    {
+        $chunks = $this->parse("event: progress\ndata: {\"text\":\"thinking\"}\n\n" . self::DONE);
+
+        $this->assertNull($chunks[0]->event);
+        $this->assertSame('thinking', $chunks[0]->delta);
+        $this->assertFalse($chunks[0]->done);
+    }
+
+    public function testFinalFieldsAreReadOnlyFromTheTerminalFrame(): void
+    {
+        $chunks = $this->parse(
+            "event: chunk\ndata: {\"text\":\"Hi\",\"reply\":\"early\",\"memoryUpdates\":{\"turnId\":\"t-1\"},\"citations\":[]}\n\n"
+            . "data: {\"done\":true,\"reply\":\"Hi\",\"citations\":[]}\n\n",
+        );
+
+        $this->assertNull($chunks[0]->reply);
+        $this->assertNull($chunks[0]->memoryUpdates);
+        $this->assertNull($chunks[0]->citations);
+        $this->assertSame('early', $chunks[0]->raw['reply']);
+
+        // An unnamed frame that says `done: true` is terminal too.
+        $this->assertNull($chunks[1]->event);
+        $this->assertTrue($chunks[1]->done);
+        $this->assertSame('Hi', $chunks[1]->reply);
+        $this->assertSame([], $chunks[1]->citations);
+        $this->assertNull($chunks[1]->memoryUpdates);
+    }
+
+    public function testMalformedFinalFieldsAreDropped(): void
+    {
+        [$done] = $this->parse("event: done\ndata: {\"reply\":5,\"memoryUpdates\":\"x\",\"citations\":{\"a\":1}}\n\n");
+
+        $this->assertTrue($done->done);
+        $this->assertNull($done->reply);
+        $this->assertNull($done->memoryUpdates);
+        $this->assertNull($done->citations);
+        $this->assertSame(['reply' => 5, 'memoryUpdates' => 'x', 'citations' => ['a' => 1]], $done->raw);
     }
 
     public function testFramesSplitAcrossReadsAreReassembled(): void
@@ -109,7 +161,7 @@ final class ChatStreamParserTest extends TestCase
             . "event: chunk\ndata: {\"text\":\"never reached\"}\n\n";
         $generator = (new ChatStreamParser())->parse(Utils::streamFor($sse));
 
-        $this->assertSame('meta', $generator->current()->event);
+        $this->assertSame(ChatEvent::META, $generator->current()->event);
 
         try {
             $generator->next();
@@ -136,6 +188,9 @@ final class ChatStreamParserTest extends TestCase
         $this->assertSame(['Hel', 'lo', ''], array_map(static fn (ChatChunk $c): string => $c->delta, $chunks));
         $this->assertSame('tr-9', $chunks[2]->traceId);
         $this->assertTrue($chunks[2]->done);
+        $this->assertNull($chunks[2]->event);
+        $this->assertNull($chunks[2]->reply);
+        $this->assertSame([], $chunks[2]->raw);
     }
 
     public function testParsingStopsAtTheDoneFrame(): void

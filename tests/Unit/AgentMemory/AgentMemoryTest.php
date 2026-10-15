@@ -9,6 +9,7 @@ use SurrealDB\AgentMemory\AgentMemoryOptions;
 use SurrealDB\AgentMemory\AgentMemoryRuntime;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Enum\BatchExtractionMode;
+use SurrealDB\AgentMemory\Enum\ChatEvent;
 use SurrealDB\AgentMemory\Enum\InferMode;
 use SurrealDB\AgentMemory\Enum\LookupSection;
 use SurrealDB\AgentMemory\Enum\MemoryQueryMode;
@@ -717,6 +718,10 @@ final class AgentMemoryTest extends TestCase
         $this->assertSame('tr-9', $chunks[1]->traceId);
         $this->assertSame('s-9', $chunks[3]->sessionId);
         $this->assertTrue($chunks[3]->done);
+        $this->assertSame(ChatEvent::DONE, $chunks[3]->event);
+        $this->assertSame('Hello', $chunks[3]->reply);
+        $this->assertSame([['marker' => 'S1']], $chunks[3]->citations);
+        $this->assertSame([], $chunks[3]->memoryUpdates, 'an empty JSON object decodes to []');
         $this->assertSame('Hello', $chunks[3]->raw['reply']);
     }
 
