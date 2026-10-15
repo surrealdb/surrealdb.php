@@ -178,6 +178,37 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame(['ok'], $ran);
     }
 
+    public function testAKeptTokenIsSignedOutWhenItExpires(): void
+    {
+        $result = $this->inLoop(function (): array {
+            $db = new Surreal(Runtime::amp());
+            $this->connect($db);
+
+            try {
+                $user = 'fleeting_' . bin2hex(random_bytes(4));
+                $db->run("DEFINE USER {$user} ON ROOT PASSWORD 'secret' ROLES OWNER DURATION FOR TOKEN 2s, FOR SESSION 1h");
+                $db->signin(new RootAuth($user, 'secret'));
+                $signedIn = $db->accessToken();
+                $signedOut = false;
+                $db->subscribe('auth', static function ($tokens) use (&$signedOut): void {
+                    $signedOut = $signedOut || $tokens === null;
+                });
+
+                // Nothing can renew it, so it is kept until it expires.
+                $this->delay(3.5);
+
+                return [$signedIn, $db->accessToken(), $signedOut];
+            } finally {
+                $db->close();
+            }
+        });
+
+        [$signedIn, $after, $signedOut] = $result;
+        $this->assertNotNull($signedIn);
+        $this->assertNull($after);
+        $this->assertTrue($signedOut);
+    }
+
     private function connect(Surreal $db): void
     {
         $url = getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc';
