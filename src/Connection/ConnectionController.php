@@ -663,12 +663,30 @@ final class ConnectionController
         );
         $session->variables = $source->variables ?? [];
         $state->sessions[$id] = $session;
-        $this->restoreSession($session);
+
+        try {
+            $this->restoreSession($session, $source !== null);
+        } catch (\Throwable $error) {
+            // Nothing outside holds the id yet, so nobody else could close it.
+            unset($state->sessions[$id]);
+
+            try {
+                $this->requireEngine()->detach($id);
+            } catch (\Throwable) {
+                // The restore failure is the one worth reporting.
+            }
+
+            throw $error;
+        }
 
         return $id;
     }
 
-    private function restoreSession(SessionState $session): void
+    /**
+     * @param bool $fork whether the session's tokens were copied from another
+     *                   session, which still holds them
+     */
+    private function restoreSession(SessionState $session, bool $fork = false): void
     {
         if ($session->namespace !== null || $session->database !== null) {
             $this->use(new NamespaceDatabase($session->namespace, $session->database), $session->id);
@@ -678,7 +696,38 @@ final class ConnectionController
             $this->requireEngine()->set($name, $value, $session->id);
         }
 
+        if ($fork && $this->authenticateWithCopiedToken($session)) {
+            return;
+        }
+
         $this->applyAuthentication($session->id);
+    }
+
+    /**
+     * A fork's copied token is good for as long as the source's is, even when
+     * it is too close to expiry for a reconnect to bother reusing it.
+     */
+    private function authenticateWithCopiedToken(SessionState $session): bool
+    {
+        $token = $session->auth->accessToken;
+
+        if ($token === null) {
+            return false;
+        }
+
+        $expiry = Jwt::expiry($token);
+
+        if ($expiry !== null && $expiry <= time()) {
+            return false;
+        }
+
+        try {
+            $this->authenticate($token, $session->id, true);
+
+            return true;
+        } catch (ServerException) {
+            return false;
+        }
     }
 
     /**
