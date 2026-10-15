@@ -6,6 +6,7 @@ use SurrealDB\SDK\Auth\Credentials;
 use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Auth\Tokens;
 use SurrealDB\SDK\Contracts\AuthProviderInterface;
+use SurrealDB\SDK\Contracts\ConnectionProbeInterface;
 use SurrealDB\SDK\Contracts\Counter;
 use SurrealDB\SDK\Contracts\EngineInterface;
 use SurrealDB\SDK\Engines\EngineRegistry;
@@ -86,6 +87,10 @@ final class ConnectionController
 
     public function status(): ConnectionStatus
     {
+        if ($this->status === ConnectionStatus::Connected && $this->engine instanceof ConnectionProbeInterface) {
+            $this->engine->probe();
+        }
+
         return $this->status;
     }
 
