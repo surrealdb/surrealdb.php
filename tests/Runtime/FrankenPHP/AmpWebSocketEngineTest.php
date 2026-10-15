@@ -12,6 +12,8 @@ use SurrealDB\SDK\Connection\DriverContext;
 use SurrealDB\SDK\Runtime\Runtime;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Transport\Amp\AmpWebSocketTransport;
+use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\SDK\Types\Table;
 
 /**
  * Drives the WebSocket engine on the Revolt event loop against a real
@@ -85,6 +87,68 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame(['hello'], $result[2]);
     }
 
+    public function testManagedLiveIterationSurvivesAReconnect(): void
+    {
+        $result = $this->inLoop(function (): array {
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $options = Runtime::amp();
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+            $namespace = 'amp_live_' . bin2hex(random_bytes(4));
+            $connected = 0;
+            $db->subscribe('connected', static function () use (&$connected): void {
+                $connected++;
+            });
+
+            try {
+                $db->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db;");
+                $db->use($namespace, 'db');
+                $db->run('DEFINE TABLE person SCHEMALESS PERMISSIONS FULL');
+
+                $live = $db->live(new Table('person'))->execute();
+                $before = $live->id();
+                $messages = [];
+                $done = false;
+
+                // A separate fiber iterates throughout, across the reconnect.
+                EventLoop::queue(static function () use ($live, &$messages, &$done): void {
+                    foreach ($live as $message) {
+                        $messages[] = $message;
+
+                        if (count($messages) === 2) {
+                            break;
+                        }
+                    }
+
+                    $done = true;
+                });
+
+                $db->create(new RecordId('person', 'one'))->execute();
+                $this->waitFor(static function () use (&$messages): bool { return count($messages) === 1; });
+
+                $transports[0]->close();
+                $this->waitFor(static function () use (&$connected): bool { return $connected === 1; });
+
+                $db->create(new RecordId('person', 'two'))->execute();
+                $this->waitFor(static function () use (&$done): bool { return $done; });
+
+                return [$before, $live->id(), array_map(static fn ($m): string => $m->queryId, $messages), $done];
+            } finally {
+                $db->close();
+            }
+        });
+
+        [$before, $after, $queryIds, $done] = $result;
+        $this->assertTrue($done);
+        $this->assertNotSame($before, $after);
+        $this->assertSame([$before, $after], $queryIds);
+    }
+
     private function connect(Surreal $db): void
     {
         try {
@@ -98,6 +162,18 @@ final class AmpWebSocketEngineTest extends TestCase
             }
 
             self::markTestSkipped('Local SurrealDB test database is not available: ' . $error->getMessage());
+        }
+    }
+
+    /**
+     * @param \Closure(): bool $condition
+     */
+    private function waitFor(\Closure $condition): void
+    {
+        $deadline = microtime(true) + 5;
+
+        while (!$condition() && microtime(true) < $deadline) {
+            $this->delay(0.02);
         }
     }
 

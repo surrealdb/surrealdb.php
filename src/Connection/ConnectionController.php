@@ -29,6 +29,7 @@ use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedVersionException;
+use SurrealDB\SDK\Live\ManagedLiveSubscription;
 use SurrealDB\SDK\Protocol\Feature;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Protocol\NamespaceDatabase;
@@ -70,11 +71,32 @@ final class ConnectionController
     /** @var list<\Closure> */
     private array $unsubscribers = [];
 
+    /**
+     * Managed live subscriptions to replay after a reconnect. Weak, so a
+     * subscription the application dropped is not kept alive.
+     *
+     * @var \WeakMap<ManagedLiveSubscription,true>
+     */
+    private \WeakMap $managedLive;
+
+    /**
+     * When each session's token is due for renewal (Unix time), keyed by
+     * session id ('' for the default session). Checked before calls, so
+     * renewal also happens under the synchronous scheduler, which cannot
+     * run the timer {@see self::scheduleRenewal()} starts.
+     *
+     * @var array<string,int>
+     */
+    private array $renewAt = [];
+
+    private bool $renewing = false;
+
     public function __construct(
         private readonly DriverContext $context,
         ?EngineRegistry $registry = null,
     ) {
         $this->events = new Publisher();
+        $this->managedLive = new \WeakMap();
         $this->registry = $registry ?? new EngineRegistry($context->options->engines ?? []);
         $this->connections = $context->meter->counter(
             'db.client.connection.count',
@@ -278,12 +300,14 @@ final class ConnectionController
 
     public function set(string $name, mixed $value, ?string $session = null): void
     {
+        $this->renewIfDue($session);
         $this->requireEngine()->set($name, $value, $session);
         $this->requireSession($session)->variables[$name] = $value;
     }
 
     public function unset(string $name, ?string $session = null): void
     {
+        $this->renewIfDue($session);
         $this->requireEngine()->unset($name, $session);
         unset($this->requireSession($session)->variables[$name]);
     }
@@ -311,6 +335,7 @@ final class ConnectionController
     public function begin(?string $session = null): string
     {
         $this->assertFeature(Features::transactions());
+        $this->renewIfDue($session);
 
         // Committing sends the transaction id as a UUID value, which JSON
         // cannot express; refuse up front rather than leave it open.
@@ -338,6 +363,7 @@ final class ConnectionController
 
     public function importSql(string $data): void
     {
+        $this->renewIfDue(null);
         $this->requireEngine()->importSql($data);
     }
 
@@ -346,6 +372,7 @@ final class ConnectionController
      */
     public function exportSql(array $options = []): string
     {
+        $this->renewIfDue(null);
         return $this->requireEngine()->exportSql($options);
     }
 
@@ -354,6 +381,7 @@ final class ConnectionController
      */
     public function query(BoundQuery $query, ?string $session = null, ?string $txn = null): iterable
     {
+        $this->renewIfDue($session);
         return $this->requireEngine()->query($query, $session, $txn);
     }
 
@@ -390,6 +418,22 @@ final class ConnectionController
     public function forkSession(?string $source): string
     {
         return $this->attachSession($this->requireSession($source));
+    }
+
+    /**
+     * @internal replay this subscription's LIVE query after a reconnect
+     */
+    public function trackLive(ManagedLiveSubscription $subscription): void
+    {
+        $this->managedLive[$subscription] = true;
+    }
+
+    /**
+     * @internal
+     */
+    public function untrackLive(ManagedLiveSubscription $subscription): void
+    {
+        unset($this->managedLive[$subscription]);
     }
 
     public function destroySession(?string $session): void
@@ -434,6 +478,32 @@ final class ConnectionController
         } catch (\Throwable $error) {
             $this->onError($error);
             $this->engine?->close();
+
+            return;
+        }
+
+        $this->replayLiveQueries();
+    }
+
+    /**
+     * Re-issue managed live queries on a new socket, once their sessions are
+     * restored. A subscription whose query fails ends; the others carry on.
+     */
+    private function replayLiveQueries(): void
+    {
+        foreach ($this->managedLive as $subscription => $_) {
+            if (!$subscription->isAlive()) {
+                unset($this->managedLive[$subscription]);
+
+                continue;
+            }
+
+            try {
+                $subscription->replay();
+            } catch (\Throwable $error) {
+                unset($this->managedLive[$subscription]);
+                $this->onError($error);
+            }
         }
     }
 
@@ -446,6 +516,15 @@ final class ConnectionController
         $this->unsubscribers = [];
         $this->state = null;
         $this->engine = null;
+        $this->renewAt = [];
+
+        $live = $this->managedLive;
+        $this->managedLive = new \WeakMap();
+
+        foreach ($live as $subscription => $_) {
+            $subscription->connectionClosed();
+        }
+
         $this->status = ConnectionStatus::Disconnected;
         $this->events->publish('disconnected');
         $this->context->events->dispatch(new Disconnected());
@@ -458,6 +537,11 @@ final class ConnectionController
         // in one callback and close it in another).
         $this->connections->add(1, ['db.system.name' => 'surrealdb', 'outcome' => 'reconnect']);
         $this->status = ConnectionStatus::Reconnecting;
+
+        foreach ($this->managedLive as $subscription => $_) {
+            $subscription->suspend($this->context->scheduler);
+        }
+
         $this->events->publish('reconnecting');
         $this->context->events->dispatch(new Reconnecting());
     }
@@ -505,6 +589,7 @@ final class ConnectionController
         }
 
         $sessionState->auth->clear();
+        unset($this->renewAt[$session ?? '']);
         $this->events->publish('auth', null, $session);
         $this->context->events->dispatch(new AuthChanged(null, $session));
     }
@@ -525,6 +610,7 @@ final class ConnectionController
         }
 
         $delay = max($expiry - time() - 60, 0);
+        $this->renewAt[$session ?? ''] = $expiry - 60;
 
         // Runs only under an async scheduler; the sync scheduler treats spawn as
         // a no-op and relies on reactive renewal (e.g. AuthMiddleware) instead.
@@ -537,6 +623,31 @@ final class ConnectionController
                 $this->onError(new AuthenticationException('Token renewal failed', $error));
             }
         });
+    }
+
+    /**
+     * Renew the session's token if it is due. Under an async scheduler the
+     * timer from {@see self::scheduleRenewal()} usually got there first.
+     */
+    private function renewIfDue(?string $session): void
+    {
+        $key = $session ?? '';
+        $at = $this->renewAt[$key] ?? null;
+
+        if ($at === null || time() < $at || $this->renewing) {
+            return;
+        }
+
+        unset($this->renewAt[$key]);
+        $this->renewing = true;
+
+        try {
+            $this->applyAuthentication($session);
+        } catch (\Throwable $error) {
+            $this->onError(new AuthenticationException('Token renewal failed', $error));
+        } finally {
+            $this->renewing = false;
+        }
     }
 
     private function applyAuthentication(?string $session): void

@@ -40,6 +40,25 @@ final class ManagedLiveSubscription extends LiveSubscription
 
         $this->id = (string) $result;
         $this->feed = $this->connection->liveQuery($this->id);
+        $this->connection->trackLive($this);
+    }
+
+    /**
+     * @internal re-issue the LIVE query on a new connection. The server
+     * assigns a new id, which {@see self::id()} then returns.
+     */
+    public function replay(): void
+    {
+        try {
+            $this->closeFeed();
+            $this->start();
+        } catch (\Throwable $error) {
+            $this->ended = true;
+
+            throw $error;
+        } finally {
+            $this->resume();
+        }
     }
 
     public function id(): string
@@ -50,6 +69,11 @@ final class ManagedLiveSubscription extends LiveSubscription
     public function isManaged(): bool
     {
         return true;
+    }
+
+    protected function stopped(): void
+    {
+        $this->connection->untrackLive($this);
     }
 
     /** The `LIVE SELECT` statement this subscription runs. */

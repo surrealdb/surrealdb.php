@@ -60,6 +60,14 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
     private int $unclaimedCount = 0;
 
+    /**
+     * Live feeds bound to the current socket. A new socket does not carry the
+     * old one's live queries, so they end when it is lost.
+     *
+     * @var array<int,LiveFeed>
+     */
+    private array $feeds = [];
+
     public function features(): FeatureSet
     {
         return new FeatureSet(
@@ -107,6 +115,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         $this->transport = null;
         $this->failAllCalls(new CallTerminatedException());
         $this->publisher->publish('disconnected');
+        $this->closeFeeds();
     }
 
     public function ready(): void
@@ -135,7 +144,13 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             fn (): bool => $this->active && !$this->terminated,
         );
 
-        $feed->onClose($this->subscribeLive($id, $feed->push(...)));
+        $key = spl_object_id($feed);
+        $unsubscribe = $this->subscribeLive($id, $feed->push(...));
+        $this->feeds[$key] = $feed;
+        $feed->onClose(function () use ($unsubscribe, $key): void {
+            $unsubscribe();
+            unset($this->feeds[$key]);
+        });
 
         return $feed;
     }
@@ -238,7 +253,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
                 break;
             }
 
-            $this->publisher->publish('reconnecting');
+            $this->announceReconnecting();
             $this->context->scheduler->delay($reconnect->nextDelay());
 
             $this->transport = $this->createTransport($this->state);
@@ -248,6 +263,57 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             $this->active = false;
             $this->failAllCalls(new CallTerminatedException());
             $this->publisher->publish('disconnected');
+            $this->closeFeeds();
+        }
+    }
+
+    /**
+     * Announce a reconnect attempt, then end the live feeds of the lost
+     * socket. Announcing first lets managed live subscriptions know to wait
+     * for their replay instead of ending with their feed.
+     */
+    private function announceReconnecting(): void
+    {
+        $this->publisher->publish('reconnecting');
+        $this->closeFeeds();
+    }
+
+    /**
+     * Reconnect without a background loop (synchronous scheduler): retry
+     * with the reconnect strategy's backoff until a socket opens, then
+     * announce `connected` so the controller restores the sessions and
+     * replays managed live queries.
+     */
+    private function reconnectInline(): bool
+    {
+        $reconnect = $this->state?->reconnect;
+
+        while (!$this->terminated && $this->state !== null && $reconnect !== null && $reconnect->enabled() && $reconnect->allowed()) {
+            $this->announceReconnecting();
+            $this->context->scheduler->delay($reconnect->nextDelay());
+
+            $this->transport?->close();
+            $this->transport = $this->createTransport($this->state);
+
+            if ($this->connectOnce()) {
+                $this->publisher->publish('connected');
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function closeFeeds(): void
+    {
+        $feeds = $this->feeds;
+        $this->feeds = [];
+        $this->unclaimedLive = [];
+        $this->unclaimedCount = 0;
+
+        foreach ($feeds as $feed) {
+            $feed->close();
         }
     }
 
@@ -377,9 +443,10 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
     /**
      * The socket closed or failed. Pending calls fail; when a background loop
-     * is running it owns reconnection, otherwise (synchronous scheduler) the
-     * connection is closed and `disconnected` is published so the controller's
-     * status no longer reports it as connected.
+     * is running it owns reconnection. Otherwise (synchronous scheduler) the
+     * engine reconnects here, and if it cannot, the connection is closed and
+     * `disconnected` is published so the controller's status no longer
+     * reports it as connected.
      */
     private function connectionLost(): void
     {
@@ -390,10 +457,15 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return;
         }
 
+        if ($this->reconnectInline()) {
+            return;
+        }
+
         $this->terminated = true;
         $this->transport?->close();
         $this->transport = null;
         $this->publisher->publish('disconnected');
+        $this->closeFeeds();
     }
 
     /**

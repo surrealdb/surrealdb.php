@@ -14,6 +14,10 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
 {
     private bool $severed = false;
 
+    private bool $refusing = false;
+
+    public int $connects = 0;
+
     public function __construct(
         private readonly StreamWebSocketClient $inner = new StreamWebSocketClient(),
     ) {}
@@ -24,8 +28,20 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
         $this->inner->close();
     }
 
+    /** Make later connection attempts fail, as if the server were down. */
+    public function refuseConnections(bool $refuse = true): void
+    {
+        $this->refusing = $refuse;
+    }
+
     public function connect(string $url, array $subprotocols = [], array $headers = []): void
     {
+        $this->connects++;
+
+        if ($this->refusing) {
+            throw new SurrealException('Connection refused');
+        }
+
         $this->severed = false;
         $this->inner->connect($url, $subprotocols, $headers);
     }
