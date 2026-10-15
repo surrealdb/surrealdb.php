@@ -11,6 +11,7 @@ use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\InvalidSessionException;
 use SurrealDB\SDK\Exceptions\TransactionFinishedException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\SurrealSession;
 use SurrealDB\SDK\SurrealTransaction;
@@ -208,6 +209,11 @@ final class SessionTransactionTest extends TestCase
             $db->run('DEFINE TABLE person SCHEMALESS PERMISSIONS FULL');
         } catch (\Throwable $error) {
             $this->unavailable($error);
+        }
+
+        if (!$db->isFeatureSupported(Features::sessions())) {
+            $db->close();
+            self::markTestSkipped('Sessions and transactions need SurrealDB 3.0 or later.');
         }
 
         return $db;

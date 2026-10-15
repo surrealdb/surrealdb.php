@@ -11,10 +11,12 @@ use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Live\LiveAction;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
 use SurrealDB\Tests\Fakes\SeverableWebSocketClient;
+use function count;
 
 /**
  * Reconnection, session restore, live query replay and token renewal under
@@ -39,8 +41,9 @@ final class WebSocketReconnectTest extends TestCase
 
         try {
             $db->let('greeting', 'hello');
-            $session = $db->newSession();
-            $session->use($this->namespace, 'other');
+            // Extra sessions need SurrealDB 3.
+            $session = $db->isFeatureSupported(Features::sessions()) ? $db->newSession() : null;
+            $session?->use($this->namespace, 'other');
 
             $this->client->sever();
 
@@ -60,8 +63,11 @@ final class WebSocketReconnectTest extends TestCase
             // session all came back.
             self::assertSame(['hello'], $db->run('RETURN $greeting'));
             self::assertSame([$this->namespace], $db->run('RETURN session::ns()'));
-            self::assertSame(['other'], $session->run('RETURN session::db()'));
-            self::assertContains($session->id(), $db->sessions());
+
+            if ($session !== null) {
+                self::assertSame(['other'], $session->run('RETURN session::db()'));
+                self::assertContains($session->id(), $db->sessions());
+            }
         } finally {
             $db->close();
         }
