@@ -8,6 +8,7 @@ use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\AgentMemoryOptions;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Enum\EntityRanking;
+use SurrealDB\AgentMemory\Enum\LookupSection;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\ActionListOptions;
 use SurrealDB\AgentMemory\Options\EntityGetOptions;
@@ -97,6 +98,10 @@ final class LookupSurfaceTest extends TestCase
 
     public function testEnumsCarryTheServersValues(): void
     {
+        $this->assertSame(
+            ['facts', 'relations', 'events', 'passages', 'uncertainty'],
+            array_column(LookupSection::cases(), 'value'),
+        );
         $this->assertSame(['coverage', 'importance', 'recency'], array_column(EntityRanking::cases(), 'value'));
     }
 
