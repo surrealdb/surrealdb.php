@@ -9,6 +9,7 @@ use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Exceptions\GraphQlException;
 use SurrealDB\SDK\Exceptions\InvalidSessionException;
 use SurrealDB\SDK\Exceptions\ServerException;
+use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Query\Frame\DoneFrame;
 use SurrealDB\SDK\Query\Frame\ErrorFrame;
 use SurrealDB\SDK\Query\Frame\ValueFrame;
@@ -84,6 +85,15 @@ final class StreamAndGraphQueryTest extends TestCase
             }
 
             self::assertSame([['id' => 'person:tobie', 'name' => 'Tobie']], $values);
+
+            // A live query only runs through execute(), which returns its
+            // subscription.
+            try {
+                $db->live(new Table('person'))->responses();
+                self::fail('Expected a live query to refuse responses().');
+            } catch (SurrealException $error) {
+                self::assertStringContainsString('execute()', $error->getMessage());
+            }
 
             [$ok, $failed] = $db->statements('RETURN 1; THROW "boom"')->responses();
 

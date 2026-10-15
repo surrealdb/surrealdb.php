@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK\Query;
 
 use SurrealDB\SDK\Connection\ConnectionController;
+use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Live\ManagedLiveSubscription;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Query\Concerns\HasCondition;
@@ -106,6 +107,24 @@ final class LiveSelectQuery extends QueryBuilder
         $subscription->start();
 
         return $subscription;
+    }
+
+    /**
+     * Not for live queries: the subscription comes only from
+     * {@see self::execute()}, and streaming would start a query on the
+     * server that nothing receives or stops.
+     */
+    public function stream(): \Generator
+    {
+        throw new SurrealException('Run a live query with execute(), which returns its subscription.');
+    }
+
+    /**
+     * Not for live queries; see {@see self::stream()}.
+     */
+    public function responses(): array
+    {
+        throw new SurrealException('Run a live query with execute(), which returns its subscription.');
     }
 
     protected function build(): BoundQuery

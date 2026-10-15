@@ -12,6 +12,7 @@ use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\ThrownException;
 use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
 use SurrealDB\SDK\Protocol\Features;
+use SurrealDB\SDK\Query\Frame\ValueFrame;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
@@ -337,6 +338,23 @@ SURQL);
                 self::fail('Expected a non-2xx response to throw.');
             } catch (UnsuccessfulApiException $error) {
                 self::assertSame('/v1/missing', $error->path);
+                self::assertSame('nope', $error->response->body);
+            }
+
+            // Streaming and responses() shape the result like execute().
+            $frames = iterator_to_array($api->get('/hello/jaime')->stream(), false);
+            self::assertInstanceOf(ValueFrame::class, $frames[0]);
+            self::assertInstanceOf(ApiResponse::class, $frames[0]->value);
+            self::assertSame(200, $frames[0]->value->status);
+
+            [$response] = $api->get('/hello/jaime')->value()->responses();
+            self::assertTrue($response->success);
+            self::assertSame('get', $response->result['method'] ?? null);
+
+            try {
+                $api->get('missing')->value()->responses();
+                self::fail('Expected a non-2xx response to throw.');
+            } catch (UnsuccessfulApiException $error) {
                 self::assertSame('nope', $error->response->body);
             }
         } finally {
