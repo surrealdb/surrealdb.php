@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
@@ -50,6 +51,21 @@ final class Session
     public function turns(?PageOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base() . '/turns', 'turns', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every turn recorded against this session, walking the pages in order
+     * (`GET /sessions/{id}/turns`). A transcript is usually read whole.
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     */
+    public function allTurns(?PageOptions $options = null): array
+    {
+        Guard::collectable('Session::allTurns()', 'Session::turns()', $options?->cursor, $options->count ?? false);
+
+        return $this->turns($options)->collect();
     }
 
     /**

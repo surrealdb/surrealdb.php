@@ -2,6 +2,8 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\KeywordListOptions;
 use SurrealDB\AgentMemory\Options\KeywordSearchOptions;
 use SurrealDB\AgentMemory\Page;
@@ -20,6 +22,21 @@ final class DocumentKeywords
     public function list(?KeywordListOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'keywords', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every keyword matching `$options`, walking the pages in order
+     * (`GET /documents/keywords`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     */
+    public function listAll(?KeywordListOptions $options = null): array
+    {
+        Guard::collectable('DocumentKeywords::listAll()', 'DocumentKeywords::list()', $options?->cursor, $options->count ?? false);
+
+        return $this->list($options)->collect();
     }
 
     /**

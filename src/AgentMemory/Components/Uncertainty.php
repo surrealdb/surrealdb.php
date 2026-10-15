@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Exceptions\ScopeException;
 use SurrealDB\AgentMemory\Guard;
@@ -26,6 +27,21 @@ final class Uncertainty
     public function list(?UncertaintyListOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'unknowns', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every uncertainty flag matching `$options`, walking the pages in order
+     * (`GET /uncertainty`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     */
+    public function listAll(?UncertaintyListOptions $options = null): array
+    {
+        Guard::collectable('Uncertainty::listAll()', 'Uncertainty::list()', $options?->cursor, $options->count ?? false);
+
+        return $this->list($options)->collect();
     }
 
     /**

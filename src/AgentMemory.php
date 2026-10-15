@@ -55,7 +55,8 @@ use SurrealDB\Http\PsrHttpClientProvider;
  * `/api/v1/{context}/…`. Options are readonly classes constructed with named
  * arguments, so `memory.recall(query, { k: 5 })` in the JS SDK becomes
  * `$memory->recall($query, new RecallOptions(k: 5))`. Collections come back as
- * a cursor-paginated {@see Page}.
+ * a cursor-paginated {@see Page}; the `listAll()` and `all*()` collectors
+ * return every row.
  *
  * ```php
  * $memory = new AgentMemory(new AgentMemoryOptions(
@@ -225,7 +226,8 @@ final class AgentMemory
      * same question gets the same answer. `resolution.kind` says what the query
      * resolved to: `entity`, `ambiguous` (see `candidates`), `topic`, or
      * `empty` (see `nearest`). Sections are bounded and flag `truncated`; walk
-     * {@see $facts} or {@see $uncertainty} for the rest.
+     * {@see $facts} (`allEdgesOf()` for every relation of the subject) or
+     * `$uncertainty->listAll()` for the rest.
      *
      * Retried like a read, with an `Idempotency-Key`, as the JS client does; a
      * retry after a lost response can record one more retrieval trace.
@@ -390,6 +392,21 @@ final class AgentMemory
     public function audit(?AuditOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base() . '/audit', 'rows', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every audit row matching `$options`, walking the pages in order
+     * (`GET /audit`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor`
+     */
+    public function auditAll(?AuditOptions $options = null): array
+    {
+        Guard::collectable('AgentMemory::auditAll()', 'AgentMemory::audit()', $options?->cursor);
+
+        return $this->audit($options)->collect();
     }
 
     /**

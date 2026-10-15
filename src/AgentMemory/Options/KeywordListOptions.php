@@ -5,7 +5,7 @@ namespace SurrealDB\AgentMemory\Options;
 use SurrealDB\AgentMemory\Components\DocumentKeywords;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see DocumentKeywords::list()}. */
+/** Options for {@see DocumentKeywords::list()} and {@see DocumentKeywords::listAll()}. */
 final readonly class KeywordListOptions
 {
     /**

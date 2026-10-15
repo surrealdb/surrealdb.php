@@ -6,7 +6,7 @@ use SurrealDB\AgentMemory\Components\Facts;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see Facts::actions()}. */
+/** Options for {@see Facts::actions()} and {@see Facts::allActions()}. */
 final readonly class ActionListOptions
 {
     /**

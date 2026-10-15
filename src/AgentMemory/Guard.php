@@ -37,4 +37,37 @@ final class Guard
 
         return $value;
     }
+
+    /**
+     * Checks the options of a whole-collection walk (`listAll()`, `all*()`):
+     * it starts at the first page and asks for no total, the runtime form of
+     * the JS client's `Omit<…, "cursor" | "count">` on those options.
+     *
+     * @param string $method     the collector, for the message (e.g. `Documents::listAll()`)
+     * @param string $pageMethod the page-at-a-time method it walks (e.g. `Documents::list()`)
+     *
+     * @throws InvalidArgumentException when a cursor or count is set, or `$max` is below 1
+     */
+    public static function collectable(string $method, string $pageMethod, ?string $cursor, bool $count = false, ?int $max = null): void
+    {
+        if ($cursor !== null) {
+            throw new InvalidArgumentException("{$method} walks the collection from its first page, so it takes no cursor; use {$pageMethod} and next() to resume from one.");
+        }
+
+        if ($count) {
+            throw new InvalidArgumentException("{$method} returns rows, not a total, so it takes no count; read totalSize from {$pageMethod} with count: true.");
+        }
+
+        self::max($method, $max);
+    }
+
+    /**
+     * @throws InvalidArgumentException when `$max` is set and below 1
+     */
+    public static function max(string $method, ?int $max): void
+    {
+        if ($max !== null && $max < 1) {
+            throw new InvalidArgumentException("{$method} needs max to be at least 1, got {$max}.");
+        }
+    }
 }

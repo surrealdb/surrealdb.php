@@ -6,7 +6,7 @@ use SurrealDB\AgentMemory\Components\Entities;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see Entities::neighbours()}. */
+/** Options for {@see Entities::neighbours()} and {@see Entities::allNeighbours()}. */
 final readonly class NeighbourhoodOptions
 {
     /**

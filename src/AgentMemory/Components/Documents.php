@@ -2,7 +2,9 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\UnsupportedMediaTypeException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\DocumentListOptions;
 use SurrealDB\AgentMemory\Options\DocumentQueryOptions;
 use SurrealDB\AgentMemory\Options\DocumentUploadOptions;
@@ -75,10 +77,43 @@ final class Documents
         return $this->transport->requestPage($path, 'chunks', $options?->toQuery() ?? []);
     }
 
+    /**
+     * Every chunk of the document, walking the pages in order
+     * (`GET /documents/{id}/chunks`). With `$max` the walk stops after the
+     * page that reaches it, so up to one page more can come back.
+     *
+     * @param int|null $max stop collecting once this many chunks are in (at least 1)
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     */
+    public function allChunks(string $documentId, ?PageOptions $options = null, ?int $max = null): array
+    {
+        Guard::collectable('Documents::allChunks()', 'Documents::chunks()', $options?->cursor, $options->count ?? false, $max);
+
+        return $this->chunks($documentId, $options)->collect($max);
+    }
+
     /** A page of documents, optionally filtered by status or MIME type. */
     public function list(?DocumentListOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'documents', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every document matching `$options`, walking the pages in order
+     * (`GET /documents`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     */
+    public function listAll(?DocumentListOptions $options = null): array
+    {
+        Guard::collectable('Documents::listAll()', 'Documents::list()', $options?->cursor, $options->count ?? false);
+
+        return $this->list($options)->collect();
     }
 
     /** Deletes a document. */

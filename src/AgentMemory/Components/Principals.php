@@ -2,6 +2,8 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\EffectiveGrantsOptions;
 use SurrealDB\AgentMemory\Options\GrantOptions;
 use SurrealDB\AgentMemory\Options\PageOptions;
@@ -21,6 +23,21 @@ final class Principals
     public function list(?PageOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'principals', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every principal in the context, walking the pages in order
+     * (`GET /principals`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     */
+    public function listAll(?PageOptions $options = null): array
+    {
+        Guard::collectable('Principals::listAll()', 'Principals::list()', $options?->cursor, $options->count ?? false);
+
+        return $this->list($options)->collect();
     }
 
     /**

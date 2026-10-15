@@ -3,6 +3,7 @@
 namespace SurrealDB\AgentMemory;
 
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use function count;
 use function is_array;
 use function is_bool;
@@ -16,9 +17,9 @@ use function array_key_exists;
  * Every Agent Memory collection pages with keyset cursors: the response carries
  * its rows beside a `page` block (`hasMore`, `nextCursor`, and `totalSize` when
  * the request asked for `count`). Iterating a `Page` walks this page's rows;
- * {@see next()} fetches the following page, and {@see autoPaginate()} lazily
+ * {@see next()} fetches the following page, {@see autoPaginate()} lazily
  * yields every row from here to the end, re-issuing the original request with
- * each `nextCursor`:
+ * each `nextCursor`, and {@see collect()} gathers those rows into one list:
  *
  * ```php
  * foreach ($memory->entities->list()->autoPaginate() as $entity) {
@@ -123,13 +124,77 @@ final class Page implements \IteratorAggregate, \Countable
      */
     public function autoPaginate(): \Generator
     {
+        foreach ($this->pages() as $page) {
+            foreach ($page->items as $item) {
+                yield $item;
+            }
+        }
+    }
+
+    /**
+     * Every row from this page to the end of the collection, as one list: the
+     * PHP form of the JS client's `collectPages`, behind every `listAll()` and
+     * `all*()`. The walk ends where {@see autoPaginate()} ends. `$max` stops it
+     * after the page on which the row count reaches `$max`; pages arrive whole,
+     * so the result can exceed `$max` by up to one page, as in JS.
+     *
+     * @param int|null $max stop once at least this many rows are in hand (at least 1)
+     *
+     * @return list<T>
+     *
+     * @throws InvalidArgumentException when `$max` is below 1
+     * @throws AgentMemoryException     when a page request fails, or the server hands back a
+     *                                  cursor it already sent (which would otherwise loop forever)
+     */
+    public function collect(?int $max = null): array
+    {
+        Guard::max('Page::collect()', $max);
+
+        $rows = [];
+
+        foreach ($this->pages() as $page) {
+            foreach ($page->items as $item) {
+                $rows[] = $item;
+            }
+
+            if ($max !== null && count($rows) >= $max) {
+                break;
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return \ArrayIterator<int, T>
+     */
+    public function getIterator(): \ArrayIterator
+    {
+        return new \ArrayIterator($this->items);
+    }
+
+    /** Rows on this page (not {@see $totalSize}). */
+    public function count(): int
+    {
+        return count($this->items);
+    }
+
+    /**
+     * This page, then each following one, fetched only when the walk resumes.
+     * The walk ends on a page without `hasMore`; one that claims more without
+     * a cursor, or hands back a cursor already followed, throws.
+     *
+     * @return \Generator<int, self<T>, mixed, void>
+     *
+     * @throws AgentMemoryException when a page request fails or the cursor does not advance
+     */
+    private function pages(): \Generator
+    {
         $page = $this;
         $followed = [];
 
         while (true) {
-            foreach ($page->items as $item) {
-                yield $item;
-            }
+            yield $page;
 
             $next = $page->next();
 
@@ -145,19 +210,5 @@ final class Page implements \IteratorAggregate, \Countable
 
             $page = $next;
         }
-    }
-
-    /**
-     * @return \ArrayIterator<int, T>
-     */
-    public function getIterator(): \ArrayIterator
-    {
-        return new \ArrayIterator($this->items);
-    }
-
-    /** Rows on this page (not {@see $totalSize}). */
-    public function count(): int
-    {
-        return count($this->items);
     }
 }

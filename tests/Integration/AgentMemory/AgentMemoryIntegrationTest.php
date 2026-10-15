@@ -124,6 +124,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $paths = array_column(iterator_to_array($first->autoPaginate(), false), 'path');
         $this->assertContains(self::$scope . '/', $paths);
         $this->assertContains($child . '/', $paths);
+        $this->assertSame($paths, array_column($scopes->listAll(new ScopeListOptions(limit: 1)), 'path'));
 
         $scopes->delete($child);
 
@@ -152,8 +153,18 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $tagged = $facts->attributes(new AttributeListOptions(entity: $attributes[0]['entity'], limit: 10));
         $this->assertEqualsCanonicalizing(['role', 'city', 'team'], array_column($tagged->items, 'key'));
 
+        $collected = $facts->allAttributes(new AttributeListOptions(entity: $alice, limit: 1));
+        $this->assertEqualsCanonicalizing(['role', 'city', 'team'], array_column($collected, 'key'));
+        $this->assertCount(2, $facts->allAttributes(new AttributeListOptions(entity: $alice, limit: 1), max: 2));
+
         $relations = $facts->relations(new RelationListOptions(src: $alice));
         $this->assertSame(['works_at'], array_column($relations->items, 'label'));
+
+        $edges = $facts->allEdgesOf($alice);
+        $this->assertSame(['works_at'], array_column($edges, 'label'));
+        $this->assertSame($edges, $facts->allEdgesOf(self::entity('organisation', 'acme')), 'the one edge is inbound to acme');
+        $this->assertSame($relations->items, $facts->allRelations(new RelationListOptions(src: $alice)));
+        $this->assertSame(['shipped'], array_column($facts->allActions(new ActionListOptions(actor: $alice)), 'verb'));
 
         $actions = $facts->actions(new ActionListOptions(actor: $alice, since: '2026-08-01T00:00:00Z'));
         $this->assertSame(['shipped'], array_column($actions->items, 'verb'));
@@ -169,6 +180,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $this->assertCount(1, $people);
         $this->assertGreaterThanOrEqual(2, $people->totalSize);
         $this->assertContains($alice, array_column(iterator_to_array($people->autoPaginate(), false), 'name'));
+        $this->assertContains($alice, array_column($entities->listAll(new EntityListOptions(type: 'person')), 'name'));
 
         $matches = $entities->search(query: $alice, options: new EntitySearchOptions(type: 'person'));
         $this->assertSame($alice, $matches[0]['entity']['name']);
@@ -189,12 +201,16 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
 
         $all = $entities->changes('person', $alice, new PageOptions(limit: 2));
         $this->assertCount(3, iterator_to_array($all->autoPaginate(), false));
+        $this->assertCount(3, $entities->allChanges('person', $alice, new PageOptions(limit: 2)));
+        // max stops after the page that reaches it: one page of two rows.
+        $this->assertCount(2, $entities->allChanges('person', $alice, new PageOptions(limit: 2), max: 1));
 
         $neighbours = $entities->neighbours('person', $alice, new NeighbourhoodOptions(count: true));
         $this->assertSame(1, $neighbours->totalSize);
         $this->assertSame('works_at', $neighbours->items[0]['label']);
         $this->assertTrue($neighbours->items[0]['outbound']);
         $this->assertSame('acme' . self::$run, $neighbours->items[0]['far']['entity']['name']);
+        $this->assertSame($neighbours->items, $entities->allNeighbours('person', $alice));
     }
 
     public function testEntityDeleteRetiresItsFacts(): void
@@ -262,6 +278,10 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
             ['Planning the offsite for May', 'Noted, May it is.'],
             array_column(iterator_to_array($turns->autoPaginate(), false), 'content'),
         );
+        $this->assertSame(
+            ['Planning the offsite for May', 'Noted, May it is.'],
+            array_column($memory->sessions->attach($batch['sessionId'])->allTurns(new PageOptions(limit: 1)), 'content'),
+        );
     }
 
     public function testRememberManyAcceptsSystemAndToolTurns(): void
@@ -274,8 +294,9 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         );
         $this->assertCount(3, $batch['turnIds']);
 
-        $turns = $memory->sessions->attach($batch['sessionId'])->turns();
-        $this->assertSame(['system', 'user', 'tool'], array_column(iterator_to_array($turns->autoPaginate(), false), 'role'));
+        $session = $memory->sessions->attach($batch['sessionId']);
+        $this->assertSame(['system', 'user', 'tool'], array_column(iterator_to_array($session->turns()->autoPaginate(), false), 'role'));
+        $this->assertSame(['system', 'user', 'tool'], array_column($session->allTurns(), 'role'));
     }
 
     public function testSessionLifecycle(): void
@@ -313,6 +334,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $flag = $open->items[0];
         $this->assertSame('role', $flag['key']);
         $this->assertTrue($flag['resolvable']);
+        $this->assertSame([$flag['id']], array_column($uncertainty->listAll(new UncertaintyListOptions(entity: $carol, resolved: false)), 'id'));
 
         $settled = $uncertainty->resolve($flag['id'], 'CEO', note: 'confirmed by HR');
         $this->assertSame($flag['id'], $settled['id']);
@@ -366,6 +388,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $this->assertSame('text/plain', $documents->get($upload['id'])['mimeType']);
         $this->assertSame($text, $documents->raw($upload['id']));
         $this->assertContains($upload['id'], array_column(iterator_to_array($documents->list()->autoPaginate(), false), 'id'));
+        $this->assertContains($upload['id'], array_column($documents->listAll(), 'id'));
         $this->assertInstanceOf(Page::class, $documents->chunks($upload['id'], new PageOptions(count: true)));
 
         $documents->delete($upload['id']);
@@ -382,6 +405,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $this->assertIsInt($list->totalSize);
 
         $this->assertInstanceOf(Page::class, $documents->keywords->list());
+        $this->assertIsList($documents->keywords->listAll());
         $this->assertArrayHasKey('linksEmitted', $documents->recomputeLinks());
     }
 
@@ -391,6 +415,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $me = self::memory()->whoami()['principalId'];
 
         $this->assertContains($me, array_column(iterator_to_array($principals->list()->autoPaginate(), false), 'id'));
+        $this->assertContains($me, array_column($principals->listAll(new PageOptions(limit: 1)), 'id'));
         $this->assertSame($me, $principals->get($me)['id']);
 
         $effective = $principals->effective($me, new EffectiveGrantsOptions(self::$scope));
@@ -407,6 +432,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $this->assertNotNull($minted['validUntil']);
         $this->assertSame(self::memory()->whoami()['principalId'], self::client($minted['key'])->whoami()['principalId']);
         $this->assertContains($name, array_column(iterator_to_array($keys->list()->autoPaginate(), false), 'name'));
+        $this->assertContains($name, array_column($keys->listAll(new PageOptions(limit: 1)), 'name'));
 
         $rotated = $keys->rotate($name);
         $this->assertNotSame($minted['key'], $rotated['key']);
@@ -420,7 +446,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         }
 
         $keys->delete($name);
-        $this->assertNotContains($name, array_column(iterator_to_array($keys->list()->autoPaginate(), false), 'name'));
+        $this->assertNotContains($name, array_column($keys->listAll(), 'name'));
     }
 
     public function testLifecycleSweepsAndIntegrityCheck(): void

@@ -6,7 +6,7 @@ use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\Enum\TraceKind;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see AgentMemory::audit()}. */
+/** Options for {@see AgentMemory::audit()} and {@see AgentMemory::auditAll()}. */
 final readonly class AuditOptions
 {
     /**

@@ -6,7 +6,7 @@ use SurrealDB\AgentMemory\Components\Uncertainty;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see Uncertainty::list()}. */
+/** Options for {@see Uncertainty::list()} and {@see Uncertainty::listAll()}. */
 final readonly class UncertaintyListOptions
 {
     /**

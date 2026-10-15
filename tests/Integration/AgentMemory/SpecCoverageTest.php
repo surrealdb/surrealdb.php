@@ -53,9 +53,10 @@ final class SpecCoverageTest extends TestCase
      * - `options`: the options class whose fields it sends,
      * - `sends`: fields the method sends itself,
      * - `page`: the rows member a paginated response is read from,
+     * - `collect`: the collector that walks every page of it (`listAll()`, `all*()`),
      * - `member`: the response member the method unwraps and returns.
      *
-     * @var array<string,array{method:string,options?:class-string,sends?:list<string>,page?:string,member?:string}>
+     * @var array<string,array{method:string,options?:class-string,sends?:list<string>,page?:string,collect?:string,member?:string}>
      */
     private const array OPERATIONS = [
         'health_check' => ['method' => AgentMemory::class . '::health'],
@@ -74,52 +75,52 @@ final class SpecCoverageTest extends TestCase
         'elaborate' => ['method' => AgentMemory::class . '::elaborate', 'options' => Options\ElaborateOptions::class],
         'fsck' => ['method' => AgentMemory::class . '::fsck', 'options' => Options\FsckOptions::class],
         'inspect' => ['method' => AgentMemory::class . '::inspect', 'options' => Options\InspectOptions::class, 'sends' => ['ref']],
-        'list_audit' => ['method' => AgentMemory::class . '::audit', 'options' => Options\AuditOptions::class, 'page' => 'rows'],
-        'list_attributes' => ['method' => Facts::class . '::attributes', 'options' => Options\AttributeListOptions::class, 'page' => 'attributes'],
-        'list_relations' => ['method' => Facts::class . '::relations', 'options' => Options\RelationListOptions::class, 'page' => 'relations'],
-        'list_actions' => ['method' => Facts::class . '::actions', 'options' => Options\ActionListOptions::class, 'page' => 'actions'],
-        'list_documents' => ['method' => Documents::class . '::list', 'options' => Options\DocumentListOptions::class, 'page' => 'documents'],
+        'list_audit' => ['method' => AgentMemory::class . '::audit', 'options' => Options\AuditOptions::class, 'page' => 'rows', 'collect' => AgentMemory::class . '::auditAll'],
+        'list_attributes' => ['method' => Facts::class . '::attributes', 'options' => Options\AttributeListOptions::class, 'page' => 'attributes', 'collect' => Facts::class . '::allAttributes'],
+        'list_relations' => ['method' => Facts::class . '::relations', 'options' => Options\RelationListOptions::class, 'page' => 'relations', 'collect' => Facts::class . '::allRelations'],
+        'list_actions' => ['method' => Facts::class . '::actions', 'options' => Options\ActionListOptions::class, 'page' => 'actions', 'collect' => Facts::class . '::allActions'],
+        'list_documents' => ['method' => Documents::class . '::list', 'options' => Options\DocumentListOptions::class, 'page' => 'documents', 'collect' => Documents::class . '::listAll'],
         'upload_document' => ['method' => Documents::class . '::upload', 'options' => Options\DocumentUploadOptions::class],
         'reprocess_document' => ['method' => Documents::class . '::reprocess', 'options' => Options\DocumentUploadOptions::class],
         'get_document' => ['method' => Documents::class . '::get'],
         'delete_document' => ['method' => Documents::class . '::delete'],
         'fetch_document_raw' => ['method' => Documents::class . '::raw'],
-        'list_chunks' => ['method' => Documents::class . '::chunks', 'options' => Options\PageOptions::class, 'page' => 'chunks'],
+        'list_chunks' => ['method' => Documents::class . '::chunks', 'options' => Options\PageOptions::class, 'page' => 'chunks', 'collect' => Documents::class . '::allChunks'],
         'query_documents' => ['method' => Documents::class . '::query', 'options' => Options\DocumentQueryOptions::class],
         'recompute_document_links' => ['method' => Documents::class . '::recomputeLinks'],
-        'list_keywords' => ['method' => DocumentKeywords::class . '::list', 'options' => Options\KeywordListOptions::class, 'page' => 'keywords'],
+        'list_keywords' => ['method' => DocumentKeywords::class . '::list', 'options' => Options\KeywordListOptions::class, 'page' => 'keywords', 'collect' => DocumentKeywords::class . '::listAll'],
         'search_keywords' => ['method' => DocumentKeywords::class . '::search', 'options' => Options\KeywordSearchOptions::class],
         'get_keyword' => ['method' => DocumentKeywords::class . '::get'],
         'list_document_keywords' => ['method' => DocumentKeywords::class . '::forDocument', 'member' => 'keywords'],
-        'list_entities' => ['method' => Entities::class . '::list', 'options' => Options\EntityListOptions::class, 'page' => 'entities'],
+        'list_entities' => ['method' => Entities::class . '::list', 'options' => Options\EntityListOptions::class, 'page' => 'entities', 'collect' => Entities::class . '::listAll'],
         'search_entities' => ['method' => Entities::class . '::search', 'options' => Options\EntitySearchOptions::class, 'sends' => ['q'], 'member' => 'matches'],
         'top_entities' => ['method' => Entities::class . '::top', 'options' => Options\TopEntitiesOptions::class, 'member' => 'entities'],
         'get_entity' => ['method' => Entities::class . '::get', 'options' => Options\EntityGetOptions::class],
         'get_entity_history' => ['method' => Entities::class . '::history', 'member' => 'history'],
-        'entity_history_all' => ['method' => Entities::class . '::changes', 'options' => Options\PageOptions::class, 'page' => 'history'],
-        'entity_neighbourhood' => ['method' => Entities::class . '::neighbours', 'options' => Options\NeighbourhoodOptions::class, 'page' => 'neighbours'],
+        'entity_history_all' => ['method' => Entities::class . '::changes', 'options' => Options\PageOptions::class, 'page' => 'history', 'collect' => Entities::class . '::allChanges'],
+        'entity_neighbourhood' => ['method' => Entities::class . '::neighbours', 'options' => Options\NeighbourhoodOptions::class, 'page' => 'neighbours', 'collect' => Entities::class . '::allNeighbours'],
         'delete_entity' => ['method' => Entities::class . '::delete'],
-        'list_uncertainty' => ['method' => Uncertainty::class . '::list', 'options' => Options\UncertaintyListOptions::class, 'page' => 'unknowns'],
+        'list_uncertainty' => ['method' => Uncertainty::class . '::list', 'options' => Options\UncertaintyListOptions::class, 'page' => 'unknowns', 'collect' => Uncertainty::class . '::listAll'],
         'resolve_uncertainty' => ['method' => Uncertainty::class . '::resolve', 'sends' => ['acceptedValue', 'note'], 'member' => 'uncertainty'],
         'create_session' => ['method' => Sessions::class . '::create', 'options' => Options\SessionCreateOptions::class],
         'delete_session' => ['method' => Session::class . '::close'],
         'get_session_context' => ['method' => Session::class . '::context', 'sends' => ['query']],
-        'list_turns' => ['method' => Session::class . '::turns', 'options' => Options\PageOptions::class, 'page' => 'turns'],
+        'list_turns' => ['method' => Session::class . '::turns', 'options' => Options\PageOptions::class, 'page' => 'turns', 'collect' => Session::class . '::allTurns'],
         'expire_context' => ['method' => Lifecycle::class . '::expire'],
         'decay_importance' => ['method' => Lifecycle::class . '::decay'],
-        'list_traces' => ['method' => Traces::class . '::list', 'options' => Options\PageOptions::class, 'page' => 'traces'],
+        'list_traces' => ['method' => Traces::class . '::list', 'options' => Options\PageOptions::class, 'page' => 'traces', 'collect' => Traces::class . '::listAll'],
         'get_trace' => ['method' => Traces::class . '::get'],
         'get_trace_stats' => ['method' => Traces::class . '::stats'],
-        'list_principals' => ['method' => Principals::class . '::list', 'options' => Options\PageOptions::class, 'page' => 'principals'],
+        'list_principals' => ['method' => Principals::class . '::list', 'options' => Options\PageOptions::class, 'page' => 'principals', 'collect' => Principals::class . '::listAll'],
         'get_principal' => ['method' => Principals::class . '::get'],
         'effective_principal' => ['method' => Principals::class . '::effective', 'options' => Options\EffectiveGrantsOptions::class],
         'grant_principal' => ['method' => Principals::class . '::grant', 'options' => Options\GrantOptions::class],
         'revoke_principal' => ['method' => Principals::class . '::revoke', 'options' => Options\GrantOptions::class],
-        'list_scopes' => ['method' => Scopes::class . '::list', 'options' => Options\ScopeListOptions::class, 'page' => 'scopes'],
+        'list_scopes' => ['method' => Scopes::class . '::list', 'options' => Options\ScopeListOptions::class, 'page' => 'scopes', 'collect' => Scopes::class . '::listAll'],
         'register_scope' => ['method' => Scopes::class . '::register', 'options' => Options\ScopeRegisterOptions::class],
         'delete_scope' => ['method' => Scopes::class . '::delete', 'sends' => ['path']],
         'forget_scope' => ['method' => Scopes::class . '::forget', 'options' => Options\ScopeForgetOptions::class],
-        'list_self_keys' => ['method' => Keys::class . '::list', 'options' => Options\PageOptions::class, 'page' => 'keys'],
+        'list_self_keys' => ['method' => Keys::class . '::list', 'options' => Options\PageOptions::class, 'page' => 'keys', 'collect' => Keys::class . '::listAll'],
         'create_self_key' => ['method' => Keys::class . '::create', 'options' => Options\KeyCreateOptions::class],
         'rotate_self_key' => ['method' => Keys::class . '::rotate', 'options' => Options\KeyRotateOptions::class],
         'delete_self_key' => ['method' => Keys::class . '::delete'],
@@ -157,6 +158,13 @@ final class SpecCoverageTest extends TestCase
 
             if (isset($coverage['options'])) {
                 $this->assertTrue(class_exists($coverage['options']), "{$operation}: {$coverage['options']} does not exist");
+            }
+
+            if (isset($coverage['page'])) {
+                // Every paged collection has its collector, as in @surrealdb/memory.
+                $this->assertArrayHasKey('collect', $coverage, "{$operation}: a paged operation needs a collector");
+                [$collectorClass, $collector] = explode('::', $coverage['collect']);
+                $this->assertTrue(method_exists($collectorClass, $collector), "{$operation}: {$coverage['collect']} does not exist");
             }
         }
     }

@@ -2,6 +2,8 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\KeyCreateOptions;
 use SurrealDB\AgentMemory\Options\KeyRotateOptions;
 use SurrealDB\AgentMemory\Options\PageOptions;
@@ -39,6 +41,20 @@ final class Keys
     public function list(?PageOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'keys', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every key the caller can see, walking the pages in order (`GET /keys`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     */
+    public function listAll(?PageOptions $options = null): array
+    {
+        Guard::collectable('Keys::listAll()', 'Keys::list()', $options?->cursor, $options->count ?? false);
+
+        return $this->list($options)->collect();
     }
 
     /** Revokes a key by name. */

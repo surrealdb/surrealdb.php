@@ -5,7 +5,7 @@ namespace SurrealDB\AgentMemory\Options;
 use SurrealDB\AgentMemory\Components\Scopes;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see Scopes::list()}. */
+/** Options for {@see Scopes::list()} and {@see Scopes::listAll()}. */
 final readonly class ScopeListOptions
 {
     /**

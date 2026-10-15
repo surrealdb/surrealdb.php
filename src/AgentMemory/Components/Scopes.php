@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\ScopeForgetOptions;
 use SurrealDB\AgentMemory\Options\ScopeListOptions;
@@ -22,6 +23,21 @@ final class Scopes
     public function list(?ScopeListOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'scopes', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every registered scope node the caller can see, walking the pages in
+     * order (`GET /scopes`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor`
+     */
+    public function listAll(?ScopeListOptions $options = null): array
+    {
+        Guard::collectable('Scopes::listAll()', 'Scopes::list()', $options?->cursor);
+
+        return $this->list($options)->collect();
     }
 
     /**

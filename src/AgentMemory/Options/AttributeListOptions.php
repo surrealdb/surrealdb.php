@@ -6,7 +6,7 @@ use SurrealDB\AgentMemory\Components\Facts;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see Facts::attributes()}. */
+/** Options for {@see Facts::attributes()} and {@see Facts::allAttributes()}. */
 final readonly class AttributeListOptions
 {
     /**

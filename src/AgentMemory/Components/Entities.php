@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\EntityGetOptions;
@@ -29,6 +30,21 @@ final class Entities
     public function list(?EntityListOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'entities', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every entity matching `$options`, walking the pages in order
+     * (`GET /entities`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     */
+    public function listAll(?EntityListOptions $options = null): array
+    {
+        Guard::collectable('Entities::listAll()', 'Entities::list()', $options?->cursor, $options->count ?? false);
+
+        return $this->list($options)->collect();
     }
 
     /**
@@ -96,6 +112,25 @@ final class Entities
     }
 
     /**
+     * The entity's whole change history, walking the pages in order
+     * (`GET /entities/{type}/{name}/history`). An attribute revised on every
+     * sync has an unbounded chain, so pass `$max` to stop the walk after the
+     * page that reaches it; up to one page more can come back.
+     *
+     * @param int|null $max stop collecting once this many rows are in (at least 1)
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     */
+    public function allChanges(string $entityType, string $name, ?PageOptions $options = null, ?int $max = null): array
+    {
+        Guard::collectable('Entities::allChanges()', 'Entities::changes()', $options?->cursor, $options->count ?? false, $max);
+
+        return $this->changes($entityType, $name, $options)->collect($max);
+    }
+
+    /**
      * A page of the entity's graph neighbours (`GET /entities/{type}/{name}/neighbourhood`):
      * each relation edge with its label, direction (`outbound`), and the entity
      * at the far end.
@@ -103,6 +138,25 @@ final class Entities
     public function neighbours(string $entityType, string $name, ?NeighbourhoodOptions $options = null): Page
     {
         return $this->transport->requestPage($this->path($entityType, $name) . '/neighbourhood', 'neighbours', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every graph neighbour of the entity, walking the pages in order
+     * (`GET /entities/{type}/{name}/neighbourhood`). With `$max` the walk
+     * stops after the page that reaches it, so up to one page more can come
+     * back.
+     *
+     * @param int|null $max stop collecting once this many neighbours are in (at least 1)
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     */
+    public function allNeighbours(string $entityType, string $name, ?NeighbourhoodOptions $options = null, ?int $max = null): array
+    {
+        Guard::collectable('Entities::allNeighbours()', 'Entities::neighbours()', $options?->cursor, $options->count ?? false, $max);
+
+        return $this->neighbours($entityType, $name, $options)->collect($max);
     }
 
     /** Soft-deletes an entity (sets valid-until). */

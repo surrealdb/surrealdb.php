@@ -2,6 +2,8 @@
 
 namespace SurrealDB\AgentMemory\Components;
 
+use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
 use SurrealDB\AgentMemory\Paths;
@@ -19,6 +21,21 @@ final class Traces
     public function list(?PageOptions $options = null): Page
     {
         return $this->transport->requestPage($this->base(), 'traces', $options?->toQuery() ?? []);
+    }
+
+    /**
+     * Every trace record, newest first, walking the pages in order
+     * (`GET /traces`).
+     *
+     * @return list<array<string,mixed>>
+     *
+     * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     */
+    public function listAll(?PageOptions $options = null): array
+    {
+        Guard::collectable('Traces::listAll()', 'Traces::list()', $options?->cursor, $options->count ?? false);
+
+        return $this->list($options)->collect();
     }
 
     /**
