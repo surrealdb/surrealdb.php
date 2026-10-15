@@ -5,6 +5,7 @@ namespace SurrealDB\SDK\Query;
 use SurrealDB\SDK\Contracts\QueryExecutor;
 use SurrealDB\SDK\Contracts\SurrealType;
 use SurrealDB\SDK\Exceptions\SurrealException;
+use SurrealDB\SDK\Support\Jsonify;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
 use function is_array;
@@ -37,9 +38,9 @@ abstract class QueryBuilder
     abstract protected function build(): BoundQuery;
 
     /**
-     * Request JSON-compatible results (loses SurrealDB type information).
-     *
-     * Reserved for codec-aware execution; carried through compilation untouched.
+     * Return plain JSON-compatible values instead of SurrealDB types: record
+     * ids, datetimes, durations and similar become strings, geometries become
+     * GeoJSON and NONE becomes null (see {@see Jsonify}).
      */
     public function json(bool $json = true): static
     {
@@ -81,9 +82,13 @@ abstract class QueryBuilder
             );
         }
 
-        /** @var list<TResult> $results */
         $results = $this->executor->query($this->build());
 
+        if ($this->json) {
+            $results = array_map(Jsonify::value(...), $results);
+        }
+
+        /** @var list<TResult> $results */
         return $results;
     }
 
