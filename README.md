@@ -156,7 +156,7 @@ foreach ($db->statements('RETURN 1; THROW "boom"')->responses() as $response) {
 
 ### Data types
 
-SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions, except `Bytes`: it is sent as a byte string, which comes back as a plain PHP `string`. `Set`, `Range` and `RecordIdRange` need SurrealDB 3.0 or later, and `File` also needs a server with the experimental files capability enabled.
+SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions, except `Bytes`: it is sent as a byte string, which comes back as a plain PHP `string`. `Set`, `Range` and `RecordIdRange` need SurrealDB 3.0 or later, and `File` also needs a server with the experimental files capability enabled. `Future` is only for SurrealDB 2.x, since 3.0 removed futures.
 
 ## Sessions and transactions
 
@@ -222,7 +222,7 @@ Live queries the SDK started are re-issued after a reconnect, and iteration carr
 
 ## Connections
 
-`ConnectOptions::$reconnect` (on by default) reconnects with exponential backoff and restores every session's namespace, database, variables and authentication. Under the default synchronous scheduler the SDK notices a dropped connection when it next uses it. A call that finds the socket dead fails, and the next one runs on the new connection; `status()` checks the socket and reconnects on the spot, so it reports `Connected` once that has worked.
+`ConnectOptions::$reconnect` (on by default) reconnects with exponential backoff and restores every session's namespace, database and variables. It restores a session's authentication when it can. It reuses an access token that expires more than a minute from now. Failing that, it uses a refresh token, or, for a session you didn't sign in explicitly, signs in again with `ConnectOptions::$authentication`. A session where none of these works comes back signed out, and an `auth` event reports `null`. One example is a session signed in explicitly with a token about to expire and no refresh token. Under the default synchronous scheduler the SDK notices a dropped connection when it next uses it. A call that finds the socket dead fails, and the next one runs on the new connection; `status()` checks the socket and reconnects on the spot, so it reports `Connected` once that has worked.
 
 ```php
 $db->connect('wss://example.com/rpc', new ConnectOptions(
