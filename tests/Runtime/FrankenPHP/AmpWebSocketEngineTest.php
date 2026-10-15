@@ -238,8 +238,18 @@ final class AmpWebSocketEngineTest extends TestCase
                     return $renewing;
                 });
 
+                // Two calls wait on the same renewal; both must resume.
+                EventLoop::queue(static function () use ($db, &$order): void {
+                    $db->run('RETURN 2');
+                    $order[] = 'query';
+                });
+
                 $db->run('RETURN 1');
                 $order[] = 'query';
+
+                $this->waitFor(static function () use (&$order): bool {
+                    return count($order) === 3;
+                });
 
                 return $order;
             } finally {
@@ -247,7 +257,7 @@ final class AmpWebSocketEngineTest extends TestCase
             }
         });
 
-        $this->assertSame(['renewed', 'query'], $order);
+        $this->assertSame(['renewed', 'query', 'query'], $order);
     }
 
     public function testATokenCloseToExpiryIsKeptWhileStillValid(): void

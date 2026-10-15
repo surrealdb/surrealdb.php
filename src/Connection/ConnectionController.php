@@ -102,9 +102,10 @@ final class ConnectionController
 
     /**
      * Renewals in flight, keyed like {@see self::$renewAt}: the task doing
-     * each, and a deferred other tasks wait on.
+     * each, and a deferred for each other task waiting on it (a deferred
+     * resumes only one waiter).
      *
-     * @var array<string,array{task: object|int|null, done: Deferred<mixed>}>
+     * @var array<string,array{task: object|int|null, waiters: list<Deferred<mixed>>}>
      */
     private array $renewing = [];
 
@@ -160,6 +161,10 @@ final class ConnectionController
         $engine = $this->registry->create($endpoint->scheme, $this->context);
 
         $this->disconnect();
+
+        // Callbacks still running for the previous connection must not
+        // mistake this one for theirs.
+        $this->connectionEpoch++;
 
         $this->engine = $engine;
         $this->authProvider = $options->authentication;
@@ -277,6 +282,7 @@ final class ConnectionController
     {
         $this->requireSession($session);
         $tokens = $this->requireEngine()->signin($auth, $session);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
@@ -290,6 +296,7 @@ final class ConnectionController
     {
         $this->requireSession($session);
         $tokens = $this->requireEngine()->signup($auth, $session);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
@@ -300,6 +307,7 @@ final class ConnectionController
     {
         $sessionState = $this->requireSession($session);
         $this->requireEngine()->authenticate($token, $session);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $sessionState->auth->accessToken = $token;
         $sessionState->auth->overridden = $sessionState->auth->overridden || !$skipOverride;
         $this->handleAuthChanged($session);
@@ -340,8 +348,9 @@ final class ConnectionController
 
     public function invalidate(?string $session = null): void
     {
-        $this->requireSession($session);
+        $sessionState = $this->requireSession($session);
         $this->requireEngine()->invalidate($session);
+        $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
     }
 
@@ -355,12 +364,7 @@ final class ConnectionController
         // Resetting the session cancels its transactions and live queries
         // on the server (SurrealDB 2.x sends no KILLED notification for them).
         $sessionState->transactions = [];
-
-        foreach ($sessionState->live as $subscription => $_) {
-            $subscription->sessionReset();
-        }
-
-        $sessionState->live = new \WeakMap();
+        $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
 
         $payload = new NamespaceDatabase();
@@ -709,6 +713,34 @@ final class ConnectionController
     //  Authentication                                                     //
     // =================================================================== //
 
+    /**
+     * End the session's live subscriptions: they were started by whoever it
+     * was signed in as. The server stops them on reset (2.x without a
+     * `KILLED` notification), and should on a change of principal, which
+     * SurrealDB 3.0.x did not always do (GHSA-4m82-p8cx-f94j).
+     */
+    private function endLiveQueries(SessionState $sessionState): void
+    {
+        foreach ($sessionState->live as $subscription => $_) {
+            $subscription->sessionEnded();
+        }
+
+        $sessionState->live = new \WeakMap();
+    }
+
+    /**
+     * An explicit sign-in changes who the session is; renewing (the SDK's
+     * own sign-in with the same credentials or token) does not.
+     */
+    private function endLiveQueriesUnlessRenewing(?string $session, bool $renewing): void
+    {
+        $sessionState = $this->state?->session($session);
+
+        if (!$renewing && $sessionState !== null) {
+            $this->endLiveQueries($sessionState);
+        }
+    }
+
     private function applyTokens(?string $session, Tokens $tokens, bool $skipOverride): void
     {
         $sessionState = $this->requireSession($session);
@@ -798,8 +830,12 @@ final class ConnectionController
             // the old one. The renewing task itself (an auth provider that
             // queries, say) goes ahead.
             if ($renewal['task'] !== self::currentTask()) {
+                /** @var Deferred<mixed> $done */
+                $done = $this->context->scheduler->defer();
+                $this->renewing[$key]['waiters'][] = $done;
+
                 try {
-                    $renewal['done']->await();
+                    $done->await();
                 } catch (\Throwable) {
                     // The renewing task reports its own failure.
                 }
@@ -808,9 +844,7 @@ final class ConnectionController
             return;
         }
 
-        /** @var Deferred<mixed> $done */
-        $done = $this->context->scheduler->defer();
-        $this->renewing[$key] = ['task' => self::currentTask(), 'done' => $done];
+        $this->renewing[$key] = ['task' => self::currentTask(), 'waiters' => []];
 
         try {
             // A new token schedules the next deadline, and signing out clears
@@ -838,8 +872,12 @@ final class ConnectionController
 
             $this->onError(new AuthenticationException('Token renewal failed', $error));
         } finally {
+            $waiters = $this->renewing[$key]['waiters'] ?? [];
             unset($this->renewing[$key]);
-            $done->resolve(true);
+
+            foreach ($waiters as $waiter) {
+                $waiter->resolve(true);
+            }
         }
     }
 
