@@ -20,6 +20,23 @@ use function strlen;
  * with back-off, idempotency keys, delegation headers, cursor pages, multipart
  * uploads, and server-sent-event streams. Failed statuses are mapped to the
  * typed {@see AgentMemoryException} hierarchy.
+ *
+ * Public, like `Transport` in `@surrealdb/memory`, so a caller can reach an
+ * endpoint this client does not wrap yet with the same authentication,
+ * retries and error mapping. {@see requestJson()}, {@see requestBytes()},
+ * {@see requestStream()} and {@see withOnBehalfOf()} are the supported entry
+ * points; the other request methods serve the components.
+ *
+ * ```php
+ * $transport = new Transport(
+ *     new HttpConnection(new PsrHttpClientProvider()),
+ *     'https://memory.example.com',
+ *     $apiKey,
+ *     new RetryPolicy(AgentMemoryOptions::DEFAULT_MAX_RETRIES),
+ * );
+ *
+ * $state = $transport->requestJson('GET', Paths::contextApiPrefix('acme_prod') . '/state');
+ * ```
  */
 final class Transport
 {
@@ -111,6 +128,8 @@ final class Transport
      * Sends a JSON request and returns one member of the decoded response
      * object, such as the `matches` of an entity search.
      *
+     * @internal used by the components; call {@see requestJson()} instead
+     *
      * @param array<string,mixed>|null $query
      * @param array<mixed>|null        $body
      *
@@ -130,6 +149,8 @@ final class Transport
      * the first page was asked with. `count` is the exception: the total is
      * only asked for on the first page, because every count costs the server
      * a full count of the filtered set.
+     *
+     * @internal used by the components; call {@see requestJson()} instead
      *
      * @param string              $itemsKey the envelope member holding the rows (e.g. `entities`)
      * @param array<string,mixed> $query    filters and page parameters; `null` values are skipped
@@ -162,6 +183,8 @@ final class Transport
     /**
      * Sends a multipart request (e.g. document upload) and decodes the JSON
      * response. Multipart writes are never retried.
+     *
+     * @internal used by the document uploads
      *
      * @return array<int|string,mixed>|null
      */

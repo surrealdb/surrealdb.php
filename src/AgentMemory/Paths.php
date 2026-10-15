@@ -4,7 +4,11 @@ namespace SurrealDB\AgentMemory;
 
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 
-/** Builds the API paths shared by the client and its components. */
+/**
+ * Builds the API paths shared by the client and its components: the
+ * equivalents of `encodePathSegment()` and `getContextApiPrefix()` in
+ * `@surrealdb/memory`, except that a blank segment is rejected.
+ */
 final class Paths
 {
     /**

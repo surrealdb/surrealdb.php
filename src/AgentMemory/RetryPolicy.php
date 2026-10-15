@@ -25,6 +25,9 @@ use function in_array;
  * async runtimes stay cooperative: the default {@see SyncScheduler} blocks,
  * while the Swoole/Revolt schedulers yield to their event loop instead of
  * stalling every other coroutine or fiber.
+ *
+ * Public, like `shouldRetry()` and `backoffSchedule()` in `@surrealdb/memory`,
+ * for a caller building its own {@see Transport}.
  */
 final class RetryPolicy
 {

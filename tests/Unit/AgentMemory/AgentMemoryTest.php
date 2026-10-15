@@ -41,6 +41,7 @@ use SurrealDB\AgentMemory\Options\RecallOptions;
 use SurrealDB\AgentMemory\Options\RememberManyOptions;
 use SurrealDB\AgentMemory\Options\RememberOptions;
 use SurrealDB\AgentMemory\Options\StateOptions;
+use SurrealDB\AgentMemory\RetryPolicy;
 use SurrealDB\AgentMemory\Transport;
 use SurrealDB\AgentMemory\Triple;
 use SurrealDB\AgentMemory\UserAgent;
@@ -357,6 +358,32 @@ final class AgentMemoryTest extends TestCase
 
         $client->state();
         $this->assertArrayNotHasKey('X-Spectron-On-Behalf-Of', $connection->headers);
+    }
+
+    public function testWithOnBehalfOfSendsTheDelegationHeader(): void
+    {
+        // The public Transport entry point; the client itself delegates through its constructor.
+        $connection = new SequenceHttpConnection([
+            new HttpConnectionException('shed', 503, 'Unavailable', '{"message":"busy"}'),
+            new Response(200, [], '{}'),
+            new Response(200, [], '{}'),
+        ]);
+        $transport = new Transport($connection, 'https://memory.example.com', 'secret', new RetryPolicy(3, new RecordingScheduler()));
+
+        $this->assertSame([], $transport->withOnBehalfOf('principal:alex')->requestJson('GET', '/api/v1/acme_prod/state'));
+        $transport->requestJson('GET', '/api/v1/acme_prod/state');
+
+        [$shed, $retried, $original] = $connection->requests;
+        // The copy keeps the connection, endpoint, key and retry policy.
+        $this->assertSame(self::BASE . '/state', $retried['url']);
+        $this->assertSame('Bearer secret', $retried['headers']['Authorization']);
+        $this->assertSame('principal:alex', $shed['headers']['X-Spectron-On-Behalf-Of']);
+        $this->assertSame('principal:alex', $retried['headers']['X-Spectron-On-Behalf-Of']);
+        $this->assertArrayNotHasKey('X-Spectron-On-Behalf-Of', $original['headers']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('onBehalfOf requires a principal id.');
+        $transport->withOnBehalfOf('principal:');
     }
 
     public function testTheApiKeyIsRedactedFromDebugOutput(): void

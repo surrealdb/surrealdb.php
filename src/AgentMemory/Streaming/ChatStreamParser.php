@@ -5,6 +5,7 @@ namespace SurrealDB\AgentMemory\Streaming;
 use Psr\Http\Message\StreamInterface;
 use SurrealDB\AgentMemory\Enum\ChatEvent;
 use SurrealDB\AgentMemory\Exceptions\StreamException;
+use SurrealDB\AgentMemory\Transport;
 use function is_array;
 use function is_string;
 use function strlen;
@@ -28,6 +29,9 @@ use function strlen;
  * {@see StreamException} rather than passing off a partial reply as whole; as
  * the SSE specification requires, a trailing frame cut off before its blank
  * line is discarded, never parsed.
+ *
+ * Public, like `parseChatStream()` in `@surrealdb/memory`, for a response
+ * opened with {@see Transport::requestStream()}.
  */
 final class ChatStreamParser
 {

@@ -11,6 +11,8 @@ namespace SurrealDB\AgentMemory;
  * the server ingests appear here (mirroring the reference JS client); anything
  * else falls through to `application/octet-stream`, which the server rejects
  * with a clear error rather than misparsing.
+ *
+ * @internal
  */
 final class MimeType
 {

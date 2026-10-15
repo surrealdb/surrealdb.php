@@ -8,6 +8,8 @@ use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
  * Builds a `multipart/form-data` request body. Parts are emitted in insertion
  * order. The server accepts the `metadata` and `file` parts in either order;
  * uploads still add `metadata` first, which older servers required.
+ *
+ * @internal
  */
 final class MultipartFormData
 {

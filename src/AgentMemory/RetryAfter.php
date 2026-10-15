@@ -9,6 +9,8 @@ use function preg_match;
  * Reads the delta-seconds form of a `Retry-After` response header, which the
  * API sends with `429` throttling and `503` load shedding. The HTTP-date form
  * is treated as absent, so callers fall back to their own back-off.
+ *
+ * @internal
  */
 final class RetryAfter
 {

@@ -4,7 +4,11 @@ namespace SurrealDB\AgentMemory;
 
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 
-/** Small helpers shared by the options classes when building wire payloads. */
+/**
+ * Small helpers shared by the options classes when building wire payloads.
+ *
+ * @internal
+ */
 final class Payload
 {
     /**

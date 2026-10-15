@@ -32,6 +32,9 @@ use function array_key_exists;
  * is a `Page<DocumentJson>` ({@see Schemas}). `T` is covariant, since a page
  * is read-only: a `Page<DocumentJson>` is also a `Page<array<string, mixed>>`.
  *
+ * Construct one directly (`new Page($rows)`) to stub a collection method of a
+ * `Contracts` interface in tests; with no fetch closure it is the last page.
+ *
  * @template-covariant T = array<string, mixed> the row type; untyped decoded rows by default
  *
  * @implements \IteratorAggregate<int, T>

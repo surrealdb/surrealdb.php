@@ -17,6 +17,9 @@ use function is_string;
  * clause) and a flat string array (an OR of single-path clauses), and the two
  * mix. So `"team/eng"` is `[["team/eng"]]`, `["a", "b"]` is `[["a"], ["b"]]`
  * (a OR b), and you nest to express an AND: `[["a", "b"]]` is `a AND b`.
+ *
+ * {@see normalise()} is the same algorithm as `normaliseScope()` in
+ * `@surrealdb/memory`.
  */
 final class Scope
 {
