@@ -5,7 +5,7 @@ namespace SurrealDB\AgentMemory\Options;
 use SurrealDB\AgentMemory\Components\Entities;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see Entities::list()} and {@see Entities::listAll()}. */
+/** Options for {@see Entities::list()}, {@see Entities::listAll()} and {@see Entities::count()}. */
 final readonly class EntityListOptions
 {
     /**

@@ -116,6 +116,18 @@ final class Documents
         return $this->list($options)->collect();
     }
 
+    /**
+     * How many documents match, without fetching them: one request for a
+     * single row with `count: true`. Only the filters (`status`, `mimeType`)
+     * are read; a response without `totalSize` counts the rows it carries.
+     */
+    public function count(?DocumentListOptions $options = null): int
+    {
+        $page = $this->list(new DocumentListOptions(status: $options?->status, mimeType: $options?->mimeType, limit: 1, count: true));
+
+        return $page->totalSize ?? $page->count();
+    }
+
     /** Deletes a document. */
     public function delete(string $documentId): void
     {

@@ -48,6 +48,18 @@ final class Entities
     }
 
     /**
+     * How many entities match, without fetching them: one request for a
+     * single row with `count: true`. Only the `type` filter is read; a
+     * response without `totalSize` counts the rows it carries.
+     */
+    public function count(?EntityListOptions $options = null): int
+    {
+        $page = $this->list(new EntityListOptions(type: $options?->type, limit: 1, count: true));
+
+        return $page->totalSize ?? $page->count();
+    }
+
+    /**
      * Searches entities by name, best match first (`GET /entities/search`).
      * Lexical and deterministic: an exact match on the normalised name scores
      * `1.0`, and each match carries its fact count and a `distinguisher` so

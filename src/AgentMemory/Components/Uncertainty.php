@@ -45,6 +45,20 @@ final class Uncertainty
     }
 
     /**
+     * How many flags match, without fetching them: one request for a single
+     * row with `count: true`. Only the filters (`entity`, `resolved`) are
+     * read; a response without `totalSize` counts the rows it carries.
+     *
+     * @throws InvalidArgumentException when the `entity` filter is not a `<type>/<name>` ref
+     */
+    public function count(?UncertaintyListOptions $options = null): int
+    {
+        $page = $this->list(new UncertaintyListOptions(entity: $options?->entity, resolved: $options?->resolved, limit: 1, count: true));
+
+        return $page->totalSize ?? $page->count();
+    }
+
+    /**
      * Settles a flag by accepting one value, written as a fresh high-trust
      * assertion that retires the contenders. The server stores the value in
      * normalised form (collapsed whitespace, control characters dropped).

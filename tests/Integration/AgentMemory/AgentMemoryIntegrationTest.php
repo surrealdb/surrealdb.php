@@ -181,6 +181,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $this->assertGreaterThanOrEqual(2, $people->totalSize);
         $this->assertContains($alice, array_column(iterator_to_array($people->autoPaginate(), false), 'name'));
         $this->assertContains($alice, array_column($entities->listAll(new EntityListOptions(type: 'person')), 'name'));
+        $this->assertSame($people->totalSize, $entities->count(new EntityListOptions(type: 'person')));
 
         $matches = $entities->search(query: $alice, options: new EntitySearchOptions(type: 'person'));
         $this->assertSame($alice, $matches[0]['entity']['name']);
@@ -331,6 +332,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
         $uncertainty = $memory->uncertainty;
         $open = $uncertainty->list(new UncertaintyListOptions(entity: $carol, resolved: false, count: true));
         $this->assertSame(1, $open->totalSize);
+        $this->assertSame(1, $uncertainty->count(new UncertaintyListOptions(entity: $carol, resolved: false)));
         $flag = $open->items[0];
         $this->assertSame('role', $flag['key']);
         $this->assertTrue($flag['resolvable']);
@@ -342,6 +344,8 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
 
         $this->assertSame([], $uncertainty->list(new UncertaintyListOptions(entity: $carol, resolved: false))->items);
         $this->assertCount(1, $uncertainty->list(new UncertaintyListOptions(entity: $carol, resolved: true))->items);
+        $this->assertSame(0, $uncertainty->count(new UncertaintyListOptions(entity: $carol, resolved: false)));
+        $this->assertSame(1, $uncertainty->count(new UncertaintyListOptions(entity: $carol, resolved: true)));
     }
 
     public function testUncertaintyListsAndRejectsUnknownFlags(): void
@@ -403,6 +407,7 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
 
         $list = $documents->list(new DocumentListOptions(count: true));
         $this->assertIsInt($list->totalSize);
+        $this->assertSame($list->totalSize, $documents->count());
 
         $this->assertInstanceOf(Page::class, $documents->keywords->list());
         $this->assertIsList($documents->keywords->listAll());

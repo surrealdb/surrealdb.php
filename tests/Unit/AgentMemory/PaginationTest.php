@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\AgentMemoryOptions;
 use SurrealDB\AgentMemory\EntityRef;
+use SurrealDB\AgentMemory\Enum\DocumentStatus;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\ActionListOptions;
@@ -563,6 +564,63 @@ final class PaginationTest extends TestCase
 
         try {
             $this->client($connection)->facts->allEdgesOf('alice');
+            $this->fail('Expected a bare name to be rejected');
+        } catch (InvalidArgumentException $e) {
+            $this->assertSame(InvalidArgumentException::class, $e::class);
+            $this->assertSame([], $connection->requests);
+        }
+    }
+
+    public function testCountAsksForOneRowAndReadsTheTotal(): void
+    {
+        $connection = new SequenceHttpConnection([self::page('documents', [['id' => 'd1']], 'n', totalSize: 42)]);
+
+        // Only the filters are read: the page parameters given are replaced.
+        $total = $this->client($connection)->documents->count(
+            new DocumentListOptions(status: DocumentStatus::READY, mimeType: 'text/plain', limit: 50, cursor: 'x'),
+        );
+
+        $this->assertSame(42, $total);
+        $this->assertSame([self::BASE . '/documents?status=ready&mimeType=text%2Fplain&limit=1&count=true'], $connection->urls());
+
+        $cases = [
+            'documents' => ['documents', fn (AgentMemory $m): int => $m->documents->count(), '/documents?limit=1&count=true'],
+            'entities' => ['entities', fn (AgentMemory $m): int => $m->entities->count(new EntityListOptions(type: 'person', limit: 9, count: false)), '/entities?type=person&limit=1&count=true'],
+            'unknowns' => [
+                'unknowns',
+                fn (AgentMemory $m): int => $m->uncertainty->count(new UncertaintyListOptions(entity: new EntityRef('person', 'alice'), resolved: false)),
+                '/uncertainty?entity=person%2Falice&resolved=false&limit=1&count=true',
+            ],
+        ];
+
+        foreach ($cases as $name => [$key, $call, $path]) {
+            $connection = new SequenceHttpConnection([self::page($key, [['row' => 1]], 'n', totalSize: 7)]);
+
+            $this->assertSame(7, $call($this->client($connection)), $name);
+            $this->assertSame([self::BASE . $path], $connection->urls(), $name);
+        }
+    }
+
+    public function testCountFallsBackToTheRowsOnThePage(): void
+    {
+        // A response without totalSize (one that ignored count) counts what it carries, as JS does.
+        $connection = new SequenceHttpConnection([
+            self::page('entities', [['name' => 'a']], 'n'),
+            self::page('entities', []),
+        ]);
+        $memory = $this->client($connection);
+
+        $this->assertSame(1, $memory->entities->count());
+        $this->assertSame(0, $memory->entities->count());
+        $this->assertCount(2, $connection->requests);
+    }
+
+    public function testCountRejectsAMalformedEntityBeforeAnyRequest(): void
+    {
+        $connection = new SequenceHttpConnection([]);
+
+        try {
+            $this->client($connection)->uncertainty->count(new UncertaintyListOptions(entity: 'alice'));
             $this->fail('Expected a bare name to be rejected');
         } catch (InvalidArgumentException $e) {
             $this->assertSame(InvalidArgumentException::class, $e::class);

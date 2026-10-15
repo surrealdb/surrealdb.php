@@ -6,7 +6,7 @@ use SurrealDB\AgentMemory\Components\Documents;
 use SurrealDB\AgentMemory\Enum\DocumentStatus;
 use SurrealDB\AgentMemory\Payload;
 
-/** Options for {@see Documents::list()} and {@see Documents::listAll()}. */
+/** Options for {@see Documents::list()}, {@see Documents::listAll()} and {@see Documents::count()}. */
 final readonly class DocumentListOptions
 {
     /**
