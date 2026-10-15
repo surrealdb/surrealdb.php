@@ -127,7 +127,7 @@ final class AgentMemory
         $this->transport = new Transport(
             $this->connection,
             rtrim($options->endpoint, '/'),
-            $options->authentication(),
+            $options->apiKey,
             new RetryPolicy($options->maxRetries, $runtime->scheduler),
             $onBehalfOf,
         );

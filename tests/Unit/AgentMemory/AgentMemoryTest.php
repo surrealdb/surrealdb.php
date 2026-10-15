@@ -7,7 +7,6 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\AgentMemoryOptions;
 use SurrealDB\AgentMemory\AgentMemoryRuntime;
-use SurrealDB\AgentMemory\Auth\ApiKey;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Enum\BatchExtractionMode;
 use SurrealDB\AgentMemory\Enum\InferMode;
@@ -39,6 +38,7 @@ use SurrealDB\AgentMemory\Options\RecallOptions;
 use SurrealDB\AgentMemory\Options\RememberManyOptions;
 use SurrealDB\AgentMemory\Options\RememberOptions;
 use SurrealDB\AgentMemory\Options\StateOptions;
+use SurrealDB\AgentMemory\Transport;
 use SurrealDB\AgentMemory\Triple;
 use SurrealDB\Exceptions\HttpConnectionException;
 use SurrealDB\Exceptions\InvalidValueException;
@@ -344,18 +344,38 @@ final class AgentMemoryTest extends TestCase
         $this->assertArrayNotHasKey('X-Spectron-On-Behalf-Of', $connection->headers);
     }
 
-    public function testCustomAuthenticationStrategyIsHonoured(): void
+    public function testTheApiKeyIsRedactedFromDebugOutput(): void
     {
-        $connection = new RecordingHttpConnection(new Response(200, [], '{}'));
+        // No request is sent: the recording fake would otherwise hold the headers.
         $client = new AgentMemory(
-            new AgentMemoryOptions('https://memory.example.com', 'acme_prod', new ApiKey('k-123', 'Surreal-Api-Key')),
-            $connection,
+            new AgentMemoryOptions('https://memory.example.com', 'acme_prod', 'sp-k1-topsecret'),
+            new RecordingHttpConnection(new Response(200, [], '{}')),
         );
 
-        $client->state();
+        foreach (['client' => $client, 'delegated client' => $client->onBehalfOf('alex')] as $name => $subject) {
+            ob_start();
+            var_dump($subject);
+            $dumps = ['print_r' => print_r($subject, true), 'var_dump' => (string) ob_get_clean()];
 
-        $this->assertSame('k-123', $connection->headers['Surreal-Api-Key']);
-        $this->assertArrayNotHasKey('Authorization', $connection->headers);
+            foreach ($dumps as $function => $output) {
+                $this->assertStringNotContainsString('topsecret', $output, "{$function} of the {$name}");
+                $this->assertStringContainsString('[redacted]', $output, "{$function} of the {$name}");
+            }
+        }
+    }
+
+    public function testTheApiKeyParametersAreSensitive(): void
+    {
+        // Pinned through reflection, so the check holds whatever zend.exception_ignore_args is set to.
+        $parameters = [
+            'AgentMemoryOptions::__construct $apiKey' => new \ReflectionParameter([AgentMemoryOptions::class, '__construct'], 'apiKey'),
+            'Transport::__construct $apiKey' => new \ReflectionParameter([Transport::class, '__construct'], 'apiKey'),
+            'Transport::send $headers' => new \ReflectionParameter([Transport::class, 'send'], 'headers'),
+        ];
+
+        foreach ($parameters as $name => $parameter) {
+            $this->assertCount(1, $parameter->getAttributes(\SensitiveParameter::class), $name);
+        }
     }
 
     public function testEmptyRememberEncodesAsJsonObject(): void

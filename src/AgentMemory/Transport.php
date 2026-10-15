@@ -4,7 +4,6 @@ namespace SurrealDB\AgentMemory;
 
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\ResponseInterface;
-use SurrealDB\AgentMemory\Auth\AuthenticationInterface;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryExceptionFactory;
 use SurrealDB\AgentMemory\Exceptions\ConnectionException;
@@ -41,21 +40,21 @@ final class Transport
      * target would make the server run requests as the caller.
      *
      * @param string      $endpoint   API endpoint origin without trailing slash
+     * @param string      $apiKey     context API key (`sp-…`), sent as `Authorization: Bearer <key>`
      * @param string|null $onBehalfOf principal id sent as the `X-Spectron-On-Behalf-Of` header
      *
-     * @throws InvalidArgumentException when `$onBehalfOf` is blank, alone or after a `principal:` prefix,
-     *                                  or it or the API key holds a control character
+     * @throws InvalidArgumentException when the API key is blank, `$onBehalfOf` is blank alone or after a
+     *                                  `principal:` prefix, or either holds a control character
      */
     public function __construct(
         private readonly HttpConnectionInterface $connection,
         private readonly string $endpoint,
-        private readonly AuthenticationInterface $auth,
+        #[\SensitiveParameter] private readonly string $apiKey,
         private readonly RetryPolicy $retry,
         private readonly ?string $onBehalfOf = null,
     ) {
-        foreach ($this->auth->headers() as $value) {
-            self::assertNoControlCharacters($value, 'The Agent Memory API key cannot contain control characters such as line breaks.');
-        }
+        Guard::notBlank($this->apiKey, 'Agent Memory API key is required.');
+        self::assertNoControlCharacters($this->apiKey, 'The Agent Memory API key cannot contain control characters such as line breaks.');
 
         if ($this->onBehalfOf !== null) {
             $principal = trim($this->onBehalfOf);
@@ -75,7 +74,7 @@ final class Transport
      */
     public function withOnBehalfOf(string $principalId): self
     {
-        return new self($this->connection, $this->endpoint, $this->auth, $this->retry, $principalId);
+        return new self($this->connection, $this->endpoint, $this->apiKey, $this->retry, $principalId);
     }
 
     /**
@@ -190,9 +189,19 @@ final class Transport
     }
 
     /**
-     * @param array<string,string> $headers
+     * The transport as `var_dump()` and `print_r()` show it, with the API key redacted.
+     *
+     * @return array<string,mixed>
      */
-    private function send(string $method, string $url, ?string $body, array $headers, bool $idempotent): ResponseInterface
+    public function __debugInfo(): array
+    {
+        return array_replace(get_object_vars($this), ['apiKey' => '[redacted]']);
+    }
+
+    /**
+     * @param array<string,string> $headers carry the API key, so they are kept out of stack traces
+     */
+    private function send(string $method, string $url, ?string $body, #[\SensitiveParameter] array $headers, bool $idempotent): ResponseInterface
     {
         $attempt = 0;
 
@@ -249,7 +258,7 @@ final class Transport
         $headers = [
             'Accept' => $accept,
             'User-Agent' => self::USER_AGENT,
-            ...$this->auth->headers(),
+            'Authorization' => 'Bearer ' . $this->apiKey,
         ];
 
         if ($this->onBehalfOf !== null) {
