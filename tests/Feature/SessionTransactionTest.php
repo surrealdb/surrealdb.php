@@ -197,6 +197,31 @@ final class SessionTransactionTest extends TestCase
         }
     }
 
+    public function testAClosedSessionCannotBeResetOrAttachALiveQuery(): void
+    {
+        $db = $this->connect();
+
+        try {
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $session = $db->newSession();
+            $session->closeSession();
+
+            foreach ([
+                'reset' => static fn () => $session->reset(),
+                'liveOf' => static fn () => $session->liveOf($id),
+            ] as $call => $attempt) {
+                try {
+                    $attempt();
+                    self::fail("{$call}() on a closed session should fail.");
+                } catch (InvalidSessionException) {
+                    $this->addToAssertionCount(1);
+                }
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testTheDefaultSessionCannotBeClosed(): void
     {
         $db = $this->connect();

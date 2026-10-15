@@ -60,6 +60,22 @@ final class SurrealLocalDatabaseTest extends TestCase
     }
 
     #[DataProvider('protocols')]
+    public function testFractionalNumbersSentAsHalfPrecisionFloatsDecode(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            // Over CBOR the server sends each of these as a 16-bit float.
+            self::assertSame(
+                [[0.5, -0.25, 1.5, 0.1, 6.103515625E-5]],
+                $db->run('RETURN [0.5, -0.25, 1.5, 0.1, 0.00006103515625]'),
+            );
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
     public function testCrudBuildersAndBoundSessionVariablesUseRealDatabase(string $protocol): void
     {
         $db = $this->connect($protocol);

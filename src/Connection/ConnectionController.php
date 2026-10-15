@@ -342,8 +342,8 @@ final class ConnectionController
 
     public function reset(?string $session = null): void
     {
-        $this->requireEngine()->reset($session);
         $sessionState = $this->requireSession($session);
+        $this->requireEngine()->reset($session);
         $sessionState->namespace = null;
         $sessionState->database = null;
         $sessionState->variables = [];
@@ -467,15 +467,11 @@ final class ConnectionController
 
     /**
      * @internal a subscription on the session, which ends if the session is
-     * reset
+     * reset. A closed session's handle cannot start one.
      */
     public function registerLive(LiveSubscription $subscription, ?string $session): void
     {
-        $sessionState = $this->state?->session($session);
-
-        if ($sessionState !== null) {
-            $sessionState->live[$subscription] = true;
-        }
+        $this->requireSession($session)->live[$subscription] = true;
     }
 
     /**
