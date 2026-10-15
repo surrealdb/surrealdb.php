@@ -26,6 +26,9 @@ final class LiveFeed implements \IteratorAggregate
 
     private bool $closed = false;
 
+    /** A `KILLED` notification was received: the server ended the query. */
+    private bool $killed = false;
+
     private ?\Closure $unsubscribe = null;
 
     /**
@@ -46,6 +49,11 @@ final class LiveFeed implements \IteratorAggregate
     public function onClose(\Closure $unsubscribe): void
     {
         $this->unsubscribe = $unsubscribe;
+
+        // A held KILLED notification was replayed while registering.
+        if ($this->closed || $this->killed) {
+            $this->unregister();
+        }
     }
 
     /**
@@ -53,11 +61,19 @@ final class LiveFeed implements \IteratorAggregate
      */
     public function push(LiveMessage $message): void
     {
-        if ($this->closed) {
+        if ($this->closed || $this->killed) {
             return;
         }
 
         $this->queue[] = $message;
+
+        // Nothing follows KILLED: stop receiving now, not when it is iterated,
+        // so the subscription reports the query dead straight away.
+        if ($message->action === LiveAction::Killed) {
+            $this->killed = true;
+            $this->unregister();
+        }
+
         $this->wake();
     }
 
@@ -72,18 +88,19 @@ final class LiveFeed implements \IteratorAggregate
         }
 
         $this->closed = true;
-
-        if ($this->unsubscribe !== null) {
-            ($this->unsubscribe)();
-            $this->unsubscribe = null;
-        }
-
+        $this->unregister();
         $this->wake();
     }
 
     public function isClosed(): bool
     {
         return $this->closed;
+    }
+
+    /** Whether the server ended the live query (a `KILLED` notification arrived). */
+    public function isKilled(): bool
+    {
+        return $this->killed;
     }
 
     /**
@@ -130,6 +147,14 @@ final class LiveFeed implements \IteratorAggregate
     public function __destruct()
     {
         $this->close();
+    }
+
+    private function unregister(): void
+    {
+        if ($this->unsubscribe !== null) {
+            ($this->unsubscribe)();
+            $this->unsubscribe = null;
+        }
     }
 
     private function wake(): void

@@ -87,18 +87,29 @@ final class AmpWebSocketEngineTest extends TestCase
 
     private function connect(Surreal $db): void
     {
-        try {
-            $db->connect(
-                getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc',
-                new ConnectOptions(authentication: new RootAuth('root', 'root'), reconnect: ['retryDelay' => 0.05]),
-            );
-        } catch (\Throwable $error) {
+        $url = getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc';
+
+        // Only an unreachable endpoint means "no local server": once it
+        // accepts connections, any connect-time failure (handshake, decoding,
+        // authentication, session restore) is a regression and must fail.
+        $host = parse_url($url, PHP_URL_HOST) ?: '127.0.0.1';
+        $port = parse_url($url, PHP_URL_PORT) ?: (parse_url($url, PHP_URL_SCHEME) === 'wss' ? 443 : 80);
+        $probe = @stream_socket_client(sprintf('tcp://%s:%d', $host, $port), $code, $message, 1.0);
+
+        if ($probe === false) {
             if (getenv('SURREALDB_REQUIRE_LOCAL') === '1') {
-                self::fail('Local SurrealDB test database is required but unavailable: ' . $error->getMessage());
+                self::fail(sprintf('Local SurrealDB test database is required but unavailable at %s: %s', $url, $message));
             }
 
-            self::markTestSkipped('Local SurrealDB test database is not available: ' . $error->getMessage());
+            self::markTestSkipped(sprintf('Local SurrealDB test database is not available at %s: %s', $url, $message));
         }
+
+        fclose($probe);
+
+        $db->connect(
+            $url,
+            new ConnectOptions(authentication: new RootAuth('root', 'root'), reconnect: ['retryDelay' => 0.05]),
+        );
     }
 
     private function delay(float $seconds): void

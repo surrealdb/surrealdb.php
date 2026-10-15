@@ -4,11 +4,15 @@ namespace SurrealDB\SDK\Api;
 
 use SurrealDB\SDK\Contracts\QueryExecutor;
 use SurrealDB\SDK\Query\ApiQuery;
+use SurrealDB\SDK\Types\None;
 
 /**
  * Calls user-defined API endpoints (`DEFINE API`) under an optional path
  * prefix, with default headers sent on every request. Obtain one from
  * {@see \SurrealDB\SDK\Surreal::api()}.
+ *
+ * A request without a body leaves `body` out (SurrealQL `NONE`); passing `null`
+ * sends an explicit `NULL` body.
  */
 final class SurrealApi
 {
@@ -40,7 +44,7 @@ final class SurrealApi
      *
      * @return ApiQuery<mixed>
      */
-    public function invoke(string $path, string $method = 'get', mixed $body = null, array $headers = [], array $query = []): ApiQuery
+    public function invoke(string $path, string $method = 'get', mixed $body = new None(), array $headers = [], array $query = []): ApiQuery
     {
         return new ApiQuery(
             $this->executor,
@@ -59,31 +63,31 @@ final class SurrealApi
     }
 
     /** @return ApiQuery<mixed> */
-    public function post(string $path, mixed $body = null): ApiQuery
+    public function post(string $path, mixed $body = new None()): ApiQuery
     {
         return $this->invoke($path, 'post', $body);
     }
 
     /** @return ApiQuery<mixed> */
-    public function put(string $path, mixed $body = null): ApiQuery
+    public function put(string $path, mixed $body = new None()): ApiQuery
     {
         return $this->invoke($path, 'put', $body);
     }
 
     /** @return ApiQuery<mixed> */
-    public function patch(string $path, mixed $body = null): ApiQuery
+    public function patch(string $path, mixed $body = new None()): ApiQuery
     {
         return $this->invoke($path, 'patch', $body);
     }
 
     /** @return ApiQuery<mixed> */
-    public function delete(string $path, mixed $body = null): ApiQuery
+    public function delete(string $path, mixed $body = new None()): ApiQuery
     {
         return $this->invoke($path, 'delete', $body);
     }
 
     /** @return ApiQuery<mixed> */
-    public function trace(string $path, mixed $body = null): ApiQuery
+    public function trace(string $path, mixed $body = new None()): ApiQuery
     {
         return $this->invoke($path, 'trace', $body);
     }
