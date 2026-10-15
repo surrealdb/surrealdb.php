@@ -63,6 +63,7 @@ final class WebSocketEngine extends AbstractRpcEngine
     {
         return new FeatureSet(
             Features::liveQueries(),
+            Features::liveQueryBindings(),
             Features::refreshTokens(),
             Features::sessions(),
             Features::transactions(),
