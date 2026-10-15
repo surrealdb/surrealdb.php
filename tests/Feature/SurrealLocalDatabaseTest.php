@@ -182,6 +182,41 @@ final class SurrealLocalDatabaseTest extends TestCase
         }
     }
 
+    #[DataProvider('protocols')]
+    public function testStringTargetsCannotInjectSurrealQl(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $db->create(new RecordId('person', 'tobie'))->content(['name' => 'Tobie'])->execute();
+
+            $hostile = 'person; DELETE person; SELECT * FROM person';
+            // Strict servers only write to defined tables.
+            $db->run('DEFINE TABLE ' . Table::escapeIdent($hostile) . '; DEFINE TABLE ' . Table::escapeIdent('trailing\\'));
+            $created = $db->create($hostile)->content(['name' => 'Hostile'])->execute();
+
+            self::assertIsArray($created);
+            self::assertCount(1, $created);
+            self::assertSame('Hostile', $created[0]['name'] ?? null);
+            self::assertInstanceOf(RecordId::class, $created[0]['id']);
+            self::assertSame($hostile, $created[0]['id']->table);
+
+            $people = $db->select('person')->execute();
+
+            self::assertIsArray($people);
+            self::assertCount(1, $people);
+            self::assertSame('Tobie', $people[0]['name'] ?? null);
+
+            $backslash = $db->create('trailing\\')->content(['ok' => true])->execute();
+
+            self::assertIsArray($backslash);
+            self::assertSame('trailing\\', $backslash[0]['id']->table);
+        } finally {
+            $db->close();
+        }
+    }
+
     /**
      * @param 'http'|'ws' $protocol
      */
