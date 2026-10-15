@@ -289,11 +289,13 @@ final class WebSocketReconnectTest extends TestCase
             // Drop the first replacement socket just as the LIVE query is
             // re-issued on it.
             $client = $this->client;
-            $client->beforeSend = static function (string $payload) use ($client): void {
+            $client->beforeSend = static function (string $payload) use ($client): ?string {
                 if (str_contains($payload, 'LIVE SELECT')) {
                     $client->beforeSend = null;
                     $client->sever();
                 }
+
+                return null;
             };
 
             $client->sever();
@@ -308,6 +310,42 @@ final class WebSocketReconnectTest extends TestCase
 
                 break;
             }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testClosingFromAReplayErrorListenerLeavesTheConnectionClosed(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $events = [];
+
+            foreach (['connected', 'disconnected'] as $event) {
+                $db->subscribe($event, static function () use (&$events, $event): void {
+                    $events[] = $event;
+                });
+            }
+
+            $db->subscribe('error', static function () use ($db): void {
+                $db->close();
+            });
+
+            // Make the server reject the replayed query (same length, so a
+            // CBOR frame stays well formed).
+            $this->client->beforeSend = static function (string $payload): ?string {
+                return str_contains($payload, 'LIVE SELECT')
+                    ? str_replace('LIVE SELECT', 'LIVE SELEKT', $payload)
+                    : null;
+            };
+
+            $this->client->sever();
+
+            self::assertSame(ConnectionStatus::Disconnected, $db->status());
+            self::assertSame(['disconnected'], $events);
+            self::assertFalse($live->isAlive());
         } finally {
             $db->close();
         }
@@ -482,6 +520,30 @@ final class WebSocketReconnectTest extends TestCase
 
             self::assertSame(1, $renewed);
             self::assertCount(1, $db->select(new RecordId('person', 'committed'))->execute());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testSelectingANamespaceRenewsADueToken(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+
+        try {
+            $first = $db->accessToken();
+            $renewed = 0;
+            $db->subscribe('auth', static function ($tokens) use (&$renewed): void {
+                if ($tokens !== null) {
+                    $renewed++;
+                }
+            });
+
+            sleep(2);
+            $db->use($this->namespace, 'db');
+
+            self::assertSame(1, $renewed);
+            self::assertNotSame($first, $db->accessToken());
         } finally {
             $db->close();
         }
