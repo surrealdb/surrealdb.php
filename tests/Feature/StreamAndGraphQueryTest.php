@@ -11,6 +11,8 @@ use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Query\Frame\DoneFrame;
 use SurrealDB\SDK\Query\Frame\ErrorFrame;
 use SurrealDB\SDK\Query\Frame\ValueFrame;
+use SurrealDB\SDK\Protocol\Feature;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
@@ -97,6 +99,7 @@ final class StreamAndGraphQueryTest extends TestCase
     public function testGqlRunsGraphPatternQueries(string $url): void
     {
         $db = $this->connect($url);
+        $this->requireFeature($db, Features::gql());
 
         try {
             $db->run('CREATE person:a SET name = "A"; CREATE person:b SET name = "B"; RELATE person:a->knows->person:b');
@@ -113,9 +116,9 @@ final class StreamAndGraphQueryTest extends TestCase
     public function testGqlRunsInsideATransaction(): void
     {
         $db = $this->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
+        $this->requireFeature($db, Features::gql());
 
         try {
-            $db->run('DEFINE TABLE person SCHEMALESS');
             $txn = $db->beginTransaction();
             $txn->run('CREATE person:t SET name = "T"');
 
@@ -132,9 +135,10 @@ final class StreamAndGraphQueryTest extends TestCase
     public function testGraphqlReturnsTheResponseEnvelope(string $url): void
     {
         $db = $this->connect($url);
+        $this->requireFeature($db, Features::graphql());
 
         try {
-            $db->run('DEFINE CONFIG GRAPHQL AUTO; DEFINE TABLE person SCHEMAFULL; DEFINE FIELD name ON person TYPE string; CREATE person:a SET name = "A"');
+            $db->run('DEFINE CONFIG GRAPHQL AUTO; DEFINE TABLE OVERWRITE person SCHEMAFULL; DEFINE FIELD name ON person TYPE string; CREATE person:a SET name = "A"');
 
             $response = $db->graphql('query Person($id: ID!) { person(id: $id) { name } }', ['id' => 'a'], 'Person');
 
@@ -151,6 +155,14 @@ final class StreamAndGraphQueryTest extends TestCase
         }
     }
 
+    private function requireFeature(Surreal $db, Feature $feature): void
+    {
+        if (!$db->isFeatureSupported($feature)) {
+            $db->close();
+            self::markTestSkipped("The {$feature->name} feature needs a newer SurrealDB.");
+        }
+    }
+
     private function connect(string $url): Surreal
     {
         $db = new Surreal();
@@ -160,6 +172,8 @@ final class StreamAndGraphQueryTest extends TestCase
             $db->connect($url, new ConnectOptions(authentication: new RootAuth('root', 'root')));
             $db->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db;");
             $db->use($namespace, 'db');
+            // Strict servers only write to defined tables.
+            $db->run('DEFINE TABLE person SCHEMALESS; DEFINE TABLE knows TYPE RELATION');
         } catch (\Throwable $error) {
             if (getenv('SURREALDB_REQUIRE_LOCAL') === '1') {
                 self::fail('Local SurrealDB test database is required but unavailable: ' . $error->getMessage());
