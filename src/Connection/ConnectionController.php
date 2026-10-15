@@ -657,10 +657,16 @@ final class ConnectionController
         unset($subscription);
 
         foreach ($replayed as $weak) {
+            // A resumed consumer can run straight away (OpenSwoole) and lose
+            // this socket too: the rest then wait for the next replay.
+            if (!$this->isCurrentConnection($epoch)) {
+                return false;
+            }
+
             $weak->get()?->resumeIteration();
         }
 
-        return true;
+        return $this->isCurrentConnection($epoch);
     }
 
     /**
@@ -835,8 +841,11 @@ final class ConnectionController
             return;
         }
 
-        $delay = max($expiry - time() - 60, 0);
-        $this->renewAt[$session ?? ''] = $expiry - 60;
+        // Renew a minute early. With renewal off there is nothing to do
+        // early: the session is signed out once the token expires.
+        $lead = $this->skipRenewal ? 0 : 60;
+        $delay = max($expiry - time() - $lead, 0);
+        $this->renewAt[$session ?? ''] = $expiry - $lead;
 
         // Runs only under an async scheduler; the sync scheduler treats spawn as
         // a no-op and relies on the checks before each call instead. The timer

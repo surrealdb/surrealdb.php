@@ -552,6 +552,28 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testWithRenewalOffATokenIsKeptUntilItExpires(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(define: false, invalidateOnExpiry: true);
+
+        try {
+            $db->signin(new NamespaceAuth($this->namespace, 'renew', 'secret'));
+            $db->use($this->namespace, 'db');
+            $token = $db->accessToken();
+
+            // Past the point renewal would be due, but the token is valid for
+            // another minute.
+            sleep(2);
+
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertNotNull($token);
+            self::assertSame($token, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testAFailedRenewalIsRetried(): void
     {
         $this->defineShortLivedUser();
@@ -702,6 +724,7 @@ final class WebSocketReconnectTest extends TestCase
         RootAuth|NamespaceAuth|\Closure|null $auth = null,
         bool $define = true,
         ?\Closure $clientFactory = null,
+        bool $invalidateOnExpiry = false,
     ): Surreal {
         $this->client = new SeverableWebSocketClient();
         $client = $this->client;
@@ -715,6 +738,7 @@ final class WebSocketReconnectTest extends TestCase
             $db->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc', new ConnectOptions(
                 authentication: $auth ?? new RootAuth('root', 'root'),
                 reconnect: $reconnect,
+                invalidateOnExpiry: $invalidateOnExpiry,
             ));
 
             if ($define) {
