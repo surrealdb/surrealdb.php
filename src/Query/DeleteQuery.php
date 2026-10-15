@@ -8,6 +8,8 @@ use SurrealDB\SDK\Query\Concerns\HasOutput;
 use SurrealDB\SDK\Query\Concerns\HasTimeout;
 use SurrealDB\SDK\Query\Concerns\HasVersion;
 use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\SDK\Types\RecordIdRange;
+use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
 
 /**
@@ -24,11 +26,11 @@ final class DeleteQuery extends QueryBuilder
     use HasVersion;
 
     /**
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
      */
     public function __construct(
         ?QueryExecutor $executor,
-        public private(set) RecordId|Table|string $what,
+        public private(set) RecordId|RecordIdRange|StringRecordId|Table|string $what,
     ) {
         parent::__construct($executor);
         $this->output = Output::BEFORE;
