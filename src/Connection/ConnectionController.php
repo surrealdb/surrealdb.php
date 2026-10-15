@@ -275,6 +275,7 @@ final class ConnectionController
      */
     public function signin(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        $this->requireSession($session);
         $tokens = $this->requireEngine()->signin($auth, $session);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
@@ -287,6 +288,7 @@ final class ConnectionController
      */
     public function signup(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        $this->requireSession($session);
         $tokens = $this->requireEngine()->signup($auth, $session);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
@@ -296,8 +298,8 @@ final class ConnectionController
 
     public function authenticate(string $token, ?string $session = null, bool $skipOverride = false): void
     {
-        $this->requireEngine()->authenticate($token, $session);
         $sessionState = $this->requireSession($session);
+        $this->requireEngine()->authenticate($token, $session);
         $sessionState->auth->accessToken = $token;
         $sessionState->auth->overridden = $sessionState->auth->overridden || !$skipOverride;
         $this->handleAuthChanged($session);
@@ -336,6 +338,7 @@ final class ConnectionController
 
     public function invalidate(?string $session = null): void
     {
+        $this->requireSession($session);
         $this->requireEngine()->invalidate($session);
         $this->handleAuthInvalidate($session);
     }
@@ -1031,12 +1034,16 @@ final class ConnectionController
     {
         $sessionState = $this->requireSession($session);
 
-        if (is_string($auth['ns'] ?? null)) {
-            $sessionState->namespace = $auth['ns'];
+        // The protocol accepts both spellings.
+        $namespace = $auth['ns'] ?? $auth['NS'] ?? null;
+        $database = $auth['db'] ?? $auth['DB'] ?? null;
+
+        if (is_string($namespace)) {
+            $sessionState->namespace = $namespace;
         }
 
-        if (is_string($auth['db'] ?? null)) {
-            $sessionState->database = $auth['db'];
+        if (is_string($database)) {
+            $sessionState->database = $database;
         }
     }
 
