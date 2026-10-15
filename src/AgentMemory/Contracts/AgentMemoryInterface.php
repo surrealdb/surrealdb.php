@@ -135,6 +135,7 @@ interface AgentMemoryInterface
      * @return QueryMemoryResponseJson
      *
      * @throws InvalidArgumentException when the query is blank, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function recall(string $query, ?RecallOptions $options = null): array;
 
@@ -153,6 +154,7 @@ interface AgentMemoryInterface
      * @return LookupResponseJson
      *
      * @throws InvalidArgumentException when the query is blank and no `subject` is given, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function lookup(string $query, ?LookupOptions $options = null): array;
 
@@ -163,6 +165,7 @@ interface AgentMemoryInterface
      * @return ForgetResponseJson
      *
      * @throws InvalidArgumentException when the query is blank, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function forget(string $query, ?ForgetOptions $options = null): array;
 
@@ -173,6 +176,7 @@ interface AgentMemoryInterface
      * @return ChatResponseJson
      *
      * @throws InvalidArgumentException when the message is blank, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function chat(string $message, ?ChatOptions $options = null): array;
 
@@ -209,6 +213,7 @@ interface AgentMemoryInterface
      * @return ContextQueryResponseJson
      *
      * @throws InvalidArgumentException when the query is blank, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function context(string $query, ?ContextOptions $options = null): array;
 
@@ -219,6 +224,7 @@ interface AgentMemoryInterface
      * @return ReflectResponseJson
      *
      * @throws InvalidArgumentException when the query is blank, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function reflect(string $query, ?ReflectOptions $options = null): array;
 
@@ -275,6 +281,7 @@ interface AgentMemoryInterface
      * @return list<AuditRowJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor`
+     * @throws AgentMemoryException     when the request fails
      */
     public function auditAll(?AuditOptions $options = null): array;
 

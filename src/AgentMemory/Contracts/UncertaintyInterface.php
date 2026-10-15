@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Contracts;
 
+use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Exceptions\ScopeException;
@@ -32,6 +33,7 @@ interface UncertaintyInterface
      * @return list<UncertaintyJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     * @throws AgentMemoryException     when the request fails
      */
     public function listAll(?UncertaintyListOptions $options = null): array;
 
@@ -41,6 +43,7 @@ interface UncertaintyInterface
      * read; a response without `totalSize` counts the rows it carries.
      *
      * @throws InvalidArgumentException when the `entity` filter is not a `<type>/<name>` ref
+     * @throws AgentMemoryException     when the request fails
      */
     public function count(?UncertaintyListOptions $options = null): int;
 
@@ -57,6 +60,7 @@ interface UncertaintyInterface
      * @throws InvalidArgumentException when the accepted value is blank, before any request is sent
      * @throws NotFoundException        when no such flag is visible to the caller
      * @throws ScopeException           when the flag reaches beyond the caller's `memory:write` region
+     * @throws AgentMemoryException     when the request fails otherwise
      */
     public function resolve(string $uncertaintyId, string $acceptedValue, ?string $note = null): array;
 }

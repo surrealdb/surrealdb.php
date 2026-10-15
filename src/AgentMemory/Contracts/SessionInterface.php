@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Contracts;
 
+use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
@@ -46,6 +47,7 @@ interface SessionInterface
      * @return list<TurnResponseJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     * @throws AgentMemoryException     when the request fails
      */
     public function allTurns(?PageOptions $options = null): array;
 
@@ -57,6 +59,7 @@ interface SessionInterface
      * @return SessionContextResponseJson
      *
      * @throws InvalidArgumentException when the query is blank, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function context(string $query): array;
 }

@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Contracts;
 
+use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\PageOptions;
 use SurrealDB\AgentMemory\Page;
@@ -29,6 +30,7 @@ interface TracesInterface
      * @return list<TraceRecordJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     * @throws AgentMemoryException     when the request fails
      */
     public function listAll(?PageOptions $options = null): array;
 

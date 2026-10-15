@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Contracts;
 
+use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\UnsupportedMediaTypeException;
 use SurrealDB\AgentMemory\Options\DocumentListOptions;
@@ -33,6 +34,7 @@ interface DocumentsInterface
      *
      * @throws UnsupportedMediaTypeException when the server has no parser for the file's media type
      * @throws InvalidArgumentException      when a stream `file` cannot be read, before any request is sent
+     * @throws AgentMemoryException          when the request fails otherwise
      */
     public function upload(DocumentUploadOptions $options): array;
 
@@ -43,6 +45,7 @@ interface DocumentsInterface
      * @return UploadResponse
      *
      * @throws InvalidArgumentException when a stream `file` cannot be read, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function reprocess(string $documentId, DocumentUploadOptions $options): array;
 
@@ -73,6 +76,7 @@ interface DocumentsInterface
      * @return list<ChunkJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     * @throws AgentMemoryException     when the request fails
      */
     public function allChunks(string $documentId, ?PageOptions $options = null, ?int $max = null): array;
 
@@ -90,6 +94,7 @@ interface DocumentsInterface
      * @return list<DocumentJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     * @throws AgentMemoryException     when the request fails
      */
     public function listAll(?DocumentListOptions $options = null): array;
 

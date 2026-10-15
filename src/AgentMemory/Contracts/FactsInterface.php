@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Contracts;
 
+use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\ActionListOptions;
@@ -44,6 +45,7 @@ interface FactsInterface
      * @return list<AttributeDetailJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     * @throws AgentMemoryException     when the request fails
      */
     public function allAttributes(?AttributeListOptions $options = null, ?int $max = null): array;
 
@@ -64,6 +66,7 @@ interface FactsInterface
      * @return list<RelationDetailJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     * @throws AgentMemoryException     when the request fails
      */
     public function allRelations(?RelationListOptions $options = null, ?int $max = null): array;
 
@@ -81,6 +84,7 @@ interface FactsInterface
      * @return list<RelationDetailJson>
      *
      * @throws InvalidArgumentException when `$entity` is not a `<type>/<name>` ref
+     * @throws AgentMemoryException     when the request fails
      */
     public function allEdgesOf(EntityRef|string $entity, ?string $label = null, ?int $limit = null): array;
 
@@ -101,6 +105,7 @@ interface FactsInterface
      * @return list<ActionDetailJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     * @throws AgentMemoryException     when the request fails
      */
     public function allActions(?ActionListOptions $options = null, ?int $max = null): array;
 }

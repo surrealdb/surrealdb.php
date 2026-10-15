@@ -162,6 +162,26 @@ final class ContractsTest extends TestCase
         }
     }
 
+    public function testAListOfThrowsAlsoCoversAFailedRequest(): void
+    {
+        // PHPStan reads a @throws list as complete: without AgentMemoryException in it, a
+        // caller's catch (RateLimitException) around the call is reported as a dead catch.
+        $sendsNoRequest = [AgentMemoryInterface::class . '::onBehalfOf', SessionsInterface::class . '::attach'];
+
+        foreach (self::IMPLEMENTATIONS as $interface) {
+            foreach ((new \ReflectionClass($interface))->getMethods() as $method) {
+                $name = "{$interface}::{$method->name}";
+                $doc = (string) $method->getDocComment();
+
+                if (!str_contains($doc, '@throws') || in_array($name, $sendsNoRequest, true)) {
+                    continue;
+                }
+
+                $this->assertMatchesRegularExpression('/@throws AgentMemoryException\s/', $doc, "{$name}() lists @throws without AgentMemoryException");
+            }
+        }
+    }
+
     public function testCodeTypedAgainstTheInterfaceCanBeTestedWithAStub(): void
     {
         $entities = $this->createStub(EntitiesInterface::class);

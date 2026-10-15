@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Contracts;
 
+use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Exceptions\NotFoundException;
 use SurrealDB\AgentMemory\Options\EntityGetOptions;
@@ -39,6 +40,7 @@ interface EntitiesInterface
      * @return list<EntityDetailJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     * @throws AgentMemoryException     when the request fails
      */
     public function listAll(?EntityListOptions $options = null): array;
 
@@ -58,6 +60,7 @@ interface EntitiesInterface
      * @return list<EntityMatchJson> the `matches`
      *
      * @throws InvalidArgumentException when the query is blank, before any request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function search(string $query, ?EntitySearchOptions $options = null): array;
 
@@ -75,7 +78,8 @@ interface EntitiesInterface
      *
      * @return EntityResponseJson
      *
-     * @throws NotFoundException when no such entity is visible to the caller
+     * @throws NotFoundException    when no such entity is visible to the caller
+     * @throws AgentMemoryException when the request fails otherwise
      */
     public function get(string $entityType, string $name, ?EntityGetOptions $options = null): array;
 
@@ -106,6 +110,7 @@ interface EntitiesInterface
      * @return list<AttributeDetailJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     * @throws AgentMemoryException     when the request fails
      */
     public function allChanges(string $entityType, string $name, ?PageOptions $options = null, ?int $max = null): array;
 
@@ -129,6 +134,7 @@ interface EntitiesInterface
      * @return list<NeighbourJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`, or `$max` is below 1
+     * @throws AgentMemoryException     when the request fails
      */
     public function allNeighbours(string $entityType, string $name, ?NeighbourhoodOptions $options = null, ?int $max = null): array;
 

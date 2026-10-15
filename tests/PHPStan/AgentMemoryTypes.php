@@ -4,6 +4,7 @@ namespace SurrealDB\Tests\PHPStan;
 
 use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\Contracts\AgentMemoryInterface;
+use SurrealDB\AgentMemory\Exceptions\RateLimitException;
 use SurrealDB\AgentMemory\Options\DocumentUploadOptions;
 use SurrealDB\AgentMemory\Options\EffectiveGrantsOptions;
 use SurrealDB\AgentMemory\Options\ScopeForgetOptions;
@@ -98,5 +99,17 @@ function typesThroughTheConcreteClient(AgentMemory $memory): void
 
     foreach ($memory->auditAll() as $row) {
         assertType('int', $row['rowsTouched']);
+    }
+}
+
+/*
+ * PHPStan reads a @throws list as complete, so each list names
+ * AgentMemoryException: without it, this catch is reported as a dead catch.
+ */
+function failedRequestsStayCatchable(AgentMemory $memory): void
+{
+    try {
+        $memory->recall('What is my role?');
+    } catch (RateLimitException) {
     }
 }

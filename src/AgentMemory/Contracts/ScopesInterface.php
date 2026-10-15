@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Contracts;
 
+use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\ScopeForgetOptions;
 use SurrealDB\AgentMemory\Options\ScopeListOptions;
@@ -31,6 +32,7 @@ interface ScopesInterface
      * @return list<ScopeNodeJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor`
+     * @throws AgentMemoryException     when the request fails
      */
     public function listAll(?ScopeListOptions $options = null): array;
 
@@ -48,6 +50,7 @@ interface ScopesInterface
      *
      * @throws InvalidArgumentException when the path is blank, which would address the root scope, before any
      *                                  request is sent
+     * @throws AgentMemoryException     when the request fails
      */
     public function delete(string $path): void;
 

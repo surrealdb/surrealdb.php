@@ -2,6 +2,7 @@
 
 namespace SurrealDB\AgentMemory\Contracts;
 
+use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
 use SurrealDB\AgentMemory\Options\KeywordListOptions;
 use SurrealDB\AgentMemory\Options\KeywordSearchOptions;
@@ -32,6 +33,7 @@ interface DocumentKeywordsInterface
      * @return list<KeywordJson>
      *
      * @throws InvalidArgumentException when `$options` sets `cursor` or `count`
+     * @throws AgentMemoryException     when the request fails
      */
     public function listAll(?KeywordListOptions $options = null): array;
 
