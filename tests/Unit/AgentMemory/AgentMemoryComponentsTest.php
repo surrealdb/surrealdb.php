@@ -151,6 +151,13 @@ final class AgentMemoryComponentsTest extends TestCase
         // A DocumentFile with no type falls back to the final filename's.
         $documents->upload(new DocumentUploadOptions(DocumentFile::fromString('x', 'blob'), filename: 'notes.md'));
         $this->assertStringContainsString("filename=\"notes.md\"\r\nContent-Type: text/markdown\r\n", (string) $connection->body);
+
+        // Blank options count as none, as on DocumentFile: the file's own name and type are sent.
+        $documents->upload(new DocumentUploadOptions(DocumentFile::fromString('%PDF', 'scan.pdf'), contentType: ' ', filename: ''));
+        $this->assertStringContainsString("filename=\"scan.pdf\"\r\nContent-Type: application/pdf\r\n", (string) $connection->body);
+
+        $documents->upload(new DocumentUploadOptions('# Notes', contentType: '', filename: ' '));
+        $this->assertStringContainsString("filename=\"upload\"\r\n\r\n# Notes\r\n", (string) $connection->body);
     }
 
     public function testDocumentFileWithoutAKnownTypeDeclaresNone(): void

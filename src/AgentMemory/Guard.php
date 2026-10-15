@@ -25,6 +25,15 @@ final class Guard
     }
 
     /**
+     * `$value`, or `null` when it is blank: for an optional value where a blank
+     * one means none.
+     */
+    public static function nullIfBlank(?string $value): ?string
+    {
+        return $value === null || self::isBlank($value) ? null : $value;
+    }
+
+    /**
      * @return string `$value`, unchanged
      *
      * @throws InvalidArgumentException with `$message` when `$value` is blank

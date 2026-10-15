@@ -121,12 +121,12 @@ final readonly class DocumentFile
             throw new InvalidArgumentException('Cannot read the uploaded document: ' . $e->getMessage(), previous: $e);
         }
 
-        $clientType = self::nonBlank($file->getClientMediaType());
+        $clientType = Guard::nullIfBlank($file->getClientMediaType());
 
         return self::create(
             self::read($stream),
-            self::nonBlank($filename) ?? $file->getClientFilename(),
-            self::nonBlank($contentType) ?? ($clientType === self::UNKNOWN_CLIENT_TYPE ? null : $clientType),
+            Guard::nullIfBlank($filename) ?? $file->getClientFilename(),
+            Guard::nullIfBlank($contentType) ?? ($clientType === self::UNKNOWN_CLIENT_TYPE ? null : $clientType),
         );
     }
 
@@ -143,9 +143,9 @@ final readonly class DocumentFile
 
     private static function create(string $contents, ?string $filename, ?string $contentType): self
     {
-        $filename = self::nonBlank($filename) ?? self::DEFAULT_FILENAME;
+        $filename = Guard::nullIfBlank($filename) ?? self::DEFAULT_FILENAME;
 
-        return new self($contents, $filename, self::nonBlank($contentType) ?? MimeType::fromFilename($filename));
+        return new self($contents, $filename, Guard::nullIfBlank($contentType) ?? MimeType::fromFilename($filename));
     }
 
     /**
@@ -166,10 +166,5 @@ final readonly class DocumentFile
         } catch (\RuntimeException $e) {
             throw new InvalidArgumentException('Cannot read the document stream: ' . $e->getMessage(), previous: $e);
         }
-    }
-
-    private static function nonBlank(?string $value): ?string
-    {
-        return $value === null || Guard::isBlank($value) ? null : $value;
     }
 }

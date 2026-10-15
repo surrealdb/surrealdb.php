@@ -7,6 +7,7 @@ use SurrealDB\AgentMemory\Components\Documents;
 use SurrealDB\AgentMemory\DocumentFile;
 use SurrealDB\AgentMemory\Exceptions\AgentMemoryException;
 use SurrealDB\AgentMemory\Exceptions\InvalidArgumentException;
+use SurrealDB\AgentMemory\Guard;
 use SurrealDB\AgentMemory\MimeType;
 use SurrealDB\AgentMemory\MultipartFormData;
 use SurrealDB\AgentMemory\Payload;
@@ -19,13 +20,13 @@ final readonly class DocumentUploadOptions
      * @param string|StreamInterface|DocumentFile        $file             the bytes to upload (required). A DocumentFile also brings its
      *                                                                     filename and media type; a stream is read whole, from the start
      *                                                                     when it is seekable, as the request is built
-     * @param string|null                                $contentType      MIME type of the file part; it wins over a DocumentFile's own type.
-     *                                                                     When neither gives one it is inferred from the filename's extension;
-     *                                                                     with no recognised extension none is sent, and the server sniffs
-     *                                                                     the bytes (text is ingested as `text/plain`, unrecognised binary is
-     *                                                                     refused with 415)
-     * @param string|null                                $filename         filename for the multipart `file` part; it wins over a DocumentFile's.
-     *                                                                     Defaults to `upload`
+     * @param string|null                                $contentType      MIME type of the file part; it wins over a DocumentFile's own type,
+     *                                                                     and a blank one counts as none. When neither gives one it is inferred
+     *                                                                     from the filename's extension; with no recognised extension none is
+     *                                                                     sent, and the server sniffs the bytes (text is ingested as
+     *                                                                     `text/plain`, unrecognised binary is refused with 415)
+     * @param string|null                                $filename         filename for the multipart `file` part; it wins over a DocumentFile's,
+     *                                                                     and a blank one counts as none. Defaults to `upload`
      * @param string|null                                $title            human-readable document title
      * @param string|null                                $source           source label for the document
      * @param string|array<int,string|list<string>>|null $scopes           DNF scope selector tagging the document (outer OR, inner AND);
@@ -49,24 +50,24 @@ final readonly class DocumentUploadOptions
     ) {}
 
     /**
-     * @internal the filename sent on the file part: `filename`, else the
-     * DocumentFile's, else `upload`
+     * @internal the filename sent on the file part: a non-blank `filename`,
+     * else the DocumentFile's, else `upload`
      */
     public function resolvedFilename(): string
     {
-        return $this->filename ?? ($this->file instanceof DocumentFile ? $this->file->filename : DocumentFile::DEFAULT_FILENAME);
+        return Guard::nullIfBlank($this->filename) ?? ($this->file instanceof DocumentFile ? $this->file->filename : DocumentFile::DEFAULT_FILENAME);
     }
 
     /**
-     * @internal the media type sent on the file part: `contentType`, else the
-     * DocumentFile's, else inferred from the resolved filename, else `null` so
+     * @internal the media type sent on the file part: a non-blank `contentType`,
+     * else the DocumentFile's, else inferred from the resolved filename, else `null` so
      * the server sniffs the bytes. Declaring `application/octet-stream`
      * instead would make the server refuse even plain text, since it has no
      * parser for that type.
      */
     public function resolvedContentType(): ?string
     {
-        return $this->contentType
+        return Guard::nullIfBlank($this->contentType)
             ?? ($this->file instanceof DocumentFile ? $this->file->contentType : null)
             ?? MimeType::fromFilename($this->resolvedFilename());
     }

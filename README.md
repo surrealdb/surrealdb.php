@@ -292,7 +292,7 @@ Build a `DocumentFile` with `fromString()`, `fromPath()`, `fromStream()` (read w
 3. the type of the filename's extension (the `filename` option, else the file's), for the formats the server ingests;
 4. none, so the server sniffs the bytes: text is ingested as `text/plain`, and other bytes are refused with an `UnsupportedMediaTypeException`.
 
-A plain string or a PSR-7 stream also works as the `file`. Bodies are read into memory before they are sent, as in `@surrealdb/memory`.
+A blank `contentType` or `filename` option counts as none. A plain string or a PSR-7 stream also works as the `file`. Bodies are read into memory before they are sent, as in `@surrealdb/memory`.
 
 ### Pagination
 
