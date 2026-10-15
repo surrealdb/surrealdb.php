@@ -438,7 +438,11 @@ final class Surreal implements QueryExecutor
 			events: $options->events ?? new EventDispatcher(),
 			logger: $options->logger ?? new NullLogger(),
 			scheduler: $options->scheduler ?? new SyncScheduler(),
-			uniqueId: static fn(): string => (string) ++$counter,
+			// By reference: an arrow function would capture a copy of the
+			// counter, and every request would get id 1.
+			uniqueId: static function () use (&$counter): string {
+				return (string) ++$counter;
+			},
 			tracer: $options->tracer ?? new NullTracer(),
 			meter: $options->meter ?? new NullMeter(),
 		);
