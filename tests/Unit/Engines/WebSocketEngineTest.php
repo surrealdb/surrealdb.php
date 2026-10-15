@@ -95,6 +95,68 @@ final class WebSocketEngineTest extends TestCase
         $this->assertSame(['connected', 'reconnecting', 'reconnecting', 'connected'], $events);
     }
 
+    public function testInitialAnnouncementIsDiscardedIfAnEagerLoopLostTheSocket(): void
+    {
+        // Runs each spawned task straight away, as OpenSwoole does, until it
+        // "suspends" (throws).
+        $scheduler = new class () implements Scheduler {
+            public function spawn(\Closure $task): void
+            {
+                try {
+                    $task();
+                } catch (\LogicException) {
+                }
+            }
+
+            public function delay(float $seconds): void {}
+
+            public function defer(?\Closure $drive = null): Deferred
+            {
+                return new SyncDeferred($drive);
+            }
+        };
+
+        // 1: the initial socket, which the loop finds closed at once. 2: its
+        // replacement, which stays open.
+        $receivers = [
+            static fn (): ?string => null,
+            static fn (): ?string => throw new \LogicException('suspended'),
+        ];
+        $options = new DriverOptions(
+            format: CodecEnum::JSON,
+            scheduler: $scheduler,
+            webSocketTransportFactory: static function () use (&$receivers): DuplexTransportInterface {
+                return self::transport(array_shift($receivers) ?? throw new \LogicException('unexpected transport'));
+            },
+            pingInterval: 0,
+        );
+
+        $engine = new WebSocketEngine(new DriverContext(
+            options: $options,
+            codec: Codec::json(),
+            format: CodecEnum::JSON,
+            events: new EventDispatcher(),
+            logger: new NullLogger(),
+            scheduler: $scheduler,
+            uniqueId: static fn (): string => '1',
+        ));
+
+        $events = [];
+        foreach (['connected', 'reconnecting', 'disconnected'] as $event) {
+            $engine->subscribe($event, static function () use (&$events, $event): void {
+                $events[] = $event;
+            });
+        }
+
+        $engine->open(new ConnectionState(
+            Endpoint::parse('ws://localhost:8000/rpc'),
+            new ExponentialBackoffReconnect(retryDelay: 0),
+            new SessionState(),
+        ));
+
+        $this->assertSame(['reconnecting', 'connected'], $events);
+    }
+
     /**
      * @param \Closure(): ?string $receive
      */

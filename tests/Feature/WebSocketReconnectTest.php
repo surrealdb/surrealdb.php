@@ -5,6 +5,7 @@ namespace SurrealDB\Tests\Feature;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\NamespaceAuth;
 use SurrealDB\SDK\Auth\RootAuth;
+use SurrealDB\SDK\Connection\ConnectionController;
 use SurrealDB\SDK\Connection\ConnectionStatus;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverOptions;
@@ -12,6 +13,7 @@ use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Live\LiveAction;
 use SurrealDB\SDK\Protocol\Features;
+use SurrealDB\SDK\Support\Jwt;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
@@ -377,6 +379,38 @@ final class WebSocketReconnectTest extends TestCase
             self::assertSame([1], $db->run('RETURN 1'));
             self::assertSame(3, $calls);
             self::assertNotSame($first, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testRenewalThatGetsTheSameTokenChecksAgainAtExpiry(): void
+    {
+        $this->defineShortLivedUser();
+
+        $setup = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+        $token = $setup->accessToken();
+        $setup->close();
+        self::assertNotNull($token);
+
+        // A provider that hands out a fixed token, as a Token or string does.
+        $calls = 0;
+        $db = $this->connect(auth: static function () use (&$calls, $token): string {
+            $calls++;
+
+            return $token;
+        }, define: false);
+
+        try {
+            $db->use($this->namespace, 'db');
+
+            sleep(2);
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(2, $calls);
+
+            // Not dropped: due again when the token expires.
+            $deadlines = (new \ReflectionProperty(ConnectionController::class, 'renewAt'))->getValue($db->connection());
+            self::assertSame(Jwt::expiry($token), $deadlines[''] ?? null);
         } finally {
             $db->close();
         }
