@@ -26,10 +26,11 @@ use SurrealDB\AgentMemory\Transport;
 use SurrealDB\AgentMemory\UserAgent;
 
 /**
- * Pins which parts of the Agent Memory client are `@internal`. PHPStan reports
- * internal use from outside the `SurrealDB` namespace, so the tag is what
- * tells callers not to build on a helper. Anything `@surrealdb/memory` exports
- * an equivalent of stays public.
+ * Pins which parts of the Agent Memory client are `@internal`, the tag that
+ * tells callers not to build on a helper. PhpStorm flags internal use, and
+ * PHPStan reports it from outside the `SurrealDB` root namespace only with
+ * bleeding edge or `featureToggles.internalTag: true`. Anything
+ * `@surrealdb/memory` exports an equivalent of stays public.
  */
 final class PublicSurfaceTest extends TestCase
 {

@@ -470,7 +470,7 @@ What PHP adds:
 - the `AgentMemoryRuntime` presets for OpenSwoole and Amp (see [Async runtimes](#async-runtimes));
 - `EntityRef`; the `Triple::attribute()`, `relation()`, `action()`, and `entity()` builders; and `Message::user()`, `assistant()`, `system()`, and `tool()`;
 - `$memory->sessions->attach()`, for a session created earlier;
-- `Page::next()`, `autoPaginate()`, and `collect()`;
+- `Page::next()` and `autoPaginate()` (`Page::collect()` is the form of `collectPages`);
 - `DocumentFile`;
 - the enums `MemoryQueryMode`, `ResultFamily`, `TraceKind`, `GraphEdgeKind`, and `ChatEvent`;
 - API fields `@surrealdb/memory` does not send yet: `observedAt` and `addressees` on `remember`, `includeDuplicates` on `recall`, `dryRun` on `forget`, and `observedAt` and `observedAtHeader` on uploads;
