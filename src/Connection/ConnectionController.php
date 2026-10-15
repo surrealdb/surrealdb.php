@@ -79,6 +79,9 @@ final class ConnectionController
      */
     private \WeakMap $managedLive;
 
+    /** How long to wait before retrying a renewal that failed. */
+    private const RENEWAL_RETRY_SECONDS = 5;
+
     /**
      * When each session's token is due for renewal (Unix time), keyed by
      * session id ('' for the default session). Checked before calls, so
@@ -89,7 +92,12 @@ final class ConnectionController
      */
     private array $renewAt = [];
 
-    private bool $renewing = false;
+    /**
+     * Sessions whose renewal is in flight, keyed like {@see self::$renewAt}.
+     *
+     * @var array<string,true>
+     */
+    private array $renewing = [];
 
     public function __construct(
         private readonly DriverContext $context,
@@ -352,12 +360,14 @@ final class ConnectionController
     public function commit(string $txn, ?string $session = null): void
     {
         $this->assertFeature(Features::transactions());
+        $this->renewIfDue($session);
         $this->requireEngine()->commit($txn, $session);
     }
 
     public function cancel(string $txn, ?string $session = null): void
     {
         $this->assertFeature(Features::transactions());
+        $this->renewIfDue($session);
         $this->requireEngine()->cancel($txn, $session);
     }
 
@@ -613,15 +623,13 @@ final class ConnectionController
         $this->renewAt[$session ?? ''] = $expiry - 60;
 
         // Runs only under an async scheduler; the sync scheduler treats spawn as
-        // a no-op and relies on reactive renewal (e.g. AuthMiddleware) instead.
+        // a no-op and relies on the checks before each call instead. The timer
+        // goes through the same deadline as those checks, so a renewal already
+        // done (or in flight) is not repeated, and a timer left over from an
+        // earlier token finds the deadline moved on.
         $this->context->scheduler->spawn(function () use ($delay, $session): void {
             $this->context->scheduler->delay((float) $delay);
-
-            try {
-                $this->applyAuthentication($session);
-            } catch (\Throwable $error) {
-                $this->onError(new AuthenticationException('Token renewal failed', $error));
-            }
+            $this->renewIfDue($session);
         });
     }
 
@@ -632,25 +640,51 @@ final class ConnectionController
     private function renewIfDue(?string $session): void
     {
         $key = $session ?? '';
-        $at = $this->renewAt[$key] ?? null;
+        $at = $this->renewalDeadline($key);
 
-        if ($at === null || time() < $at || $this->renewing) {
+        if ($at === null || time() < $at || isset($this->renewing[$key])) {
             return;
         }
 
-        unset($this->renewAt[$key]);
-        $this->renewing = true;
+        $this->renewing[$key] = true;
 
         try {
-            $this->applyAuthentication($session);
+            // Success schedules the next deadline, or clears it if the
+            // session ends up signed out; anything else leaves nothing to
+            // renew.
+            $this->applyAuthentication($session, keepValidToken: true);
+
+            if ($this->renewalDeadline($key) === $at) {
+                unset($this->renewAt[$key]);
+            }
         } catch (\Throwable $error) {
+            // Try again shortly rather than carry on with a token about to
+            // expire.
+            if ($this->renewalDeadline($key) === $at) {
+                $this->renewAt[$key] = time() + self::RENEWAL_RETRY_SECONDS;
+            }
+
             $this->onError(new AuthenticationException('Token renewal failed', $error));
         } finally {
-            $this->renewing = false;
+            unset($this->renewing[$key]);
         }
     }
 
-    private function applyAuthentication(?string $session): void
+    /**
+     * Read fresh each time: renewing reschedules (or clears) the deadline.
+     */
+    private function renewalDeadline(string $key): ?int
+    {
+        return $this->renewAt[$key] ?? null;
+    }
+
+    /**
+     * @param bool $keepValidToken when nothing can replace the token, keep it
+     *                             while it is still valid rather than sign the
+     *                             session out (renewal, as opposed to restoring a
+     *                             session on a new socket)
+     */
+    private function applyAuthentication(?string $session, bool $keepValidToken = false): void
     {
         $sessionState = $this->state?->session($session);
 
@@ -695,6 +729,10 @@ final class ConnectionController
         }
 
         if (!$sessionState->auth->overridden && $this->applyAuthProvider($session)) {
+            return;
+        }
+
+        if ($keepValidToken && $token !== null && (Jwt::expiry($token) ?? PHP_INT_MAX) > time()) {
             return;
         }
 

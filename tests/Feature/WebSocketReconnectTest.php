@@ -106,6 +106,59 @@ final class WebSocketReconnectTest extends TestCase
         $db->run('RETURN 1');
     }
 
+    public function testAThrowingTransportFactoryCountsAsAFailedAttempt(): void
+    {
+        $calls = 0;
+        $db = $this->connect(clientFactory: function () use (&$calls): SeverableWebSocketClient {
+            // The first reconnect attempt cannot even build a client.
+            if (++$calls === 2) {
+                throw new \RuntimeException('No client available.');
+            }
+
+            return $this->client;
+        });
+        $errors = [];
+        $db->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+            $errors[] = $error->getMessage();
+        });
+
+        try {
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+                self::fail('Expected the call on the dropped socket to fail.');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(3, $calls);
+            self::assertContains('No client available.', $errors);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testClosingFromAReconnectingListenerStopsTheReconnect(): void
+    {
+        $db = $this->connect();
+        $db->subscribe('reconnecting', static function () use ($db): void {
+            $db->close();
+        });
+
+        $this->client->sever();
+
+        try {
+            $db->run('RETURN 1');
+            self::fail('Expected the call on the dropped socket to fail.');
+        } catch (SurrealException) {
+        }
+
+        self::assertSame(ConnectionStatus::Disconnected, $db->status());
+        self::assertSame(1, $this->client->connects);
+    }
+
     public function testManagedLiveQueriesAreReplayedAfterAReconnect(): void
     {
         $db = $this->connect();
@@ -210,20 +263,106 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testAFailedRenewalIsRetried(): void
+    {
+        $this->defineShortLivedUser();
+
+        $calls = 0;
+        $namespace = $this->namespace;
+        $provider = static function (?string $session) use (&$calls, $namespace): NamespaceAuth {
+            // The second call is the first renewal: fail it once.
+            if (++$calls === 2) {
+                throw new \RuntimeException('Credentials store briefly unavailable.');
+            }
+
+            return new NamespaceAuth($namespace, 'renew', 'secret');
+        };
+        $db = $this->connect(auth: $provider, define: false);
+
+        try {
+            $db->use($this->namespace, 'db');
+            $first = $db->accessToken();
+            $errors = 0;
+            $db->subscribe('error', static function () use (&$errors): void {
+                $errors++;
+            });
+
+            sleep(2);
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(1, $errors);
+            self::assertSame($first, $db->accessToken());
+
+            sleep(6);
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(3, $calls);
+            self::assertNotSame($first, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testCommittingATransactionRenewsADueToken(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+
+        try {
+            if (!$db->isFeatureSupported(Features::transactions())) {
+                self::markTestSkipped('Interactive transactions need SurrealDB 3.0 or later.');
+            }
+
+            $db->use($this->namespace, 'db');
+            $renewed = 0;
+            $db->subscribe('auth', static function ($tokens) use (&$renewed): void {
+                if ($tokens !== null) {
+                    $renewed++;
+                }
+            });
+
+            $txn = $db->beginTransaction();
+            $txn->run('CREATE person:committed');
+            sleep(2);
+            $txn->commit();
+
+            self::assertSame(1, $renewed);
+            self::assertCount(1, $db->select(new RecordId('person', 'committed'))->execute());
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * A namespace user whose tokens are due for renewal one second after signin.
+     */
+    private function defineShortLivedUser(): void
+    {
+        $setup = $this->connect();
+
+        try {
+            $setup->run(
+                "DEFINE USER renew ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 61s, FOR SESSION 1h",
+            );
+        } finally {
+            $setup->close();
+        }
+    }
+
     /**
      * @param array<string,mixed> $reconnect
+     * @param (\Closure(): SeverableWebSocketClient)|null $clientFactory
      */
     private function connect(
         array $reconnect = ['retryDelay' => 0.001],
-        RootAuth|NamespaceAuth|null $auth = null,
+        RootAuth|NamespaceAuth|\Closure|null $auth = null,
         bool $define = true,
+        ?\Closure $clientFactory = null,
     ): Surreal {
         $this->client = new SeverableWebSocketClient();
         $client = $this->client;
         $this->namespace ??= 'reconnect_' . bin2hex(random_bytes(4));
 
         $db = new Surreal(new DriverOptions(
-            webSocketClientFactory: static fn (): SeverableWebSocketClient => $client,
+            webSocketClientFactory: $clientFactory ?? static fn (): SeverableWebSocketClient => $client,
         ));
 
         try {

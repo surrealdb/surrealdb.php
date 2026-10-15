@@ -207,8 +207,12 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
      */
     private function connectOnce(): bool
     {
+        if ($this->transport === null) {
+            return false;
+        }
+
         try {
-            $this->transport?->open();
+            $this->transport->open();
             $this->active = true;
             $this->state?->reconnect->reset();
 
@@ -256,7 +260,12 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             $this->announceReconnecting();
             $this->context->scheduler->delay($reconnect->nextDelay());
 
-            $this->transport = $this->createTransport($this->state);
+            // A listener or another task may have closed the engine meanwhile.
+            if ($this->terminated) {
+                break;
+            }
+
+            $this->replaceTransport();
         }
 
         if (!$this->terminated) {
@@ -283,6 +292,8 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
      * with the reconnect strategy's backoff until a socket opens, then
      * announce `connected` so the controller restores the sessions and
      * replays managed live queries.
+     *
+     * @phpstan-impure
      */
     private function reconnectInline(): bool
     {
@@ -292,8 +303,13 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             $this->announceReconnecting();
             $this->context->scheduler->delay($reconnect->nextDelay());
 
+            // A `reconnecting` listener may have closed the engine.
+            if ($this->terminated) {
+                return false;
+            }
+
             $this->transport?->close();
-            $this->transport = $this->createTransport($this->state);
+            $this->replaceTransport();
 
             if ($this->connectOnce()) {
                 $this->publisher->publish('connected');
@@ -303,6 +319,21 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         }
 
         return false;
+    }
+
+    /**
+     * Create the next transport. A factory that throws counts as a failed
+     * attempt, like a socket that does not open, rather than ending the
+     * reconnect loop half way.
+     */
+    private function replaceTransport(): void
+    {
+        try {
+            $this->transport = $this->state === null ? null : $this->createTransport($this->state);
+        } catch (\Throwable $error) {
+            $this->transport = null;
+            $this->publisher->publish('error', $error);
+        }
     }
 
     private function closeFeeds(): void
@@ -457,7 +488,8 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return;
         }
 
-        if ($this->reconnectInline()) {
+        // Also done if a `reconnecting` listener closed the engine.
+        if ($this->reconnectInline() || $this->terminated) {
             return;
         }
 
