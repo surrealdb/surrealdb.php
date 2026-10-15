@@ -3,9 +3,13 @@
 namespace SurrealDB\SDK\Query;
 
 use SurrealDB\SDK\Contracts\QueryExecutor;
+use SurrealDB\SDK\Contracts\StreamingQueryExecutor;
 use SurrealDB\SDK\Contracts\SurrealType;
 use SurrealDB\SDK\Exceptions\ExpressionException;
 use SurrealDB\SDK\Exceptions\SurrealException;
+use SurrealDB\SDK\Query\Frame\DoneFrame;
+use SurrealDB\SDK\Query\Frame\ErrorFrame;
+use SurrealDB\SDK\Query\Frame\ValueFrame;
 use SurrealDB\SDK\Support\Jsonify;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\RecordIdRange;
@@ -73,6 +77,56 @@ abstract class QueryBuilder
     }
 
     /**
+     * Execute and yield the results as frames: for each statement, its
+     * values (one frame per element when it returns a list), then a
+     * {@see DoneFrame}, or an {@see ErrorFrame} if it failed. A failing
+     * statement does not stop the stream. Mirrors the JS SDK's `stream()`.
+     *
+     * @return \Generator<int, ValueFrame<TResult>|ErrorFrame<TResult>|DoneFrame<TResult>>
+     */
+    public function stream(): \Generator
+    {
+        foreach ($this->streamingExecutor()->stream($this->build()) as $chunk) {
+            if ($chunk->error !== null) {
+                yield new ErrorFrame($chunk->index, $chunk->error, $chunk->time);
+
+                continue;
+            }
+
+            $result = $chunk->result;
+
+            if (is_array($result) && array_is_list($result)) {
+                foreach ($result as $value) {
+                    yield new ValueFrame($chunk->index, $this->output($value), false);
+                }
+            } else {
+                yield new ValueFrame($chunk->index, $this->output($result), true);
+            }
+
+            yield new DoneFrame($chunk->index, $chunk->time, $chunk->type);
+        }
+    }
+
+    /**
+     * Execute and return every statement's outcome without throwing for
+     * failed statements. Mirrors the JS SDK's `responses()`.
+     *
+     * @return list<QueryResponse<TResult>>
+     */
+    public function responses(): array
+    {
+        $responses = [];
+
+        foreach ($this->streamingExecutor()->stream($this->build()) as $chunk) {
+            $responses[] = $chunk->error !== null
+                ? new QueryResponse(false, error: $chunk->error, time: $chunk->time)
+                : new QueryResponse(true, $this->output($chunk->result), time: $chunk->time, type: $chunk->type);
+        }
+
+        return $responses;
+    }
+
+    /**
      * Run the compiled query through the executor, returning one entry per
      * statement.
      *
@@ -94,6 +148,26 @@ abstract class QueryBuilder
 
         /** @var list<TResult> $results */
         return $results;
+    }
+
+    /**
+     * @return TResult
+     */
+    private function output(mixed $value): mixed
+    {
+        /** @var TResult */
+        return $this->json ? Jsonify::value($value) : $value;
+    }
+
+    private function streamingExecutor(): StreamingQueryExecutor
+    {
+        if (!$this->executor instanceof StreamingQueryExecutor) {
+            throw new SurrealException(
+                static::class . ' needs a StreamingQueryExecutor to stream; build it via Surreal or pass one explicitly.',
+            );
+        }
+
+        return $this->executor;
     }
 
     /**

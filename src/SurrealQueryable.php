@@ -4,13 +4,14 @@ namespace SurrealDB\SDK;
 
 use SurrealDB\SDK\Api\SurrealApi;
 use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Contracts\QueryExecutor;
+use SurrealDB\SDK\Contracts\StreamingQueryExecutor;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Query\AuthQuery;
 use SurrealDB\SDK\Query\BoundQuery;
 use SurrealDB\SDK\Query\CreateQuery;
 use SurrealDB\SDK\Query\DeleteQuery;
 use SurrealDB\SDK\Query\InsertQuery;
+use SurrealDB\SDK\Query\Query;
 use SurrealDB\SDK\Query\RelateQuery;
 use SurrealDB\SDK\Query\RunQuery;
 use SurrealDB\SDK\Query\SelectQuery;
@@ -28,7 +29,7 @@ use SurrealDB\SDK\Types\Table;
  *
  * Mirrors the JS SDK's `SurrealQueryable`.
  */
-abstract class SurrealQueryable implements QueryExecutor
+abstract class SurrealQueryable implements StreamingQueryExecutor
 {
     public function __construct(
         protected readonly ConnectionController $connection,
@@ -57,6 +58,55 @@ abstract class SurrealQueryable implements QueryExecutor
         $results = [];
 
         foreach ($this->connection->query($query, $this->sessionId, $this->transactionId()) as $chunk) {
+            $results[] = $chunk->resultOrThrow();
+        }
+
+        return $results;
+    }
+
+    /**
+     * Execute a bound query, yielding each statement's result (or failure)
+     * as it is read. Prefer {@see Query::stream()} or {@see Query::responses()}.
+     *
+     * @return iterable<\SurrealDB\SDK\Protocol\QueryChunk<mixed>>
+     */
+    public function stream(BoundQuery $query): iterable
+    {
+        return $this->connection->query($query, $this->sessionId, $this->transactionId());
+    }
+
+    /**
+     * Wrap raw, possibly multi-statement SurrealQL in a {@see Query}, to
+     * `collect()`, `stream()` or inspect its `responses()`:
+     *
+     *     foreach ($db->statements('SELECT * FROM person; SELECT * FROM post')->stream() as $frame) {
+     *         if ($frame instanceof ValueFrame) { ... }
+     *     }
+     *
+     * @param array<string,mixed> $bindings
+     *
+     * @return Query<mixed>
+     */
+    public function statements(string $surql, array $bindings = []): Query
+    {
+        return new Query($this, new BoundQuery($surql, $bindings));
+    }
+
+    /**
+     * Run an ISO GQL graph query (SurrealDB 3.2 or later), returning one
+     * result per statement:
+     *
+     *     $db->gql('MATCH (a:person)-[:knows]->(b:person) WHERE a.name = $name RETURN b.name AS friend', ['name' => 'Tobie']);
+     *
+     * @param array<string,mixed> $variables
+     *
+     * @return list<mixed>
+     */
+    public function gql(string $query, array $variables = []): array
+    {
+        $results = [];
+
+        foreach ($this->connection->gql($query, $variables, $this->sessionId, $this->transactionId()) as $chunk) {
             $results[] = $chunk->resultOrThrow();
         }
 

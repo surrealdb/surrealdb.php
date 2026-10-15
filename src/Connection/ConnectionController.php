@@ -386,6 +386,30 @@ final class ConnectionController
     }
 
     /**
+     * @param array<string,mixed> $variables
+     *
+     * @return iterable<\SurrealDB\SDK\Protocol\QueryChunk<mixed>>
+     */
+    public function gql(string $query, array $variables = [], ?string $session = null, ?string $txn = null): iterable
+    {
+        $this->assertFeature(Features::gql());
+        $this->renewIfDue($session);
+
+        return $this->requireEngine()->gql($query, $variables, $session, $txn);
+    }
+
+    /**
+     * @param array<string,mixed> $variables
+     */
+    public function graphql(string $query, array $variables = [], ?string $operation = null, ?string $session = null): mixed
+    {
+        $this->assertFeature(Features::graphql());
+        $this->renewIfDue($session);
+
+        return $this->requireEngine()->graphql($query, $variables, $operation, $session);
+    }
+
+    /**
      * @return iterable<\SurrealDB\SDK\Live\LiveMessage<mixed>>
      */
     public function liveQuery(string $id): iterable

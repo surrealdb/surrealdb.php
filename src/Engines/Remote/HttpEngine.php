@@ -33,6 +33,8 @@ final class HttpEngine extends AbstractRpcEngine
         return new FeatureSet(
             Features::refreshTokens(),
             Features::api(),
+            Features::gql(),
+            Features::graphql(),
             Features::exportImportRaw(),
             Features::surrealMl(),
         );
