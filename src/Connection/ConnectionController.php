@@ -889,19 +889,21 @@ final class ConnectionController
      *                             while it is still valid rather than sign the
      *                             session out (renewal, as opposed to restoring a
      *                             session on a new socket)
+     *
+     * @return bool whether it kept a token nothing could replace
      */
-    private function applyAuthentication(?string $session, bool $keepValidToken = false): void
+    private function applyAuthentication(?string $session, bool $keepValidToken = false): bool
     {
         $sessionState = $this->state?->session($session);
 
         if ($sessionState === null) {
-            return;
+            return false;
         }
 
         if ($this->skipRenewal) {
             $this->abortAuthentication($session);
 
-            return;
+            return false;
         }
 
         $token = $sessionState->auth->accessToken;
@@ -913,7 +915,7 @@ final class ConnectionController
                 try {
                     $this->authenticate($token, $session, true);
 
-                    return;
+                    return false;
                 } catch (ServerException) {
                     // Fall through to the next strategy.
                 }
@@ -927,7 +929,7 @@ final class ConnectionController
                 try {
                     $this->refresh($tokens, $session, true);
 
-                    return;
+                    return false;
                 } catch (ServerException) {
                     // Fall through to the next strategy.
                 }
@@ -935,14 +937,16 @@ final class ConnectionController
         }
 
         if (!$sessionState->auth->overridden && $this->applyAuthProvider($session)) {
-            return;
+            return false;
         }
 
         if ($keepValidToken && $token !== null && (Jwt::expiry($token) ?? PHP_INT_MAX) > time()) {
-            return;
+            return true;
         }
 
         $this->abortAuthentication($session);
+
+        return false;
     }
 
     private function applyAuthProvider(?string $session): bool
