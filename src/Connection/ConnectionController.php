@@ -854,6 +854,12 @@ final class ConnectionController
      */
     private function restoreSession(SessionState $session, bool $fork = false): void
     {
+        // Authenticate first: a server that refuses guests (the SurrealDB 2.x
+        // default) rejects USE and LET from an anonymous session.
+        if (!$fork || !$this->authenticateWithCopiedToken($session)) {
+            $this->applyAuthentication($session->id);
+        }
+
         if ($session->namespace !== null || $session->database !== null) {
             $this->use(new NamespaceDatabase($session->namespace, $session->database), $session->id);
         }
@@ -861,12 +867,6 @@ final class ConnectionController
         foreach ($session->variables as $name => $value) {
             $this->requireEngine()->set($name, $value, $session->id);
         }
-
-        if ($fork && $this->authenticateWithCopiedToken($session)) {
-            return;
-        }
-
-        $this->applyAuthentication($session->id);
     }
 
     /**
