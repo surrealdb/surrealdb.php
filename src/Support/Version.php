@@ -2,11 +2,15 @@
 
 namespace SurrealDB\SDK\Support;
 
-/** Version range checking against the SDK's supported SurrealDB versions. */
+/**
+ * Version range checking against the SDK's supported SurrealDB versions.
+ *
+ * The range is `>= MINIMUM` and `< MAXIMUM`, so every 4.x release is accepted.
+ */
 final class Version
 {
     public const string MINIMUM = '1.0.0';
-    public const string MAXIMUM = '4.0.0';
+    public const string MAXIMUM = '5.0.0';
 
     public static function isSupported(
         string $version,
