@@ -73,7 +73,7 @@ jobs:
       run: composer install --no-interaction --prefer-dist
 
     - name: SurrealDB in Github Actions
-      uses: surrealdb/setup-surreal@7c103070ba4f544240cd287432ba70d6f50163a5 # v2.0.1
+      uses: surrealdb/setup-surreal@5795ce3773d2fec644ef5ce6b549f4872d4b33be # v3.0.0
       with:
         surrealdb_version: ${{ matrix.version }}
         surrealdb_auth: true
