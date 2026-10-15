@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK\Connection;
 
 use SurrealDB\SDK\Auth\AuthState;
+use SurrealDB\SDK\Live\LiveSubscription;
 
 /**
  * Mutable state for a single session: its selected namespace/database, defined
@@ -20,10 +21,19 @@ final class SessionState
      */
     public array $transactions = [];
 
+    /**
+     * Live subscriptions on this session, which resetting it ends.
+     *
+     * @var \WeakMap<LiveSubscription,true>
+     */
+    public \WeakMap $live;
+
     public function __construct(
         public ?string $id = null,
         public ?string $namespace = null,
         public ?string $database = null,
         public AuthState $auth = new AuthState(),
-    ) {}
+    ) {
+        $this->live = new \WeakMap();
+    }
 }

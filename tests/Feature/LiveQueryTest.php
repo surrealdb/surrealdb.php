@@ -140,6 +140,32 @@ final class LiveQueryTest extends TestCase
         }
     }
 
+    public function testResettingTheSessionEndsItsLiveQueries(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $managed = $db->live(new Table('person'))->execute();
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $unmanaged = $db->liveOf($id);
+
+            $db->reset();
+
+            self::assertFalse($managed->isAlive());
+            self::assertFalse($unmanaged->isAlive());
+
+            // Iteration ends instead of waiting for notifications that
+            // cannot come.
+            foreach ([$managed, $unmanaged] as $live) {
+                foreach ($live as $message) {
+                    self::assertSame(LiveAction::Killed, $message->action);
+                }
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testRemovingTheTableEndsTheSubscription(): void
     {
         $db = $this->connect();
