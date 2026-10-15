@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK;
 
 use SurrealDB\SDK\Connection\ConnectionController;
+use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\TransactionFinishedException;
 
 /**
@@ -51,8 +52,7 @@ final class SurrealTransaction extends SurrealQueryable
      */
     public function commit(): void
     {
-        $this->connection->commit($this->transactionId(), $this->sessionId);
-        $this->finished = true;
+        $this->finish(fn (string $id) => $this->connection->commit($id, $this->sessionId));
     }
 
     /**
@@ -60,7 +60,26 @@ final class SurrealTransaction extends SurrealQueryable
      */
     public function cancel(): void
     {
-        $this->connection->cancel($this->transactionId(), $this->sessionId);
+        $this->finish(fn (string $id) => $this->connection->cancel($id, $this->sessionId));
+    }
+
+    /**
+     * Once the server has answered, the transaction is over even if the
+     * answer is an error (a commit that hit a conflict is gone too). Only a
+     * call that may not have reached the server leaves it open.
+     *
+     * @param \Closure(string): void $end
+     */
+    private function finish(\Closure $end): void
+    {
+        try {
+            $end($this->transactionId());
+        } catch (ServerException $error) {
+            $this->finished = true;
+
+            throw $error;
+        }
+
         $this->finished = true;
     }
 

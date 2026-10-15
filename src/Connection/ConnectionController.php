@@ -682,13 +682,21 @@ final class ConnectionController
         $this->renewing[$key] = true;
 
         try {
-            // Success schedules the next deadline, or clears it if the
-            // session ends up signed out; anything else leaves nothing to
-            // renew.
+            // A new token schedules the next deadline, and signing out clears
+            // it. The same token again (one that could not be replaced, or a
+            // fixed token from the auth provider) is checked once more when it
+            // expires, when the provider may have a new one.
             $this->applyAuthentication($session, keepValidToken: true);
 
             if ($this->renewalDeadline($key) === $at) {
-                unset($this->renewAt[$key]);
+                $token = $this->state?->session($session)?->auth->accessToken;
+                $expiry = $token === null ? null : Jwt::expiry($token);
+
+                if ($expiry !== null && $expiry > $at) {
+                    $this->renewAt[$key] = $expiry;
+                } else {
+                    unset($this->renewAt[$key]);
+                }
             }
         } catch (\Throwable $error) {
             // Try again shortly rather than carry on with a token about to

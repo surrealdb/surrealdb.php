@@ -9,6 +9,7 @@ use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Enum\CodecEnum;
 use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\InvalidSessionException;
+use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\TransactionFinishedException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Protocol\Features;
@@ -201,6 +202,32 @@ final class SessionTransactionTest extends TestCase
 
             $this->expectException(TransactionFinishedException::class);
             $txn->select(new Table('person'))->execute();
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testATransactionTheServerRejectsIsFinished(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $txn = $db->beginTransaction();
+            // End it behind the handle's back, so the server no longer knows it.
+            $db->connection()->cancel($txn->id());
+
+            try {
+                $txn->commit();
+                self::fail('Committing an unknown transaction should fail.');
+            } catch (ServerException) {
+            }
+
+            self::assertTrue($txn->isFinished());
+
+            // The usual cleanup reports the transaction as finished rather
+            // than raising a second server error.
+            $this->expectException(TransactionFinishedException::class);
+            $txn->cancel();
         } finally {
             $db->close();
         }

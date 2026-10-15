@@ -45,6 +45,16 @@ final class Features
         return new Feature('graphql', '3.2.0');
     }
 
+    /**
+     * Bound parameters in a `LIVE SELECT`. SurrealDB 2.x evaluates a live
+     * query's condition for each notification, after the request's bindings
+     * are gone.
+     */
+    public static function liveQueryBindings(): Feature
+    {
+        return new Feature('live-query-bindings', '3.0.0');
+    }
+
     public static function exportImportRaw(): Feature
     {
         return new Feature('export-import-raw');
