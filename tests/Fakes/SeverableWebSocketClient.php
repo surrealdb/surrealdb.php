@@ -18,6 +18,14 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
 
     public int $connects = 0;
 
+    /**
+     * Called with each outgoing payload before it is sent; it may sever the
+     * connection to fail that send.
+     *
+     * @var (\Closure(string): void)|null
+     */
+    public ?\Closure $beforeSend = null;
+
     public function __construct(
         private readonly StreamWebSocketClient $inner = new StreamWebSocketClient(),
     ) {}
@@ -48,6 +56,10 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
 
     public function send(string $payload, bool $binary = false): void
     {
+        if ($this->beforeSend !== null) {
+            ($this->beforeSend)($payload);
+        }
+
         if ($this->severed) {
             throw new SurrealException('Failed to write to the WebSocket connection');
         }
