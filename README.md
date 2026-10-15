@@ -168,10 +168,12 @@ $session->use('test', 'other');
 $session->let('tenant', 'acme');
 $session->select(new Table('person'))->execute();
 
-$fork = $db->forkSession();                 // copies ns, db, variables and tokens, e.g. after signin()
+$fork = $db->forkSession();                 // copies ns, db, variables and the access token, e.g. after signin()
 $db->sessions();                            // ids of the attached sessions
 $fork->closeSession();
 ```
+
+A fork does not copy the refresh token, which the server lets only one session use. Once the copied access token expires, the fork renews through `ConnectOptions::$authentication` if the source was signed in by it; otherwise sign the fork in again.
 
 Interactive transactions run every query made through them until they are committed or cancelled:
 
