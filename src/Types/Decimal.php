@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;

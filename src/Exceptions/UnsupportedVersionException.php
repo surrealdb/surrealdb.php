@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when the connected SurrealDB version is outside the supported range. */
 final class UnsupportedVersionException extends SurrealException

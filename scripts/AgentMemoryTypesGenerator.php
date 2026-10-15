@@ -1,0 +1,487 @@
+<?php
+
+/**
+ * Renders the Agent Memory response schemas as PHPStan type aliases on
+ * `SurrealDB\AgentMemory\Schema\Schemas` ({@see TARGET}): one `@phpstan-type`
+ * for each schema a 2xx `application/json` response reaches, followed through
+ * every `$ref`. A pure function of the decoded OpenAPI 3.1 document: the same
+ * schemas always give the same bytes.
+ *
+ * Only keywords that decide a PHP type are read. Annotations and value
+ * constraints ({@see IGNORED}, such as `description`, `title`, `example`,
+ * `minimum` and `maxItems`) are never rendered, so a documentation-only spec
+ * change regenerates an identical file. `format` is ignored too: `int32` and
+ * `int64` are both `int`, `float` and `double` both `float`, and `date-time`
+ * and `binary` both `string`. A construct the rules do not cover throws an
+ * {@see UnexpectedValueException} naming its JSON pointer instead of being
+ * approximated.
+ *
+ * Kept out of the `SurrealDB\` namespace: it is a build tool, not SDK code.
+ */
+final class AgentMemoryTypesGenerator
+{
+    /** The generated file, relative to the repository root. */
+    public const string TARGET = 'src/AgentMemory/Schema/Schemas.php';
+
+    /** Keywords that carry no type information. */
+    private const array IGNORED = [
+        '$comment', 'default', 'deprecated', 'description', 'example', 'examples', 'exclusiveMaximum',
+        'exclusiveMinimum', 'externalDocs', 'format', 'maxItems', 'maxLength', 'maxProperties', 'maximum',
+        'minItems', 'minLength', 'minProperties', 'minimum', 'multipleOf', 'pattern', 'readOnly', 'title',
+        'uniqueItems', 'writeOnly', 'xml',
+    ];
+
+    /** Keywords the rendering rules understand. */
+    private const array RENDERED = [
+        '$ref', 'additionalProperties', 'enum', 'items', 'oneOf', 'properties', 'propertyNames', 'required', 'type',
+    ];
+
+    private const array SCALARS = ['boolean' => 'bool', 'integer' => 'int', 'number' => 'float', 'string' => 'string'];
+
+    private const string SCHEMAS = '#/components/schemas/';
+
+    private const string IDENTIFIER = '/^[A-Za-z_][A-Za-z0-9_]*$/';
+
+    /**
+     * @param array<mixed> $spec the decoded OpenAPI 3.1 document
+     */
+    public function __construct(private readonly array $spec) {}
+
+    /**
+     * @throws UnexpectedValueException when the file cannot be read or holds no JSON object
+     */
+    public static function fromFile(string $path): self
+    {
+        $json = is_file($path) && is_readable($path) ? file_get_contents($path) : false;
+
+        if ($json === false) {
+            throw new UnexpectedValueException("Cannot read the OpenAPI description at {$path}.");
+        }
+
+        try {
+            $spec = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new UnexpectedValueException("{$path} is not valid JSON: {$e->getMessage()}.", previous: $e);
+        }
+
+        if (!is_array($spec)) {
+            throw new UnexpectedValueException("{$path} does not hold an OpenAPI document.");
+        }
+
+        return new self($spec);
+    }
+
+    /**
+     * The schemas reachable from any 2xx `application/json` response, `strcmp`-sorted.
+     *
+     * @return list<string>
+     *
+     * @throws UnexpectedValueException on a construct the rules do not cover
+     */
+    public function responseSchemas(): array
+    {
+        return array_keys($this->aliases());
+    }
+
+    /**
+     * Each response schema's rendered PHPStan type, keyed by alias name and
+     * `strcmp`-sorted. Object shapes at the top of an alias span several
+     * lines; nested ones stay on one.
+     *
+     * @return array<string,string>
+     *
+     * @throws UnexpectedValueException on a construct the rules do not cover
+     */
+    public function aliases(): array
+    {
+        $pending = $this->responseRoots();
+        $aliases = [];
+        $edges = [];
+
+        while (($name = array_key_first($pending)) !== null) {
+            unset($pending[$name]);
+            $refs = [];
+            $aliases[$name] = $this->type($this->spec['components']['schemas'][$name], self::SCHEMAS . self::escape($name), true, $refs);
+            $edges[$name] = $refs;
+
+            foreach ($refs as $ref => $pointer) {
+                if (!isset($aliases[$ref])) {
+                    $pending[$ref] ??= $pointer;
+                }
+            }
+        }
+
+        uksort($aliases, strcmp(...));
+        self::assertAcyclic($edges);
+
+        return $aliases;
+    }
+
+    /**
+     * The PHP source of {@see TARGET}.
+     *
+     * @throws UnexpectedValueException on a construct the rules do not cover
+     */
+    public function render(): string
+    {
+        $tags = '';
+
+        foreach ($this->aliases() as $name => $type) {
+            $tags .= ' * @phpstan-type ' . $name . ' ' . str_replace("\n", "\n * ", $type) . "\n";
+        }
+
+        return <<<PHP
+            <?php
+
+            // @generated by scripts/generate-agent-memory-types.php from the Agent Memory OpenAPI
+            // description (spectron doc/spec/enduser.swagger.json). DO NOT EDIT: run
+            // `composer generate:agent-memory-types -- <path/to/enduser.swagger.json>`.
+
+            namespace SurrealDB\\AgentMemory\\Schema;
+
+            /**
+             * PHPStan array shapes for the Agent Memory responses: one alias for each
+             * schema a success response reaches, named as in the OpenAPI description and
+             * in `@surrealdb/memory`. They describe the plain arrays the client returns;
+             * nothing is checked at runtime. Import one into a class with
+             * `@phpstan-import-type DocumentJson from Schemas`.
+             *
+             * Required members are plain keys, optional ones `key?:`, and nullable ones
+             * add `|null`. Enums are literal string unions, so keep a default arm when
+             * you `match` on one: the server can add values.
+             *
+            {$tags} */
+            final class Schemas
+            {
+                private function __construct() {}
+            }
+
+            PHP;
+    }
+
+    /**
+     * Every schema a 2xx `application/json` response names, directly or inside an inline schema.
+     *
+     * @return array<string,string> schema name => pointer of its first `$ref`
+     */
+    private function responseRoots(): array
+    {
+        $roots = [];
+
+        foreach (is_array($this->spec['paths'] ?? null) ? $this->spec['paths'] : [] as $path => $item) {
+            foreach (is_array($item) ? $item : [] as $method => $operation) {
+                if (!is_array($operation) || !is_array($operation['responses'] ?? null)) {
+                    continue;
+                }
+
+                foreach ($operation['responses'] as $status => $response) {
+                    if (preg_match('/^2(\d\d|XX)$/', (string) $status) !== 1) {
+                        continue;
+                    }
+
+                    $pointer = '#/paths/' . self::escape((string) $path) . "/{$method}/responses/{$status}";
+
+                    if (!is_array($response) || isset($response['$ref'])) {
+                        self::fail($pointer, 'only inline response objects are supported');
+                    }
+
+                    $schema = $response['content']['application/json']['schema'] ?? null;
+
+                    if ($schema !== null) {
+                        $this->type($schema, "{$pointer}/content/application~1json/schema", false, $roots);
+                    }
+                }
+            }
+        }
+
+        return $roots;
+    }
+
+    /**
+     * @param array<string,string> $refs collects each schema `$node` references, with the pointer of its first `$ref`
+     */
+    private function type(mixed $node, string $pointer, bool $topLevel, array &$refs): string
+    {
+        if (!is_array($node) || ($node !== [] && array_is_list($node))) {
+            self::fail($pointer, 'a schema must be a JSON object');
+        }
+
+        $keywords = self::keywords($node, $pointer);
+
+        if (isset($node['$ref'])) {
+            if ($keywords !== ['$ref']) {
+                self::fail($pointer, '`$ref` beside `' . implode('`, `', array_diff($keywords, ['$ref'])) . '` is not supported');
+            }
+
+            $name = $this->reference($node['$ref'], $pointer);
+            $refs[$name] ??= $pointer;
+
+            return $name;
+        }
+
+        if (isset($node['oneOf'])) {
+            if ($keywords !== ['oneOf']) {
+                self::fail($pointer, '`oneOf` beside `' . implode('`, `', array_diff($keywords, ['oneOf'])) . '` is not supported');
+            }
+
+            if (!is_array($node['oneOf']) || $node['oneOf'] === [] || !array_is_list($node['oneOf'])) {
+                self::fail("{$pointer}/oneOf", 'must be a non-empty list of schemas');
+            }
+
+            $arms = [];
+            $nullable = false;
+
+            foreach ($node['oneOf'] as $index => $arm) {
+                if (is_array($arm) && ($arm['type'] ?? null) === 'null' && self::keywords($arm, "{$pointer}/oneOf/{$index}") === ['type']) {
+                    $nullable = true;
+                } else {
+                    $arms[] = $this->type($arm, "{$pointer}/oneOf/{$index}", $topLevel, $refs);
+                }
+            }
+
+            return self::union($arms === [] ? ['null'] : $arms, $nullable);
+        }
+
+        $declared = $node['type'] ?? [];
+        $declared = is_array($declared) ? $declared : [$declared];
+
+        foreach ($declared as $type) {
+            if (!is_string($type) || ($type !== 'null' && $type !== 'array' && $type !== 'object' && !isset(self::SCALARS[$type]))) {
+                self::fail("{$pointer}/type", 'unknown type ' . json_encode($type));
+            }
+        }
+
+        $nullable = in_array('null', $declared, true);
+        $types = array_values(array_diff($declared, ['null']));
+
+        if (count($types) > 1) {
+            self::fail("{$pointer}/type", 'more than one non-null type is not supported');
+        }
+
+        $type = $types[0] ?? null;
+        $allowed = match ($type) {
+            'array' => ['type', 'items'],
+            'object' => ['type', 'properties', 'required', 'additionalProperties', 'propertyNames'],
+            default => ['type', 'enum'],
+        };
+
+        foreach ($keywords as $keyword) {
+            if (!in_array($keyword, $allowed, true)) {
+                self::fail("{$pointer}/{$keyword}", 'not supported on ' . ($type === null ? 'a schema without a type' : "type `{$type}`"));
+            }
+        }
+
+        if (isset($node['enum'])) {
+            $literals = self::literals($node['enum'], "{$pointer}/enum");
+
+            return self::union(array_values(array_diff($literals, ['null'])), $nullable || in_array('null', $literals, true));
+        }
+
+        return match ($type) {
+            null => $declared === [] ? 'mixed' : 'null',
+            'array' => self::union(['list<' . $this->type($node['items'] ?? self::fail($pointer, '`array` without `items`'), "{$pointer}/items", false, $refs) . '>'], $nullable),
+            'object' => self::union([$this->object($node, $pointer, $topLevel, $refs)], $nullable),
+            default => self::union([self::SCALARS[$type]], $nullable),
+        };
+    }
+
+    /**
+     * @param array<mixed>         $node
+     * @param array<string,string> $refs
+     */
+    private function object(array $node, string $pointer, bool $topLevel, array &$refs): string
+    {
+        if (isset($node['propertyNames']) && (!is_array($node['propertyNames']) || self::keywords($node['propertyNames'], "{$pointer}/propertyNames") !== ['type'] || $node['propertyNames']['type'] !== 'string')) {
+            self::fail("{$pointer}/propertyNames", 'only `{"type": "string"}` is supported');
+        }
+
+        if (!isset($node['properties'])) {
+            if (isset($node['required'])) {
+                self::fail("{$pointer}/required", 'not supported without `properties`');
+            }
+
+            $values = $node['additionalProperties'] ?? true;
+
+            if ($values !== true && !is_array($values)) {
+                self::fail("{$pointer}/additionalProperties", 'only a schema or `true` is supported');
+            }
+
+            return 'array<string, ' . ($values === true ? 'mixed' : $this->type($values, "{$pointer}/additionalProperties", false, $refs)) . '>';
+        }
+
+        if (array_key_exists('additionalProperties', $node)) {
+            self::fail("{$pointer}/additionalProperties", 'not supported beside `properties`');
+        }
+
+        $properties = $node['properties'];
+        $required = $node['required'] ?? [];
+
+        if (!is_array($properties) || ($properties !== [] && array_is_list($properties))) {
+            self::fail("{$pointer}/properties", 'must map member names to schemas');
+        }
+
+        if (!is_array($required) || !array_is_list($required)) {
+            self::fail("{$pointer}/required", 'must be a list of member names');
+        }
+
+        foreach ($required as $index => $member) {
+            if (!is_string($member) || !array_key_exists($member, $properties)) {
+                self::fail("{$pointer}/required/{$index}", json_encode($member) . ' is not one of the `properties`');
+            }
+        }
+
+        $members = [];
+
+        foreach ($properties as $member => $schema) {
+            $member = (string) $member;
+            $members[] = (preg_match(self::IDENTIFIER, $member) === 1 ? $member : self::literal($member, "{$pointer}/properties/" . self::escape($member)))
+                . (in_array($member, $required, true) ? '' : '?') . ': '
+                . $this->type($schema, "{$pointer}/properties/" . self::escape($member), false, $refs);
+        }
+
+        if ($members === []) {
+            return 'array{}';
+        }
+
+        return $topLevel
+            ? "array{\n    " . implode(",\n    ", $members) . ",\n}"
+            : 'array{' . implode(', ', $members) . '}';
+    }
+
+    /**
+     * @return list<string> each enum value as a PHPStan literal, `null` included
+     */
+    private static function literals(mixed $values, string $pointer): array
+    {
+        if (!is_array($values) || $values === [] || !array_is_list($values)) {
+            self::fail($pointer, 'must be a non-empty list');
+        }
+
+        $literals = [];
+
+        foreach ($values as $index => $value) {
+            $literals[] = match (true) {
+                $value === null => 'null',
+                is_string($value) => self::literal($value, "{$pointer}/{$index}"),
+                is_int($value) => (string) $value,
+                default => self::fail("{$pointer}/{$index}", 'only string and integer enum values are supported'),
+            };
+        }
+
+        return $literals;
+    }
+
+    /** The schema name a `#/components/schemas/<name>` reference points at. */
+    private function reference(mixed $ref, string $pointer): string
+    {
+        if (!is_string($ref) || !str_starts_with($ref, self::SCHEMAS)) {
+            self::fail("{$pointer}/\$ref", json_encode($ref) . ' is not a reference into #/components/schemas');
+        }
+
+        $name = substr($ref, strlen(self::SCHEMAS));
+
+        if (preg_match(self::IDENTIFIER, $name) !== 1) {
+            self::fail("{$pointer}/\$ref", "`{$name}` is not a valid PHPStan type alias name");
+        }
+
+        if (!is_array($this->spec['components']['schemas'][$name] ?? null)) {
+            self::fail("{$pointer}/\$ref", "{$ref} points at no schema");
+        }
+
+        return $name;
+    }
+
+    /**
+     * Rejects a `$ref` cycle, which a PHPStan type alias cannot express.
+     *
+     * @param array<string,array<string,string>> $edges schema name => the schemas it references, with each `$ref`'s pointer
+     */
+    private static function assertAcyclic(array $edges): void
+    {
+        $done = [];
+        $visit = static function (string $name, array $stack) use (&$visit, &$done, $edges): void {
+            $stack[] = $name;
+
+            foreach ($edges[$name] ?? [] as $ref => $pointer) {
+                $open = array_search($ref, $stack, true);
+
+                if (is_int($open)) {
+                    self::fail($pointer, '`$ref` cycle ' . implode(' → ', [...array_slice($stack, $open), $ref]) . ' is not supported');
+                }
+
+                if (!isset($done[$ref])) {
+                    $visit($ref, $stack);
+                }
+            }
+
+            $done[$name] = true;
+        };
+
+        foreach (array_keys($edges) as $name) {
+            if (!isset($done[$name])) {
+                $visit($name, []);
+            }
+        }
+    }
+
+    /**
+     * The keywords of a schema node that matter, after dropping {@see IGNORED} ones and `x-` extensions.
+     *
+     * @param array<mixed> $node
+     *
+     * @return list<string>
+     */
+    private static function keywords(array $node, string $pointer): array
+    {
+        $keywords = [];
+
+        foreach (array_keys($node) as $keyword) {
+            $keyword = (string) $keyword;
+
+            if (in_array($keyword, self::IGNORED, true) || str_starts_with($keyword, 'x-')) {
+                continue;
+            }
+
+            if (!in_array($keyword, self::RENDERED, true)) {
+                self::fail("{$pointer}/" . self::escape($keyword), "`{$keyword}` is not supported");
+            }
+
+            $keywords[] = $keyword;
+        }
+
+        return $keywords;
+    }
+
+    /**
+     * @param list<string> $types
+     */
+    private static function union(array $types, bool $nullable): string
+    {
+        if (in_array('mixed', $types, true)) {
+            return 'mixed';
+        }
+
+        return implode('|', array_values(array_unique($nullable ? [...$types, 'null'] : $types)));
+    }
+
+    /** A single-quoted PHPStan string literal. */
+    private static function literal(string $value, string $pointer): string
+    {
+        if (preg_match('/[\x00-\x1F\x7F]/', $value) === 1 || str_contains($value, '*/')) {
+            self::fail($pointer, json_encode($value) . ' cannot be written into a docblock');
+        }
+
+        return "'" . str_replace(['\\', "'"], ['\\\\', "\\'"], $value) . "'";
+    }
+
+    /** Escapes one JSON pointer segment (RFC 6901). */
+    private static function escape(string $segment): string
+    {
+        return str_replace(['~', '/'], ['~0', '~1'], $segment);
+    }
+
+    private static function fail(string $pointer, string $problem): never
+    {
+        throw new UnexpectedValueException("{$pointer}: {$problem}. Fix the spec, or extend scripts/AgentMemoryTypesGenerator.php.");
+    }
+}

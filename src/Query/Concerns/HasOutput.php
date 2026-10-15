@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Query\Concerns;
+namespace SurrealDB\Query\Concerns;
 
-use SurrealDB\SDK\Enum\Output;
-use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\Enum\Output;
+use SurrealDB\Query\BoundQuery;
 
 /**
  * Adds a `RETURN <output>` modifier (NONE / NULL / DIFF / BEFORE / AFTER).

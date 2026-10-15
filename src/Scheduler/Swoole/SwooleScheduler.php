@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Scheduler\Swoole;
+namespace SurrealDB\Scheduler\Swoole;
 
 use OpenSwoole\Coroutine;
 use OpenSwoole\Coroutine\System;
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Contracts\Scheduler;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Contracts\Scheduler;
 
 /**
  * Scheduler backed by OpenSwoole coroutines. Background tasks become real

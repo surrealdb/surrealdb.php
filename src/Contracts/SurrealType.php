@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
 interface SurrealType
 {

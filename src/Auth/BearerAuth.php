@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
 /** Bearer access credentials (a pre-issued access key). */
 final readonly class BearerAuth implements Credentials

@@ -3,9 +3,9 @@
 namespace SurrealDB\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Exceptions\NotFoundException;
-use SurrealDB\SDK\Exceptions\ServerException;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Exceptions\NotFoundException;
+use SurrealDB\Exceptions\ServerException;
+use SurrealDB\Rpc\RpcResponse;
 
 final class ServerExceptionTest extends TestCase
 {

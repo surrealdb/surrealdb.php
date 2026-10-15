@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry;
+namespace SurrealDB\Telemetry;
 
-use SurrealDB\SDK\Contracts\Counter;
+use SurrealDB\Contracts\Counter;
 
 /** A counter that discards every measurement; returned by {@see NullMeter}. */
 final class NullCounter implements Counter

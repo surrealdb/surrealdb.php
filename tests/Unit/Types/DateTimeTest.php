@@ -3,7 +3,7 @@
 namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Types\DateTime;
+use SurrealDB\Types\DateTime;
 
 final class DateTimeTest extends TestCase
 {

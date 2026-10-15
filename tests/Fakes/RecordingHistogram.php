@@ -2,7 +2,7 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Contracts\Histogram;
+use SurrealDB\Contracts\Histogram;
 
 /** A {@see Histogram} that records every measurement for assertions. */
 final class RecordingHistogram implements Histogram

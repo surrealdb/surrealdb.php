@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 use Symfony\Component\Uid\AbstractUid;
 use Symfony\Component\Uid\Uuid as SymfonyUuid;

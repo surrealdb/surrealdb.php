@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\Psr;
+namespace SurrealDB\Telemetry\Psr;
 
 use Psr\Log\LoggerInterface;
-use SurrealDB\SDK\Contracts\Histogram;
+use SurrealDB\Contracts\Histogram;
 
 /** A {@see Histogram} that logs each measurement as a structured PSR-3 line. */
 final class Psr3Histogram implements Histogram

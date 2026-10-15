@@ -3,12 +3,12 @@
 namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Types\Bytes;
-use SurrealDB\SDK\Types\File;
-use SurrealDB\SDK\Types\Future;
-use SurrealDB\SDK\Types\None;
-use SurrealDB\SDK\Types\Set;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Types\Bytes;
+use SurrealDB\Types\File;
+use SurrealDB\Types\Future;
+use SurrealDB\Types\None;
+use SurrealDB\Types\Set;
+use SurrealDB\Types\Table;
 
 final class MiscTypesTest extends TestCase
 {

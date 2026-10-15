@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Codec;
+namespace SurrealDB\Codec;
 
 /**
  * The default, zero-dependency deserializer. Decodes JSON wire payloads into

@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Protocol;
+namespace SurrealDB\Protocol;
 
 /** An immutable set of features declared as supported by an engine. */
 final class FeatureSet

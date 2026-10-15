@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor;
+namespace SurrealDB\Codec\Cbor;
 
 enum CborTag: int
 {

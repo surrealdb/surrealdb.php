@@ -1,29 +1,29 @@
 <?php
 
-namespace SurrealDB\SDK\Engines\Remote;
+namespace SurrealDB\Engines\Remote;
 
-use SurrealDB\SDK\Connection\ConnectionState;
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Contracts\DuplexTransportInterface;
-use SurrealDB\SDK\Engines\AbstractRpcEngine;
-use SurrealDB\SDK\Events\LiveMessageReceived;
-use SurrealDB\SDK\Exceptions\CallTerminatedException;
-use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
-use SurrealDB\SDK\Live\LiveAction;
-use SurrealDB\SDK\Live\LiveMessage;
-use SurrealDB\SDK\Protocol\FeatureSet;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
-use SurrealDB\SDK\Transport\StreamWebSocketClient;
-use SurrealDB\SDK\Transport\WebSocketTransport;
+use SurrealDB\Connection\ConnectionState;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Contracts\DuplexTransportInterface;
+use SurrealDB\Engines\AbstractRpcEngine;
+use SurrealDB\Events\LiveMessageReceived;
+use SurrealDB\Exceptions\CallTerminatedException;
+use SurrealDB\Exceptions\ConnectionUnavailableException;
+use SurrealDB\Live\LiveAction;
+use SurrealDB\Live\LiveMessage;
+use SurrealDB\Protocol\FeatureSet;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
+use SurrealDB\Transport\StreamWebSocketClient;
+use SurrealDB\Transport\WebSocketTransport;
 use function is_array;
 use function is_string;
 
 /**
  * An engine that maintains a persistent WebSocket connection.
  *
- * Written entirely against the {@see \SurrealDB\SDK\Contracts\Scheduler} seam:
+ * Written entirely against the {@see \SurrealDB\Contracts\Scheduler} seam:
  * each `send()` registers a {@see Deferred} keyed by request id and awaits it,
  * while a single read loop resolves response deferreds and routes live
  * messages. Under the synchronous scheduler the loop is driven on demand by the

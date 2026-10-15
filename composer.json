@@ -13,6 +13,7 @@
     ],
     "require": {
         "php": ">=8.4",
+        "composer-runtime-api": "^2.2",
         "brick/math": "^0.12 || ^0.13 || ^0.14 || ^0.17.2",
         "psr/event-dispatcher": "^1.0",
         "psr/http-client": "^1.0",
@@ -46,19 +47,22 @@
         "amphp/websocket-client": "Async WebSocket transport for the Amp/Revolt runtime",
         "amphp/http-client": "Non-blocking HTTP transport for the Amp/Revolt runtime",
         "amphp/http-client-psr7": "Non-blocking PSR-18 client for OTLP export on the Amp/Revolt runtime (Runtime::amp with ObservabilityOptions)",
-        "open-telemetry/api": "Emit OpenTelemetry traces and metrics via the bundled SurrealDB\\SDK\\Telemetry\\OpenTelemetry adapter",
+        "open-telemetry/api": "Emit OpenTelemetry traces and metrics via the bundled SurrealDB\\Telemetry\\OpenTelemetry adapter",
         "open-telemetry/sdk": "Configure OpenTelemetry providers via the runtime-aware observability presets (Runtime::sync/swoole/amp with ObservabilityOptions)",
         "open-telemetry/exporter-otlp": "OTLP exporter used by the runtime-aware observability presets to ship traces and metrics"
     },
     "autoload": {
         "psr-4": {
-            "SurrealDB\\SDK\\": "src/"
+            "SurrealDB\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
             "SurrealDB\\Tests\\": "tests/"
-        }
+        },
+        "classmap": [
+            "scripts/AgentMemoryTypesGenerator.php"
+        ]
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
@@ -81,7 +85,10 @@
         "test": "vendor/bin/phpunit --testsuite default",
         "test:openswoole": "vendor/bin/phpunit --testsuite openswoole",
         "test:frankenphp": "vendor/bin/phpunit --testsuite frankenphp",
-        "test:all": "vendor/bin/phpunit"
+        "test:agent-memory": "vendor/bin/phpunit --testsuite agent-memory",
+        "test:agent-memory-integration": "vendor/bin/phpunit --testsuite agent-memory-integration",
+        "test:all": "vendor/bin/phpunit",
+        "generate:agent-memory-types": "@php scripts/generate-agent-memory-types.php"
     },
     "scripts-descriptions": {
         "analyse": "Run PHPStan static analysis on the source tree.",
@@ -91,6 +98,9 @@
         "test": "Run the full suite on the default synchronous PHP-FPM/CLI driver (sync scheduler).",
         "test:openswoole": "Run the OpenSwoole coroutine runtime suite (requires the openswoole extension).",
         "test:frankenphp": "Run the FrankenPHP / Amp (Revolt) runtime suite (requires revolt/event-loop).",
-        "test:all": "Run every suite: default (sync) + OpenSwoole + FrankenPHP."
+        "test:agent-memory": "Run the Agent Memory client unit tests (no server needed).",
+        "test:agent-memory-integration": "Run the Agent Memory tests against a real server (start one with scripts/agent-memory-server.sh).",
+        "test:all": "Run every suite: default (sync), OpenSwoole, FrankenPHP, and the Agent Memory suites (the integration suite skips without a server).",
+        "generate:agent-memory-types": "Regenerate src/AgentMemory/Schema/Schemas.php (PHPStan response types) from the Agent Memory OpenAPI spec: pass its path after `--`, or set AGENT_MEMORY_OPENAPI_SPEC."
     }
 }

@@ -3,11 +3,11 @@
 namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
-use SurrealDB\SDK\Surreal;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
+use SurrealDB\Surreal;
 use SurrealDB\Tests\Fakes\FakeTransport;
 use SurrealDB\Tests\Fakes\RecordingMeter;
 use SurrealDB\Tests\Fakes\RecordingSpan;

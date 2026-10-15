@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\Psr;
+namespace SurrealDB\Telemetry\Psr;
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
-use SurrealDB\SDK\Contracts\Counter;
-use SurrealDB\SDK\Contracts\Histogram;
-use SurrealDB\SDK\Contracts\Meter;
+use SurrealDB\Contracts\Counter;
+use SurrealDB\Contracts\Histogram;
+use SurrealDB\Contracts\Meter;
 
 /**
  * A zero-dependency {@see Meter} that records measurements as structured PSR-3

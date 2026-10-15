@@ -3,13 +3,13 @@
 namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Events\Connected;
-use SurrealDB\SDK\Surreal;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Events\Connected;
+use SurrealDB\Surreal;
 use SurrealDB\Tests\Fakes\FakeDuplexTransport;
 
 final class SurrealWebSocketTest extends TestCase
@@ -102,10 +102,10 @@ final class SurrealWebSocketTest extends TestCase
     public function testPsr14EventsAreDispatched(): void
     {
         $responder = $this->responder();
-        $dispatcher = new \SurrealDB\SDK\Events\EventDispatcher();
+        $dispatcher = new \SurrealDB\Events\EventDispatcher();
         $received = [];
 
-        if ($dispatcher->provider() instanceof \SurrealDB\SDK\Events\ListenerProvider) {
+        if ($dispatcher->provider() instanceof \SurrealDB\Events\ListenerProvider) {
             $dispatcher->provider()->on(Connected::class, function (Connected $event) use (&$received): void {
                 $received[] = $event->version;
             });

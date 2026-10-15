@@ -1,39 +1,39 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
-use SurrealDB\SDK\Auth\Credentials;
-use SurrealDB\SDK\Auth\Token;
-use SurrealDB\SDK\Auth\Tokens;
-use SurrealDB\SDK\Contracts\AuthProviderInterface;
-use SurrealDB\SDK\Contracts\Counter;
-use SurrealDB\SDK\Contracts\EngineInterface;
-use SurrealDB\SDK\Engines\EngineRegistry;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Enum\SpanStatus;
-use SurrealDB\SDK\Events\AuthChanged;
-use SurrealDB\SDK\Events\Connected;
-use SurrealDB\SDK\Events\Connecting;
-use SurrealDB\SDK\Events\ConnectionError;
-use SurrealDB\SDK\Events\Disconnected;
-use SurrealDB\SDK\Events\NamespaceDatabaseSelected;
-use SurrealDB\SDK\Events\Reconnecting;
-use SurrealDB\SDK\Exceptions\AuthenticationException;
-use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
-use SurrealDB\SDK\Exceptions\InvalidSessionException;
-use SurrealDB\SDK\Exceptions\ServerException;
-use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
-use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
-use SurrealDB\SDK\Exceptions\UnsupportedVersionException;
-use SurrealDB\SDK\Protocol\Feature;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Protocol\NamespaceDatabase;
-use SurrealDB\SDK\Protocol\VersionInfo;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Reconnect\ExponentialBackoffReconnect;
-use SurrealDB\SDK\Support\Jwt;
-use SurrealDB\SDK\Support\Publisher;
-use SurrealDB\SDK\Support\Version;
+use SurrealDB\Auth\Credentials;
+use SurrealDB\Auth\Token;
+use SurrealDB\Auth\Tokens;
+use SurrealDB\Contracts\AuthProviderInterface;
+use SurrealDB\Contracts\Counter;
+use SurrealDB\Contracts\EngineInterface;
+use SurrealDB\Engines\EngineRegistry;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Enum\SpanStatus;
+use SurrealDB\Events\AuthChanged;
+use SurrealDB\Events\Connected;
+use SurrealDB\Events\Connecting;
+use SurrealDB\Events\ConnectionError;
+use SurrealDB\Events\Disconnected;
+use SurrealDB\Events\NamespaceDatabaseSelected;
+use SurrealDB\Events\Reconnecting;
+use SurrealDB\Exceptions\AuthenticationException;
+use SurrealDB\Exceptions\ConnectionUnavailableException;
+use SurrealDB\Exceptions\InvalidSessionException;
+use SurrealDB\Exceptions\ServerException;
+use SurrealDB\Exceptions\UnavailableFeatureException;
+use SurrealDB\Exceptions\UnsupportedFeatureException;
+use SurrealDB\Exceptions\UnsupportedVersionException;
+use SurrealDB\Protocol\Feature;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Protocol\NamespaceDatabase;
+use SurrealDB\Protocol\VersionInfo;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Reconnect\ExponentialBackoffReconnect;
+use SurrealDB\Support\Jwt;
+use SurrealDB\Support\Publisher;
+use SurrealDB\Support\Version;
 use Symfony\Component\Uid\Uuid;
 use function is_string;
 
@@ -44,7 +44,7 @@ use function is_string;
  * `ConnectionController`.
  *
  * High-level lifecycle events are exposed via {@see subscribe()} (an internal
- * publisher consumed by {@see \SurrealDB\SDK\Surreal}); rich domain events are
+ * publisher consumed by {@see \SurrealDB\Surreal}); rich domain events are
  * additionally dispatched to the PSR-14 dispatcher for outside observers.
  */
 final class ConnectionController
@@ -333,7 +333,7 @@ final class ConnectionController
     }
 
     /**
-     * @return iterable<\SurrealDB\SDK\Protocol\QueryChunk<mixed>>
+     * @return iterable<\SurrealDB\Protocol\QueryChunk<mixed>>
      */
     public function query(BoundQuery $query, ?string $session = null, ?string $txn = null): iterable
     {
@@ -341,7 +341,7 @@ final class ConnectionController
     }
 
     /**
-     * @return iterable<\SurrealDB\SDK\Live\LiveMessage<mixed>>
+     * @return iterable<\SurrealDB\Live\LiveMessage<mixed>>
      */
     public function liveQuery(string $id): iterable
     {

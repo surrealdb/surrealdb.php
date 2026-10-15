@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Events;
+namespace SurrealDB\Events;
 
-use SurrealDB\SDK\Auth\Tokens;
+use SurrealDB\Auth\Tokens;
 
 /** Dispatched when a session's authentication state changes (or is cleared). */
 final readonly class AuthChanged

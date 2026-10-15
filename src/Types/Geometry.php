@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
-use SurrealDB\SDK\Exceptions\InvalidValueException;
+use SurrealDB\Exceptions\InvalidValueException;
 
 /**
  * Base class for SurrealQL `geometry` values (RFC 7946 / GeoJSON).

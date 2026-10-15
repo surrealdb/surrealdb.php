@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Query\Concerns;
+namespace SurrealDB\Query\Concerns;
 
-use SurrealDB\SDK\Enum\Mutation;
-use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\Enum\Mutation;
+use SurrealDB\Query\BoundQuery;
 
 /**
  * Shared storage + compilation for the data mutation keyword

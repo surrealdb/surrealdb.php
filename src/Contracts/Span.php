@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
-use SurrealDB\SDK\Enum\SpanStatus;
+use SurrealDB\Enum\SpanStatus;
 
 /**
  * A single unit of traced work, created by a {@see Tracer}. Methods are

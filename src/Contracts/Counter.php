@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
 /**
  * A monotonic counter instrument: each {@see add()} increments the total by a

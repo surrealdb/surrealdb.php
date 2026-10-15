@@ -1,17 +1,17 @@
 <?php
 
-namespace SurrealDB\SDK\Transport\Amp;
+namespace SurrealDB\Transport\Amp;
 
 use Amp\Websocket\Client\WebsocketHandshake;
 use Amp\Websocket\WebsocketMessage;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\Endpoint;
-use SurrealDB\SDK\Contracts\DuplexTransportInterface;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\Endpoint;
+use SurrealDB\Contracts\DuplexTransportInterface;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Exceptions\UnexpectedServerResponseException;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 
 use function Amp\Websocket\Client\connect;
 use function is_array;

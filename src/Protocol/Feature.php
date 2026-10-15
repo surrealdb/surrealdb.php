@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Protocol;
+namespace SurrealDB\Protocol;
 
 /**
  * A capability that may be supported by a specific engine and/or version range

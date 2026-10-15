@@ -1,10 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Scheduler\Amp;
+namespace SurrealDB\Scheduler\Amp;
 
 use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
-use SurrealDB\SDK\Contracts\Deferred;
+use SurrealDB\Contracts\Deferred;
 
 /**
  * A fiber-backed {@see Deferred} on the Revolt event loop. `await()` suspends

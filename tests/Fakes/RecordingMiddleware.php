@@ -2,9 +2,9 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Contracts\MiddlewareInterface;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Contracts\MiddlewareInterface;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 
 /** Records before/after markers so middleware ordering can be asserted. */
 final class RecordingMiddleware implements MiddlewareInterface

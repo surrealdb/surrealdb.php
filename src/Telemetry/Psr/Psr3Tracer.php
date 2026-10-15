@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\Psr;
+namespace SurrealDB\Telemetry\Psr;
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
-use SurrealDB\SDK\Contracts\Span;
-use SurrealDB\SDK\Contracts\Tracer;
-use SurrealDB\SDK\Enum\SpanKind;
+use SurrealDB\Contracts\Span;
+use SurrealDB\Contracts\Tracer;
+use SurrealDB\Enum\SpanKind;
 
 /**
  * A zero-dependency {@see Tracer} that records spans as structured PSR-3 log

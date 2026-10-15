@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
 /**
  * Mutable per-session authentication state owned by the connection controller.

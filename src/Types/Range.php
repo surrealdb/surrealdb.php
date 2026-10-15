@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 /**
  * A SurrealQL `range` value: a bounded or unbounded interval delimited by

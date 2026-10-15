@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Codec;
+namespace SurrealDB\Codec;
 
 /**
  * The default, zero-dependency serializer. Encodes RPC payloads as JSON, which

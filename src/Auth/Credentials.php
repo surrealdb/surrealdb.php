@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
 /**
  * Credentials that can be turned into the parameter object expected by the

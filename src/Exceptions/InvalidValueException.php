@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /**
  * Thrown client-side when a value cannot be parsed into, or constructed as, a

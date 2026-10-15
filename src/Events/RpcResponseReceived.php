@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Events;
+namespace SurrealDB\Events;
 
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 
 /** Dispatched after an RPC response is received (success or error). */
 final readonly class RpcResponseReceived

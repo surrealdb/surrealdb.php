@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Live;
+namespace SurrealDB\Live;
 
 /**
  * A single live query notification pushed by the server.

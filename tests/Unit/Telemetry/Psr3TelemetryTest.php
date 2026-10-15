@@ -4,10 +4,10 @@ namespace SurrealDB\Tests\Unit\Telemetry;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Enum\SpanStatus;
-use SurrealDB\SDK\Telemetry\Psr\Psr3Meter;
-use SurrealDB\SDK\Telemetry\Psr\Psr3Tracer;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Enum\SpanStatus;
+use SurrealDB\Telemetry\Psr\Psr3Meter;
+use SurrealDB\Telemetry\Psr\Psr3Tracer;
 use SurrealDB\Tests\Fakes\RecordingLogger;
 
 final class Psr3TelemetryTest extends TestCase

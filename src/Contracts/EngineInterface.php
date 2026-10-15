@@ -1,15 +1,15 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
-use SurrealDB\SDK\Auth\Tokens;
-use SurrealDB\SDK\Connection\ConnectionState;
-use SurrealDB\SDK\Live\LiveMessage;
-use SurrealDB\SDK\Protocol\FeatureSet;
-use SurrealDB\SDK\Protocol\NamespaceDatabase;
-use SurrealDB\SDK\Protocol\QueryChunk;
-use SurrealDB\SDK\Protocol\VersionInfo;
-use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\Auth\Tokens;
+use SurrealDB\Connection\ConnectionState;
+use SurrealDB\Live\LiveMessage;
+use SurrealDB\Protocol\FeatureSet;
+use SurrealDB\Protocol\NamespaceDatabase;
+use SurrealDB\Protocol\QueryChunk;
+use SurrealDB\Protocol\VersionInfo;
+use SurrealDB\Query\BoundQuery;
 
 /**
  * The communication contract between the SDK and a SurrealDB datastore.

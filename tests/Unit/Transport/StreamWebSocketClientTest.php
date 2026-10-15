@@ -3,7 +3,7 @@
 namespace SurrealDB\Tests\Unit\Transport;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Transport\StreamWebSocketClient;
+use SurrealDB\Transport\StreamWebSocketClient;
 
 /**
  * Drives the bundled client against a tiny WebSocket server running in a

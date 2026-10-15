@@ -2,9 +2,9 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Contracts\Counter;
-use SurrealDB\SDK\Contracts\Histogram;
-use SurrealDB\SDK\Contracts\Meter;
+use SurrealDB\Contracts\Counter;
+use SurrealDB\Contracts\Histogram;
+use SurrealDB\Contracts\Meter;
 
 /** A {@see Meter} that captures created instruments for assertions. */
 final class RecordingMeter implements Meter

@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Protocol;
+namespace SurrealDB\Protocol;
 
-use SurrealDB\SDK\Exceptions\ServerException;
+use SurrealDB\Exceptions\ServerException;
 use function is_array;
 use function is_string;
 

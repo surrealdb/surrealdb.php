@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Codec;
+namespace SurrealDB\Codec;
 
 interface SerializerInterface
 {

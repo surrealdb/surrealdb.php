@@ -1,14 +1,14 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\OpenTelemetry;
+namespace SurrealDB\Telemetry\OpenTelemetry;
 
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\SpanKind as OtelSpanKind;
 use OpenTelemetry\API\Trace\TracerInterface;
-use SurrealDB\SDK\Contracts\Span;
-use SurrealDB\SDK\Contracts\Tracer;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Exceptions\ConfigurationException;
+use SurrealDB\Contracts\Span;
+use SurrealDB\Contracts\Tracer;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Exceptions\ConfigurationException;
 
 /**
  * Bridges the SDK {@see Tracer} seam onto an OpenTelemetry tracer. Every span is

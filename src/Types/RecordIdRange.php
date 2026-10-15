@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 /**
  * A SurrealQL record id range (e.g. `person:1..=100`): a table paired with a

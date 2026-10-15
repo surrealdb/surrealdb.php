@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 
 /**
  * A request/response interceptor wrapping the engine `send()` primitive. This

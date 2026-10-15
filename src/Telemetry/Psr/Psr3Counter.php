@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\Psr;
+namespace SurrealDB\Telemetry\Psr;
 
 use Psr\Log\LoggerInterface;
-use SurrealDB\SDK\Contracts\Counter;
+use SurrealDB\Contracts\Counter;
 
 /** A {@see Counter} that logs each increment as a structured PSR-3 line. */
 final class Psr3Counter implements Counter

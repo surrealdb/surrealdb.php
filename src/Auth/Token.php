@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
 /** A raw JWT/bearer token used with the `authenticate` RPC. */
 final readonly class Token

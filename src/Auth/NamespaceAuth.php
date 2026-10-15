@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
 /** Namespace-scoped user credentials. */
 final readonly class NamespaceAuth implements Credentials

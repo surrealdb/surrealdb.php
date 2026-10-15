@@ -4,8 +4,8 @@ namespace SurrealDB\Tests\Runtime\FrankenPHP;
 
 use PHPUnit\Framework\TestCase;
 use Revolt\EventLoop;
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Scheduler\Amp\RevoltScheduler;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Scheduler\Amp\RevoltScheduler;
 
 /**
  * Runtime tests for the Revolt fiber scheduler that powers the Amp / FrankenPHP

@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Codec;
+namespace SurrealDB\Codec;
 
 use Beau\CborPHP\CborEncoder;
-use SurrealDB\SDK\Codec\Cbor\CborValueMapper;
+use SurrealDB\Codec\Cbor\CborValueMapper;
 
 final class CborSerializer implements SerializerInterface
 {

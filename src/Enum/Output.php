@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Enum;
+namespace SurrealDB\Enum;
 
 /**
  * The `RETURN` clause variants accepted by mutating statements

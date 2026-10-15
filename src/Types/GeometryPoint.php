@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 /**
  * A GeoJSON `Point` geometry: a single `[longitude, latitude]` coordinate.

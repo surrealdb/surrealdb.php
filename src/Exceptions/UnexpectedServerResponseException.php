@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when the server returns a response the SDK cannot interpret. */
 final class UnexpectedServerResponseException extends SurrealException

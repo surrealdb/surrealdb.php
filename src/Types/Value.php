@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 use JsonSerializable;
-use SurrealDB\SDK\Contracts\SurrealType;
+use SurrealDB\Contracts\SurrealType;
 use function is_array;
 use function is_bool;
 use function is_float;

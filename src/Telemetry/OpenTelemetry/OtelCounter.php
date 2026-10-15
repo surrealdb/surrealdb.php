@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\OpenTelemetry;
+namespace SurrealDB\Telemetry\OpenTelemetry;
 
 use OpenTelemetry\API\Metrics\CounterInterface;
-use SurrealDB\SDK\Contracts\Counter;
+use SurrealDB\Contracts\Counter;
 
 /** Wraps an OpenTelemetry counter instrument. */
 final class OtelCounter implements Counter

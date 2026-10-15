@@ -2,9 +2,9 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Contracts\Span;
-use SurrealDB\SDK\Contracts\Tracer;
-use SurrealDB\SDK\Enum\SpanKind;
+use SurrealDB\Contracts\Span;
+use SurrealDB\Contracts\Tracer;
+use SurrealDB\Enum\SpanKind;
 
 /** A {@see Tracer} that captures started spans for assertions. */
 final class RecordingTracer implements Tracer

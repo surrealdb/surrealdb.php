@@ -3,11 +3,11 @@
 namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Transport\StreamWebSocketClient;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Surreal;
+use SurrealDB\Transport\StreamWebSocketClient;
 
 /**
  * A WebSocket read that waits longer than the socket's read timeout (60 s by
