@@ -3,9 +3,11 @@
 namespace SurrealDB\Tests\Unit\AgentMemory;
 
 use GuzzleHttp\Psr7\Response;
+use GuzzleHttp\Psr7\Utils;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\AgentMemory;
 use SurrealDB\AgentMemory\AgentMemoryOptions;
+use SurrealDB\AgentMemory\DocumentFile;
 use SurrealDB\AgentMemory\Enum\DocumentStatus;
 use SurrealDB\AgentMemory\Enum\GraphEdgeKind;
 use SurrealDB\AgentMemory\Enum\QueryMode;
@@ -122,6 +124,66 @@ final class AgentMemoryComponentsTest extends TestCase
 
         $documents->upload(new DocumentUploadOptions(file: 'x', filename: 'scan.pdf', contentType: 'application/x-custom'));
         $this->assertStringContainsString("Content-Type: application/x-custom\r\n", (string) $connection->body);
+    }
+
+    public function testDocumentUploadTakesTheNameAndTypeFromADocumentFile(): void
+    {
+        $connection = new RecordingHttpConnection(new Response(202, [], '{"id":"doc-4"}'));
+
+        $this->client($connection)->documents->upload(new DocumentUploadOptions(DocumentFile::fromString('# Notes', 'notes.md')));
+
+        $this->assertStringContainsString("filename=\"notes.md\"\r\nContent-Type: text/markdown\r\n\r\n# Notes\r\n", (string) $connection->body);
+    }
+
+    public function testUploadOptionsOverrideTheDocumentFile(): void
+    {
+        $connection = new RecordingHttpConnection(new Response(202, [], '{"id":"doc-5"}'));
+        $documents = $this->client($connection)->documents;
+        $file = DocumentFile::fromString('x', 'a.pdf', 'application/pdf');
+
+        // A new filename does not re-infer the type: the DocumentFile's own type still wins.
+        $documents->upload(new DocumentUploadOptions($file, filename: 'b.md'));
+        $this->assertStringContainsString("filename=\"b.md\"\r\nContent-Type: application/pdf\r\n", (string) $connection->body);
+
+        $documents->reprocess('doc-5', new DocumentUploadOptions($file, contentType: 'text/plain', filename: 'b.md'));
+        $this->assertStringContainsString("filename=\"b.md\"\r\nContent-Type: text/plain\r\n", (string) $connection->body);
+
+        // A DocumentFile with no type falls back to the final filename's.
+        $documents->upload(new DocumentUploadOptions(DocumentFile::fromString('x', 'blob'), filename: 'notes.md'));
+        $this->assertStringContainsString("filename=\"notes.md\"\r\nContent-Type: text/markdown\r\n", (string) $connection->body);
+    }
+
+    public function testDocumentFileWithoutAKnownTypeDeclaresNone(): void
+    {
+        $connection = new RecordingHttpConnection(new Response(202, [], '{"id":"doc-6"}'));
+
+        $this->client($connection)->documents->upload(new DocumentUploadOptions(DocumentFile::fromString('BYTES')));
+
+        $this->assertStringContainsString("filename=\"upload\"\r\n\r\nBYTES\r\n", (string) $connection->body);
+        $this->assertStringNotContainsString('Content-Type: ', (string) $connection->body);
+    }
+
+    public function testDocumentUploadReadsAStreamWholeAndRejectsAnUnreadableOne(): void
+    {
+        $connection = new RecordingHttpConnection(new Response(202, [], '{"id":"doc-7"}'));
+        $documents = $this->client($connection)->documents;
+        $stream = Utils::streamFor('# Notes');
+        $stream->read(3);
+
+        $documents->upload(new DocumentUploadOptions($stream, filename: 'notes.md'));
+        $this->assertStringContainsString("Content-Type: text/markdown\r\n\r\n# Notes\r\n", (string) $connection->body);
+
+        $connection = new RecordingHttpConnection(new Response(202, [], '{"id":"doc-8"}'));
+        $detached = Utils::streamFor('# Notes');
+        $detached->detach();
+
+        try {
+            $this->client($connection)->documents->upload(new DocumentUploadOptions($detached));
+            $this->fail('Expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertSame('Cannot read the document stream: it is not readable.', $e->getMessage());
+            $this->assertNull($connection->url, 'nothing is uploaded');
+        }
     }
 
     public function testDocumentReadEndpointsBuildTheExpectedPaths(): void

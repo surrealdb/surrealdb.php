@@ -32,6 +32,7 @@ interface DocumentsInterface
      * @return UploadResponse
      *
      * @throws UnsupportedMediaTypeException when the server has no parser for the file's media type
+     * @throws InvalidArgumentException      when a stream `file` cannot be read, before any request is sent
      */
     public function upload(DocumentUploadOptions $options): array;
 
@@ -40,6 +41,8 @@ interface DocumentsInterface
      * document keeps its scope; a `scopes` option is ignored.
      *
      * @return UploadResponse
+     *
+     * @throws InvalidArgumentException when a stream `file` cannot be read, before any request is sent
      */
     public function reprocess(string $documentId, DocumentUploadOptions $options): array;
 

@@ -2,6 +2,7 @@
 
 namespace SurrealDB\Tests\Integration\AgentMemory;
 
+use SurrealDB\AgentMemory\DocumentFile;
 use SurrealDB\AgentMemory\EntityRef;
 use SurrealDB\AgentMemory\Enum\InferMode;
 use SurrealDB\AgentMemory\Enum\LookupSection;
@@ -399,6 +400,18 @@ final class AgentMemoryIntegrationTest extends AgentMemoryServerTestCase
 
         $this->expectException(NotFoundException::class);
         $documents->get($upload['id']);
+    }
+
+    public function testDocumentFileDeclaresTheMediaTypeOfItsFilename(): void
+    {
+        $documents = self::memory()->documents;
+        $file = DocumentFile::fromString('# Notes ' . self::$run . "\n", 'notes-' . self::$run . '.md');
+
+        $upload = $documents->upload(new DocumentUploadOptions($file, scopes: self::$scope));
+
+        $this->assertSame('text/markdown', $documents->get($upload['id'])['mimeType']);
+
+        $documents->delete($upload['id']);
     }
 
     public function testDocumentCollectionsPage(): void
