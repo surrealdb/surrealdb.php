@@ -3,7 +3,9 @@
 namespace SurrealDB\Tests\Unit\Engines;
 
 use GuzzleHttp\Psr7\HttpFactory;
+use GuzzleHttp\Psr7\NoSeekStream;
 use GuzzleHttp\Psr7\Response;
+use GuzzleHttp\Psr7\Utils;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
@@ -70,6 +72,20 @@ final class ImportErrorTest extends TestCase
             self::assertSame(400, $error->status);
             self::assertStringContainsString('Import requires `OPTION IMPORT;`', $error->getMessage());
             self::assertStringNotContainsString('"code"', $error->getMessage());
+        }
+    }
+
+    public function testPlainTextFailureKeepsTheBodyOfANonSeekableStream(): void
+    {
+        $db = $this->connect(new Response(502, [], new NoSeekStream(Utils::streamFor('upstream proxy error'))));
+
+        try {
+            $db->import('OPTION IMPORT; CREATE a;');
+            self::fail('Expected the import to fail.');
+        } catch (HttpConnectionException $error) {
+            self::assertSame(502, $error->status);
+            self::assertStringContainsString('upstream proxy error', $error->getMessage());
+            self::assertSame('upstream proxy error', $error->body);
         }
     }
 

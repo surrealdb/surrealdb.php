@@ -50,9 +50,13 @@ final class SurrealHttp
         return $this->resolver->client()->sendRequest($request);
     }
 
-    public static function failure(ResponseInterface $response, ?string $message = null): HttpConnectionException
+    /**
+     * @param string|null $content the response body, when the caller has
+     *                             already consumed it from the stream
+     */
+    public static function failure(ResponseInterface $response, ?string $message = null, ?string $content = null): HttpConnectionException
     {
-        $content = (string) $response->getBody();
+        $content ??= (string) $response->getBody();
 
         return new HttpConnectionException(
             $message ?? ($content !== '' ? $content : $response->getReasonPhrase()),
