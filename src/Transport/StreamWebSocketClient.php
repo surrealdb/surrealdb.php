@@ -27,12 +27,21 @@ final class StreamWebSocketClient implements WebSocketClientInterface
 
     private bool $connected = false;
 
+    /**
+     * Messages read while checking the connection, for {@see self::receive()}.
+     *
+     * @var list<string>
+     */
+    private array $pending = [];
+
     public function __construct(
         private readonly float $connectTimeout = 10.0,
     ) {}
 
     public function connect(string $url, array $subprotocols = [], array $headers = []): void
     {
+        $this->pending = [];
+
         $parts = parse_url($url);
 
         if ($parts === false || !isset($parts['host'])) {
@@ -75,6 +84,20 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         $this->writeFrame(0x9, $payload);
     }
 
+    private function isOpen(): bool
+    {
+        return $this->connected && is_resource($this->socket) && !feof($this->socket);
+    }
+
+    private function hasUnreadData(): bool
+    {
+        $read = [$this->socket];
+        $write = null;
+        $except = null;
+
+        return @stream_select($read, $write, $except, 0) > 0;
+    }
+
     public function close(int $code = 1000, string $reason = ''): void
     {
         if ($this->connected && is_resource($this->socket)) {
@@ -93,14 +116,39 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         $this->connected = false;
     }
 
+    /**
+     * Whether the connection is open. Frames the server already sent are
+     * read first: a close frame waiting in the buffer means the connection is
+     * closed, though the stream is not at EOF until it is read. Messages read
+     * along the way are kept for {@see self::receive()}.
+     */
     public function isConnected(): bool
     {
-        return $this->connected && is_resource($this->socket) && !feof($this->socket);
+        while ($this->isOpen() && $this->hasUnreadData()) {
+            $message = $this->readMessage(null);
+
+            if ($message === null) {
+                break;
+            }
+
+            $this->pending[] = $message;
+        }
+
+        return $this->isOpen();
     }
 
     public function receive(?float $timeout = null): ?string
     {
-        if (!$this->isConnected()) {
+        if ($this->pending !== []) {
+            return array_shift($this->pending);
+        }
+
+        return $this->readMessage($timeout);
+    }
+
+    private function readMessage(?float $timeout): ?string
+    {
+        if (!$this->isOpen()) {
             return null;
         }
 
