@@ -515,6 +515,8 @@ final class ConnectionController
 
     private function onConnected(): void
     {
+        $epoch = $this->connectionEpoch;
+
         try {
             $version = $this->requireEngine()->version()->version;
             $this->cachedVersion = $version;
@@ -547,6 +549,13 @@ final class ConnectionController
             $this->events->publish('connected', $version);
             $this->context->events->dispatch(new Connected($version));
         } catch (\Throwable $error) {
+            // This socket was lost while restoring: the engine is already
+            // reconnecting (or has reconnected), and a later socket announces
+            // itself.
+            if (!$this->isCurrentConnection($epoch)) {
+                return;
+            }
+
             $this->onError($error);
             $this->engine?->close();
         }
