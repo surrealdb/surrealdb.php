@@ -113,10 +113,6 @@ final class RecordId extends Value
             return Value::toSurql($id);
         }
 
-        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $id) === 1) {
-            return $id;
-        }
-
-        return '`' . str_replace('`', '\\`', $id) . '`';
+        return Table::escapeIdent($id);
     }
 }

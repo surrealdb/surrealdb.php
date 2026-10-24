@@ -4,10 +4,14 @@ namespace SurrealDB\SDK\Query;
 
 use SurrealDB\SDK\Contracts\QueryExecutor;
 use SurrealDB\SDK\Contracts\SurrealType;
+use SurrealDB\SDK\Exceptions\ExpressionException;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\SDK\Types\RecordIdRange;
+use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
 use function is_array;
+use function is_string;
 
 /**
  * Base class for the fluent statement builders.
@@ -91,11 +95,11 @@ abstract class QueryBuilder
      * Append a statement target, prefixing `ONLY` for single record IDs so the
      * result is a single record rather than a list (mirroring SurrealDB).
      *
-     * @param RecordId<string>|Table<string>|string $what
+     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
      */
-    protected function appendTarget(BoundQuery $query, RecordId|Table|string $what): void
+    protected function appendTarget(BoundQuery $query, RecordId|RecordIdRange|StringRecordId|Table|string $what): void
     {
-        if ($what instanceof RecordId) {
+        if ($what instanceof RecordId || $what instanceof StringRecordId) {
             $query->append('ONLY ');
         }
 
@@ -103,9 +107,13 @@ abstract class QueryBuilder
     }
 
     /**
-     * Escape a "thing" (record id, table, raw identifier, or list thereof)
-     * inline. Identifiers cannot be passed as parameters over the JSON protocol,
-     * so they are escaped via {@see SurrealType::escape()}.
+     * Escape a "thing" (record id, table, table name, or list thereof) inline.
+     * Identifiers cannot be passed as parameters over the JSON protocol, so
+     * they are escaped via {@see SurrealType::escape()}.
+     *
+     * A plain string is always a table name and is escaped as an identifier;
+     * it is never interpolated as raw SurrealQL. Use a {@see RecordId} or a
+     * {@see StringRecordId} to target a record.
      */
     protected function thing(mixed $value): string
     {
@@ -117,6 +125,10 @@ abstract class QueryBuilder
             return $value->escape();
         }
 
-        return (string) $value;
+        if (is_string($value)) {
+            return Table::escapeIdent($value);
+        }
+
+        throw new ExpressionException('Unsupported statement target: ' . get_debug_type($value));
     }
 }
