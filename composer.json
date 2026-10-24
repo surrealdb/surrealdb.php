@@ -20,7 +20,7 @@
         "psr/http-message": "^1.1 || ^2.0",
         "psr/log": "^3.0",
         "symfony/uid": "^7.0 || ^8.1",
-        "welpie21/cbor.php": "^2.1"
+        "welpie21/cbor.php": "^2.1.2"
     },
     "require-dev": {
         "amphp/http-client": "^5.3",
