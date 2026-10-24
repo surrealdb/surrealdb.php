@@ -66,9 +66,11 @@ final class CborValueMapper
 				$data->toCompact(),
 			),
 			$data instanceof Future => self::tag(CborTag::FUTURE, $data->body),
+			// Tag 37 with the 16 raw bytes. SurrealDB 4.0 refuses the text form
+			// (tag 9), and every server since 1.5.0 reads this one.
 			$data instanceof Uuid => self::tag(
-				CborTag::STRING_UUID,
-				(string) $data,
+				CborTag::SPEC_UUID,
+				new CborByteString($data->toBytes()),
 			),
 			$data instanceof Bytes => new CborByteString($data->bytes),
 			$data instanceof File => self::unsupportedHighTag(CborTag::FILE),
