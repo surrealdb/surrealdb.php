@@ -840,10 +840,6 @@ final class ConnectionController
     }
 
     /**
-     * An explicit change starts a new generation, before its request goes
-     * out; a renewal or restore (`$skipOverride`) carries on the current one.
-     */
-    /**
      * Send an authentication request. Until an explicit one is answered, the
      * session's credentials are about to change, so renewals hold off rather
      * than renew what is being replaced.
@@ -870,6 +866,10 @@ final class ConnectionController
         }
     }
 
+    /**
+     * An explicit change starts a new generation, before its request goes
+     * out; a renewal or restore (`$skipOverride`) carries on the current one.
+     */
     private function beginAuthChange(SessionState $sessionState, bool $skipOverride): int
     {
         return $skipOverride ? $sessionState->auth->generation : ++$sessionState->auth->generation;
