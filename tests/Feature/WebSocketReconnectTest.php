@@ -388,7 +388,14 @@ final class WebSocketReconnectTest extends TestCase
                 if (count($received) === 1) {
                     $db->create(new RecordId('person', 'three'))->execute();
                     $db->run('KILL ' . Uuid::from($live->id())->escape());
-                    $db->run('RETURN 1');
+
+                    // The server sends KILLED on its own task, so it can land
+                    // just after a round trip's reply: wait for it briefly.
+                    for ($attempt = 0; $attempt < 100 && $live->isAlive(); $attempt++) {
+                        $db->run('RETURN 1');
+                        usleep(20_000);
+                    }
+
                     self::assertFalse($live->isAlive());
                 }
             }
