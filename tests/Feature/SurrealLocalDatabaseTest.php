@@ -6,10 +6,14 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Exceptions\AlreadyExistsException;
+use SurrealDB\SDK\Exceptions\ServerException;
+use SurrealDB\SDK\Exceptions\ThrownException;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use function sprintf;
 
 /**
  * Database-backed coverage for the public SDK surface.
@@ -172,6 +176,53 @@ SURQL);
     }
 
     #[DataProvider('protocols')]
+    public function testImportReportsFailuresAndRoundTripsAnExport(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            // Strict servers only write to defined tables.
+            $db->import("OPTION IMPORT;\nDEFINE TABLE person;\nCREATE person:tobie SET name = 'Tobie';");
+            self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
+
+            try {
+                $db->import("OPTION IMPORT;\nCREATE person:jaime SET name = 'Jaime';\nTHROW 'boom';");
+                self::fail('Expected the import to fail.');
+            } catch (ServerException $error) {
+                self::assertStringContainsString('Import failed at statement', $error->getMessage());
+                self::assertStringContainsString('boom', $error->getMessage());
+
+                // SurrealDB 2.x reports no error kind, so only 3.x is typed.
+                if ($this->serverMajor($db) >= 3) {
+                    self::assertInstanceOf(ThrownException::class, $error);
+                }
+            }
+
+            try {
+                $db->import("OPTION IMPORT;\nCREATE person:tobie SET name = 'Again';");
+                self::fail('Expected the duplicate record to fail the import.');
+            } catch (ServerException $error) {
+                self::assertStringContainsString('already exists', $error->getMessage());
+
+                if ($this->serverMajor($db) >= 3) {
+                    self::assertInstanceOf(AlreadyExistsException::class, $error);
+                }
+            }
+
+            $export = $db->export();
+            self::assertStringContainsString('OPTION IMPORT;', $export);
+            self::assertStringContainsString('Tobie', $export);
+
+            $db->run('REMOVE TABLE person');
+            $db->import($export);
+
+            self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
     public function testStringTargetsCannotInjectSurrealQl(string $protocol): void
     {
         $db = $this->connect($protocol);
@@ -220,6 +271,11 @@ SURQL);
     /**
      * @param 'http'|'ws' $protocol
      */
+    private function serverMajor(Surreal $db): int
+    {
+        return (int) preg_replace('/^surrealdb-/', '', $db->version());
+    }
+
     private function connect(string $protocol): Surreal
     {
         $db = new Surreal();

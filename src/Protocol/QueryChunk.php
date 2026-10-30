@@ -41,8 +41,9 @@ final class QueryChunk
 
         $message = is_string($result['result'] ?? null) ? $result['result'] : 'Query execution failed';
         $details = isset($result['details']) && is_array($result['details']) ? $result['details'] : null;
+        $kind = is_string($result['kind'] ?? null) ? $result['kind'] : 'Query';
 
-        return new self($index, null, 'ERR', $time, new ServerException('Query', $message, 0, $details));
+        return new self($index, null, 'ERR', $time, ServerException::create($kind, $message, 0, $details));
     }
 
     public function isError(): bool
