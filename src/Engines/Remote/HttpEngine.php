@@ -33,6 +33,8 @@ final class HttpEngine extends AbstractRpcEngine
         return new FeatureSet(
             Features::refreshTokens(),
             Features::api(),
+            Features::gql(),
+            Features::graphql(),
             Features::exportImportRaw(),
             Features::surrealMl(),
         );
@@ -96,12 +98,23 @@ final class HttpEngine extends AbstractRpcEngine
             throw new MissingNamespaceDatabaseException();
         }
 
+        // HTTP has no server-side session, so the variables `let()` kept
+        // locally go along with each query; explicit ones win.
         if ($request->method === 'query') {
             $params = $request->params;
             $bindings = is_array($params[1] ?? null) ? $params[1] : [];
             $mergedBindings = [...$session->variables, ...$bindings];
             $params[1] = $mergedBindings !== [] ? $mergedBindings : null;
             $request = $request->withParams($params);
+        } elseif ($request->method === 'gql') {
+            $params = $request->params;
+            $variables = is_array($params[1] ?? null) ? $params[1] : [];
+            $merged = [...$session->variables, ...$variables];
+
+            if ($merged !== []) {
+                $params[1] = $merged;
+                $request = $request->withParams($params);
+            }
         }
 
         return $this->transport->send($request);

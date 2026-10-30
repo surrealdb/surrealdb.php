@@ -26,6 +26,9 @@ final class LiveFeed implements \IteratorAggregate
 
     private bool $closed = false;
 
+    /** The socket went away: nothing more arrives, but the queue is still yielded. */
+    private bool $ended = false;
+
     /** A `KILLED` notification was received: the server ended the query. */
     private bool $killed = false;
 
@@ -51,7 +54,7 @@ final class LiveFeed implements \IteratorAggregate
         $this->unsubscribe = $unsubscribe;
 
         // A held KILLED notification was replayed while registering.
-        if ($this->closed || $this->killed) {
+        if (!$this->isReceiving()) {
             $this->unregister();
         }
     }
@@ -61,7 +64,7 @@ final class LiveFeed implements \IteratorAggregate
      */
     public function push(LiveMessage $message): void
     {
-        if ($this->closed || $this->killed) {
+        if (!$this->isReceiving()) {
             return;
         }
 
@@ -78,8 +81,7 @@ final class LiveFeed implements \IteratorAggregate
     }
 
     /**
-     * Stop receiving: deregister from the engine and end any iteration once
-     * the messages already queued have been yielded.
+     * Stop receiving and end iteration, dropping anything still queued.
      */
     public function close(): void
     {
@@ -88,22 +90,35 @@ final class LiveFeed implements \IteratorAggregate
         }
 
         $this->closed = true;
+        $this->queue = [];
         $this->unregister();
         $this->wake();
     }
 
     /**
-     * Stop receiving and drop what is queued: nothing more is yielded.
+     * The connection this feed listened on is gone: stop receiving, and end
+     * iteration once the messages already queued have been yielded.
      */
-    public function discard(): void
+    public function end(): void
     {
-        $this->queue = [];
-        $this->close();
+        if ($this->ended || $this->closed) {
+            return;
+        }
+
+        $this->ended = true;
+        $this->unregister();
+        $this->wake();
     }
 
     public function isClosed(): bool
     {
         return $this->closed;
+    }
+
+    /** Whether more notifications can still arrive. */
+    public function isReceiving(): bool
+    {
+        return !$this->closed && !$this->ended && !$this->killed;
     }
 
     /** Whether the server ended the live query (a `KILLED` notification arrived). */
@@ -135,7 +150,7 @@ final class LiveFeed implements \IteratorAggregate
                 }
             }
 
-            if ($this->closed || !($this->isOpen)()) {
+            if ($this->closed || $this->ended || !($this->isOpen)()) {
                 return;
             }
 

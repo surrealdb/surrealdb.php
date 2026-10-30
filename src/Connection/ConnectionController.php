@@ -7,6 +7,7 @@ use SurrealDB\SDK\Auth\Credentials;
 use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Auth\Tokens;
 use SurrealDB\SDK\Contracts\AuthProviderInterface;
+use SurrealDB\SDK\Contracts\Deferred;
 use SurrealDB\SDK\Contracts\ConnectionProbeInterface;
 use SurrealDB\SDK\Contracts\Counter;
 use SurrealDB\SDK\Contracts\EngineInterface;
@@ -30,6 +31,7 @@ use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedVersionException;
 use SurrealDB\SDK\Live\LiveSubscription;
+use SurrealDB\SDK\Live\ManagedLiveSubscription;
 use SurrealDB\SDK\Protocol\Feature;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Protocol\NamespaceDatabase;
@@ -71,11 +73,48 @@ final class ConnectionController
     /** @var list<\Closure> */
     private array $unsubscribers = [];
 
+    /**
+     * Managed live subscriptions to replay after a reconnect. Weak, so a
+     * subscription the application dropped is not kept alive.
+     *
+     * @var \WeakMap<ManagedLiveSubscription,true>
+     */
+    private \WeakMap $managedLive;
+
+    /**
+     * Counts reconnect attempts, so work done for one socket can tell that
+     * it has since been lost.
+     */
+    private int $connectionEpoch = 0;
+
+    /** How long to wait before retrying a renewal that failed. */
+    private const RENEWAL_RETRY_SECONDS = 5;
+
+    /**
+     * When each session's token is due for renewal (Unix time), keyed by
+     * session id ('' for the default session). Checked before calls, so
+     * renewal also happens under the synchronous scheduler, which cannot
+     * run the timer {@see self::scheduleRenewal()} starts.
+     *
+     * @var array<string,int>
+     */
+    private array $renewAt = [];
+
+    /**
+     * Renewals in flight, keyed like {@see self::$renewAt}: the task doing
+     * each, a guard telling it its entry is still its own, and a deferred
+     * for each other task waiting on it (a deferred resumes only one waiter).
+     *
+     * @var array<string,array{task: object|int|null, guard: object, waiters: list<Deferred<mixed>>}>
+     */
+    private array $renewing = [];
+
     public function __construct(
         private readonly DriverContext $context,
         ?EngineRegistry $registry = null,
     ) {
         $this->events = new Publisher();
+        $this->managedLive = new \WeakMap();
         $this->registry = $registry ?? new EngineRegistry($context->options->engines ?? []);
         $this->connections = $context->meter->counter(
             'db.client.connection.count',
@@ -122,6 +161,10 @@ final class ConnectionController
         $engine = $this->registry->create($endpoint->scheme, $this->context);
 
         $this->disconnect();
+
+        // Callbacks still running for the previous connection must not
+        // mistake this one for theirs.
+        $this->connectionEpoch++;
 
         $this->engine = $engine;
         $this->authProvider = $options->authentication;
@@ -213,6 +256,7 @@ final class ConnectionController
     public function use(?NamespaceDatabase $what, ?string $session = null): NamespaceDatabase
     {
         $sessionState = $this->requireSession($session);
+        $this->renewIfDue($session);
         $result = $this->requireEngine()->use($what, $session);
 
         if ($result->namespace !== null) {
@@ -236,8 +280,14 @@ final class ConnectionController
      */
     public function signin(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
-        $this->requireSession($session);
-        $tokens = $this->requireEngine()->signin($auth, $session);
+        $sessionState = $this->requireSession($session);
+        $generation = $this->beginAuthChange($sessionState, $skipOverride);
+        $tokens = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->signin($auth, $session));
+
+        if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
+            return $tokens;
+        }
+
         $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
@@ -250,8 +300,14 @@ final class ConnectionController
      */
     public function signup(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
-        $this->requireSession($session);
-        $tokens = $this->requireEngine()->signup($auth, $session);
+        $sessionState = $this->requireSession($session);
+        $generation = $this->beginAuthChange($sessionState, $skipOverride);
+        $tokens = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->signup($auth, $session));
+
+        if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
+            return $tokens;
+        }
+
         $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
@@ -262,7 +318,13 @@ final class ConnectionController
     public function authenticate(string $token, ?string $session = null, bool $skipOverride = false): void
     {
         $sessionState = $this->requireSession($session);
-        $this->requireEngine()->authenticate($token, $session);
+        $generation = $this->beginAuthChange($sessionState, $skipOverride);
+        $this->sendAuth($sessionState, $skipOverride, fn () => $this->requireEngine()->authenticate($token, $session));
+
+        if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
+            return;
+        }
+
         $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $sessionState->auth->accessToken = $token;
         $sessionState->auth->overridden = $sessionState->auth->overridden || !$skipOverride;
@@ -272,7 +334,14 @@ final class ConnectionController
     public function refresh(Tokens $tokens, ?string $session = null, bool $skipOverride = false): Tokens
     {
         $this->assertFeature(Features::refreshTokens());
-        $refreshed = $this->requireEngine()->refresh($tokens, $session);
+        $sessionState = $this->requireSession($session);
+        $generation = $this->beginAuthChange($sessionState, $skipOverride);
+        $refreshed = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->refresh($tokens, $session));
+
+        if (!$this->isCurrentAuth($session, $sessionState->auth, $generation)) {
+            return $refreshed;
+        }
+
         $this->applyTokens($session, $refreshed, $skipOverride);
 
         return $refreshed;
@@ -281,12 +350,14 @@ final class ConnectionController
     public function revoke(Tokens $tokens, ?string $session = null): void
     {
         $this->assertFeature(Features::refreshTokens());
+        $this->requireSession($session);
         $this->requireEngine()->revoke($tokens, $session);
     }
 
     public function set(string $name, mixed $value, ?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
+        $this->renewIfDue($session);
         $this->requireEngine()->set($name, $value, $session);
         $sessionState->variables[$name] = $value;
     }
@@ -294,6 +365,7 @@ final class ConnectionController
     public function unset(string $name, ?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
+        $this->renewIfDue($session);
         $this->requireEngine()->unset($name, $session);
         unset($sessionState->variables[$name]);
     }
@@ -301,7 +373,8 @@ final class ConnectionController
     public function invalidate(?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
-        $this->requireEngine()->invalidate($session);
+        $this->beginAuthChange($sessionState, false);
+        $this->sendAuth($sessionState, false, fn () => $this->requireEngine()->invalidate($session));
         $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
     }
@@ -309,7 +382,8 @@ final class ConnectionController
     public function reset(?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
-        $this->requireEngine()->reset($session);
+        $this->beginAuthChange($sessionState, false);
+        $this->sendAuth($sessionState, false, fn () => $this->requireEngine()->reset($session));
         $sessionState->namespace = null;
         $sessionState->database = null;
         $sessionState->variables = [];
@@ -327,6 +401,7 @@ final class ConnectionController
     public function begin(?string $session = null): string
     {
         $this->assertFeature(Features::transactions());
+        $this->renewIfDue($session);
 
         // Committing sends the transaction id as a UUID value, which JSON
         // cannot express; refuse up front rather than leave it open.
@@ -353,17 +428,20 @@ final class ConnectionController
     public function commit(string $txn, ?string $session = null): void
     {
         $this->assertFeature(Features::transactions());
+        $this->renewIfDue($session);
         $this->endTransaction($txn, $session, fn () => $this->requireEngine()->commit($txn, $session));
     }
 
     public function cancel(string $txn, ?string $session = null): void
     {
         $this->assertFeature(Features::transactions());
+        $this->renewIfDue($session);
         $this->endTransaction($txn, $session, fn () => $this->requireEngine()->cancel($txn, $session));
     }
 
     public function importSql(string $data): void
     {
+        $this->renewIfDue(null);
         $this->requireEngine()->importSql($data);
     }
 
@@ -372,6 +450,7 @@ final class ConnectionController
      */
     public function exportSql(array $options = []): string
     {
+        $this->renewIfDue(null);
         return $this->requireEngine()->exportSql($options);
     }
 
@@ -382,8 +461,35 @@ final class ConnectionController
     {
         // A closed session's handle fails here rather than on the server.
         $this->requireSession($session);
+        $this->renewIfDue($session);
 
         return $this->requireEngine()->query($query, $session, $txn);
+    }
+
+    /**
+     * @param array<string,mixed> $variables
+     *
+     * @return iterable<\SurrealDB\SDK\Protocol\QueryChunk<mixed>>
+     */
+    public function gql(string $query, array $variables = [], ?string $session = null, ?string $txn = null): iterable
+    {
+        $this->assertFeature(Features::gql());
+        $this->requireSession($session);
+        $this->renewIfDue($session);
+
+        return $this->requireEngine()->gql($query, $variables, $session, $txn);
+    }
+
+    /**
+     * @param array<string,mixed> $variables
+     */
+    public function graphql(string $query, array $variables = [], ?string $operation = null, ?string $session = null): mixed
+    {
+        $this->assertFeature(Features::graphql());
+        $this->requireSession($session);
+        $this->renewIfDue($session);
+
+        return $this->requireEngine()->graphql($query, $variables, $operation, $session);
     }
 
     /**
@@ -412,6 +518,8 @@ final class ConnectionController
     {
         $this->assertFeature(Features::sessions());
 
+        $this->renewIfDue(null);
+
         return $this->requireEngine()->sessions();
     }
 
@@ -428,6 +536,22 @@ final class ConnectionController
     public function forkSession(?string $source): string
     {
         return $this->attachSession($this->requireSession($source));
+    }
+
+    /**
+     * @internal replay this subscription's LIVE query after a reconnect
+     */
+    public function trackLive(ManagedLiveSubscription $subscription): void
+    {
+        $this->managedLive[$subscription] = true;
+    }
+
+    /**
+     * @internal
+     */
+    public function untrackLive(ManagedLiveSubscription $subscription): void
+    {
+        unset($this->managedLive[$subscription]);
     }
 
     public function destroySession(?string $session): void
@@ -450,6 +574,8 @@ final class ConnectionController
 
     private function onConnected(): void
     {
+        $epoch = $this->connectionEpoch;
+
         try {
             $version = $this->requireEngine()->version()->version;
             $this->cachedVersion = $version;
@@ -471,13 +597,134 @@ final class ConnectionController
 
             $this->requireEngine()->ready();
 
+            // Before announcing the connection, so a listener that writes in
+            // response already has the live queries listening. If this socket
+            // was lost meanwhile, the next one announces itself instead.
+            if (!$this->replayLiveQueries()) {
+                return;
+            }
+
             $this->status = ConnectionStatus::Connected;
             $this->events->publish('connected', $version);
             $this->context->events->dispatch(new Connected($version));
         } catch (\Throwable $error) {
+            // This socket was lost while restoring: the engine is already
+            // reconnecting (or has reconnected), and a later socket announces
+            // itself.
+            if (!$this->isCurrentConnection($epoch)) {
+                return;
+            }
+
             $this->onError($error);
             $this->engine?->close();
         }
+    }
+
+    /**
+     * Re-issue managed live queries on a new socket, once their sessions are
+     * restored. A subscription whose query fails ends; the others carry on.
+     *
+     * @return bool false if the socket was lost while replaying
+     */
+    private function replayLiveQueries(): bool
+    {
+        $epoch = $this->connectionEpoch;
+        $subscriptions = [];
+        $replayed = [];
+
+        // Held weakly, so a subscription the application lets go of while an
+        // earlier one is replaying is not replayed too, and left running on
+        // the server once the batch drops it.
+        foreach ($this->managedLive as $subscription => $_) {
+            $subscriptions[] = \WeakReference::create($subscription);
+        }
+
+        unset($subscription);
+
+        foreach ($subscriptions as $weak) {
+            $subscription = $weak->get();
+
+            if ($subscription === null) {
+                continue;
+            }
+
+            // Its session is gone (or it was killed): end it, which also
+            // releases an iteration waiting for the replay.
+            if (!$subscription->isAlive()) {
+                unset($this->managedLive[$subscription]);
+                $subscription->connectionClosed();
+
+                continue;
+            }
+
+            try {
+                $subscription->replay();
+            } catch (\Throwable $error) {
+                // The new socket was lost too: the subscriptions stay
+                // tracked and waiting, for the next connection to replay.
+                if ($this->connectionEpoch !== $epoch) {
+                    return false;
+                }
+
+                unset($this->managedLive[$subscription]);
+                $subscription->connectionClosed();
+                $this->onError($error);
+
+                // An error listener closed the connection.
+                if (!$this->isCurrentConnection($epoch)) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            $replayed[] = $weak;
+
+            // The application may have let go of it while its query was in
+            // flight. Once this loop lets go too, nothing would stop the new
+            // query on the server.
+            $id = $subscription->id();
+            $owner = $subscription->session();
+            unset($subscription);
+
+            if ($weak->get() === null && $id !== '') {
+                try {
+                    LiveSubscription::killOnServer($this, $id, $owner);
+                } catch (\Throwable) {
+                    // Best effort: it is gone on this side either way.
+                }
+
+                // That lost the socket: the next one replays the rest.
+                if (!$this->isCurrentConnection($epoch)) {
+                    return false;
+                }
+            }
+        }
+
+        // Only now, so a consumer that writes as soon as it resumes does not
+        // miss a change a query still being replayed would have caught.
+        unset($subscription);
+
+        foreach ($replayed as $weak) {
+            // A resumed consumer can run straight away (OpenSwoole) and lose
+            // this socket too: the rest then wait for the next replay.
+            if (!$this->isCurrentConnection($epoch)) {
+                return false;
+            }
+
+            $weak->get()?->resumeIteration();
+        }
+
+        return $this->isCurrentConnection($epoch);
+    }
+
+    /**
+     * Whether the socket a callback started on is still the live one: not
+     * lost since, and the connection not closed.
+     */
+    private function isCurrentConnection(int $epoch): bool
+    {
+        return $this->engine !== null && $this->connectionEpoch === $epoch;
     }
 
     private function onDisconnected(): void
@@ -489,9 +736,34 @@ final class ConnectionController
         $this->unsubscribers = [];
         $this->state = null;
         $this->engine = null;
+        $this->renewAt = [];
+
+        // Renewals still running belong to the closed connection: release
+        // the tasks waiting on them, and leave the next connection to renew
+        // for itself.
+        $renewing = $this->renewing;
+        $this->renewing = [];
+        $live = $this->managedLive;
+        $this->managedLive = new \WeakMap();
+
+        // Announced before waking anyone: a woken task can run straight away
+        // (OpenSwoole) and connect again, which this must not then undo.
         $this->status = ConnectionStatus::Disconnected;
-        $this->events->publish('disconnected');
-        $this->context->events->dispatch(new Disconnected());
+
+        try {
+            $this->events->publish('disconnected');
+            $this->context->events->dispatch(new Disconnected());
+        } finally {
+            foreach ($renewing as $renewal) {
+                foreach ($renewal['waiters'] as $waiter) {
+                    $waiter->resolve(true);
+                }
+            }
+
+            foreach ($live as $subscription => $_) {
+                $subscription->connectionClosed();
+            }
+        }
     }
 
     private function onReconnecting(): void
@@ -506,8 +778,26 @@ final class ConnectionController
         }
 
         $this->status = ConnectionStatus::Reconnecting;
-        $this->events->publish('reconnecting');
-        $this->context->events->dispatch(new Reconnecting());
+        $this->connectionEpoch++;
+
+        foreach ($this->managedLive as $subscription => $_) {
+            $subscription->suspend($this->context->scheduler);
+        }
+
+        // A listener that throws must not stop the reconnect half way, which
+        // would leave the engine neither connected nor closed.
+        $announcements = [
+            fn () => $this->events->publish('reconnecting'),
+            fn () => $this->context->events->dispatch(new Reconnecting()),
+        ];
+
+        foreach ($announcements as $announce) {
+            try {
+                $announce();
+            } catch (\Throwable $error) {
+                $this->onError($error);
+            }
+        }
     }
 
     private function onError(\Throwable $error): void
@@ -549,6 +839,54 @@ final class ConnectionController
         }
     }
 
+    /**
+     * Send an authentication request. Until an explicit one is answered, the
+     * session's credentials are about to change, so renewals hold off rather
+     * than renew what is being replaced.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $request
+     *
+     * @return T
+     */
+    private function sendAuth(SessionState $sessionState, bool $skipOverride, \Closure $request): mixed
+    {
+        if ($skipOverride) {
+            return $request();
+        }
+
+        $auth = $sessionState->auth;
+        $auth->pending++;
+
+        try {
+            return $request();
+        } finally {
+            $auth->pending--;
+        }
+    }
+
+    /**
+     * An explicit change starts a new generation, before its request goes
+     * out; a renewal or restore (`$skipOverride`) carries on the current one.
+     */
+    private function beginAuthChange(SessionState $sessionState, bool $skipOverride): int
+    {
+        return $skipOverride ? $sessionState->auth->generation : ++$sessionState->auth->generation;
+    }
+
+    /**
+     * Whether nothing changed the session's authentication since `$generation`
+     * began: no explicit sign-in or sign-out, and still the same connection.
+     * Other tasks change that while this one waits.
+     *
+     * @phpstan-impure
+     */
+    private function isCurrentAuth(?string $session, AuthState $auth, int $generation): bool
+    {
+        return $this->state?->session($session)?->auth === $auth && $auth->generation === $generation;
+    }
+
     private function applyTokens(?string $session, Tokens $tokens, bool $skipOverride): void
     {
         $sessionState = $this->requireSession($session);
@@ -581,12 +919,16 @@ final class ConnectionController
         }
 
         $sessionState->auth->clear();
+        unset($this->renewAt[$session ?? '']);
         $this->events->publish('auth', null, $session);
         $this->context->events->dispatch(new AuthChanged(null, $session));
     }
 
     private function scheduleRenewal(?string $session): void
     {
+        // Whatever the previous token was due for no longer applies.
+        unset($this->renewAt[$session ?? '']);
+
         $sessionState = $this->state?->session($session);
         $token = $sessionState?->auth->accessToken;
 
@@ -600,32 +942,169 @@ final class ConnectionController
             return;
         }
 
-        $delay = max($expiry - time() - 60, 0);
+        // Renew a minute early. With renewal off there is nothing to do
+        // early: the session is signed out once the token expires.
+        $lead = $this->skipRenewal ? 0 : 60;
+        $delay = max($expiry - time() - $lead, 0);
+        $this->renewAt[$session ?? ''] = $expiry - $lead;
 
         // Runs only under an async scheduler; the sync scheduler treats spawn as
-        // a no-op and relies on reactive renewal (e.g. AuthMiddleware) instead.
+        // a no-op and relies on the checks before each call instead. The timer
+        // goes through the same deadline as those checks, so a renewal already
+        // done (or in flight) is not repeated, and a timer left over from an
+        // earlier token finds the deadline moved on.
         $this->context->scheduler->spawn(function () use ($delay, $session): void {
             $this->context->scheduler->delay((float) $delay);
+            $this->renewIfDue($session);
+        });
+    }
 
-            try {
-                $kept = $this->applyAuthentication($session, keepValidToken: true);
+    /**
+     * Renew the session's token if it is due. Under an async scheduler the
+     * timer from {@see self::scheduleRenewal()} usually got there first.
+     */
+    private function renewIfDue(?string $session): void
+    {
+        $key = $session ?? '';
+        $at = $this->renewalDeadline($key);
+
+        if ($at === null || time() < $at) {
+            return;
+        }
+
+        // An explicit sign-in or sign-out is waiting on the server: it
+        // replaces or clears these credentials. Check again shortly, in case
+        // it fails and they still need renewing.
+        if (($this->state?->session($session)?->auth->pending ?? 0) > 0) {
+            $this->checkRenewalAt($session, time() + self::RENEWAL_RETRY_SECONDS);
+
+            return;
+        }
+
+        $renewal = $this->renewing[$key] ?? null;
+
+        if ($renewal !== null) {
+            // Another task is renewing: wait for its token rather than send
+            // the old one. The renewing task itself (an auth provider that
+            // queries, say) goes ahead.
+            if ($renewal['task'] !== self::currentTask()) {
+                /** @var Deferred<mixed> $done */
+                $done = $this->context->scheduler->defer();
+                $this->renewing[$key]['waiters'][] = $done;
+
+                try {
+                    $done->await();
+                } catch (\Throwable) {
+                    // The renewing task reports its own failure.
+                }
+            }
+
+            return;
+        }
+
+        $guard = new \stdClass();
+        $this->renewing[$key] = ['task' => self::currentTask(), 'guard' => $guard, 'waiters' => []];
+
+        try {
+            // A new token schedules the next deadline, and signing out clears
+            // it. The same token again (one that could not be replaced, or a
+            // fixed token from the auth provider) is checked once more when it
+            // expires, when the provider may have a new one.
+            $this->applyAuthentication($session, keepValidToken: true);
+
+            if ($this->renewalDeadline($key) === $at) {
                 $token = $this->state?->session($session)?->auth->accessToken;
                 $expiry = $token === null ? null : Jwt::expiry($token);
 
-                // Nothing could replace the token: check again once it has
-                // expired, which signs the session out (and ends its live
-                // queries) unless something can replace it by then.
-                if ($kept && $expiry !== null) {
-                    $this->context->scheduler->delay((float) max($expiry - time(), 0));
+                if ($expiry !== null && $expiry > $at) {
+                    $this->renewAt[$key] = $expiry;
 
-                    if ($this->state?->session($session)?->auth->accessToken === $token) {
-                        $this->applyAuthentication($session);
-                    }
+                    // Checked at expiry even if no call comes along: that
+                    // signs the session out (and ends its live queries)
+                    // unless something can replace it.
+                    $this->checkRenewalAt($session, $expiry);
+                } else {
+                    unset($this->renewAt[$key]);
                 }
-            } catch (\Throwable $error) {
-                $this->onError(new AuthenticationException('Token renewal failed', $error));
             }
+        } catch (\Throwable $error) {
+            // The connection it renewed for was closed meanwhile: its failure
+            // is not the current connection's to report.
+            if (!$this->ownsRenewal($key, $guard)) {
+                return;
+            }
+
+            // Try again shortly rather than carry on with a token about to
+            // expire.
+            if ($this->renewalDeadline($key) === $at) {
+                $this->renewAt[$key] = time() + self::RENEWAL_RETRY_SECONDS;
+                $this->checkRenewalAt($session, $this->renewAt[$key]);
+            }
+
+            $this->onError(new AuthenticationException('Token renewal failed', $error));
+        } finally {
+            // Unless the connection was closed meanwhile, which released the
+            // waiters and may have let a new connection start its own.
+            if ($this->ownsRenewal($key, $guard)) {
+                $waiters = $this->renewing[$key]['waiters'];
+                unset($this->renewing[$key]);
+
+                foreach ($waiters as $waiter) {
+                    $waiter->resolve(true);
+                }
+            }
+        }
+    }
+
+    /**
+     * Under an async scheduler, check the renewal at `$at` even if no call
+     * comes along (the sync scheduler treats spawn as a no-op, and relies on
+     * the checks before each call).
+     */
+    private function checkRenewalAt(?string $session, int $at): void
+    {
+        $this->context->scheduler->spawn(function () use ($at, $session): void {
+            $this->context->scheduler->delay((float) max($at - time(), 0));
+            $this->renewIfDue($session);
         });
+    }
+
+    /**
+     * Whether the renewal holding `$guard` is still the one in flight for
+     * `$key`: closing the connection drops the guards while renewals wait.
+     */
+    private function ownsRenewal(string $key, object $guard): bool
+    {
+        return isset($this->renewing[$key]) && $this->renewing[$key]['guard'] === $guard;
+    }
+
+    /**
+     * The fiber or coroutine running now, or null outside one (where nothing
+     * else can run at the same time).
+     */
+    private static function currentTask(): object|int|null
+    {
+        $fiber = \Fiber::getCurrent();
+
+        if ($fiber !== null) {
+            return $fiber;
+        }
+
+        if (class_exists(\OpenSwoole\Coroutine::class)) {
+            $id = \OpenSwoole\Coroutine::getCid();
+
+            return $id > 0 ? $id : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Read fresh each time: renewing reschedules (or clears) the deadline.
+     */
+    private function renewalDeadline(string $key): ?int
+    {
+        return $this->renewAt[$key] ?? null;
     }
 
     /**
@@ -650,7 +1129,11 @@ final class ConnectionController
             return false;
         }
 
-        $token = $sessionState->auth->accessToken;
+        // Each step below can wait (on the server, or on an auth provider),
+        // and an explicit sign-in or sign-out meanwhile takes precedence.
+        $auth = $sessionState->auth;
+        $generation = $auth->generation;
+        $token = $auth->accessToken;
 
         if ($token !== null) {
             $expiry = Jwt::expiry($token);
@@ -664,6 +1147,10 @@ final class ConnectionController
                     // Fall through to the next strategy.
                 }
             }
+        }
+
+        if (!$this->isCurrentAuth($session, $auth, $generation)) {
+            return false;
         }
 
         if ($sessionState->auth->refreshToken !== null) {
@@ -680,7 +1167,15 @@ final class ConnectionController
             }
         }
 
-        if (!$sessionState->auth->overridden && $this->applyAuthProvider($session)) {
+        if (!$this->isCurrentAuth($session, $auth, $generation)) {
+            return false;
+        }
+
+        if (!$sessionState->auth->overridden && $this->applyAuthProvider($session, $auth, $generation)) {
+            return false;
+        }
+
+        if (!$this->isCurrentAuth($session, $auth, $generation)) {
             return false;
         }
 
@@ -693,13 +1188,18 @@ final class ConnectionController
         return false;
     }
 
-    private function applyAuthProvider(?string $session): bool
+    private function applyAuthProvider(?string $session, AuthState $auth, int $generation): bool
     {
         if ($this->authProvider === null) {
             return false;
         }
 
         $computed = $this->resolveProvider($this->authProvider, $session);
+
+        // Signed in or out explicitly while the provider ran: that stands.
+        if (!$this->isCurrentAuth($session, $auth, $generation)) {
+            return true;
+        }
 
         if ($computed === null) {
             return false;
