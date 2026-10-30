@@ -6,7 +6,6 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Codec\CborDeserializer;
 use SurrealDB\SDK\Codec\CborSerializer;
-use SurrealDB\SDK\Exceptions\SerializationException;
 use SurrealDB\SDK\Types\BoundExcluded;
 use SurrealDB\SDK\Types\BoundIncluded;
 use SurrealDB\SDK\Types\Bytes;
@@ -133,7 +132,7 @@ final class CborCodecTest extends TestCase
     /**
      * @return iterable<string, array{Value}>
      */
-    public static function unsupportedHighTagValueProvider(): iterable
+    public static function highTagValueProvider(): iterable
     {
         $line = new GeometryLine(new GeometryPoint(0.0, 0.0), new GeometryPoint(1.0, 1.0));
         $polygon = new GeometryPolygon(new GeometryLine(
@@ -144,7 +143,9 @@ final class CborCodecTest extends TestCase
         ));
 
         yield 'record-id-range' => [new RecordIdRange('person', new BoundIncluded(1), new BoundExcluded(100))];
+        yield 'record-id-range open end' => [new RecordIdRange('person', new BoundExcluded('a'), null)];
         yield 'range' => [new Range(new BoundIncluded(1), new BoundExcluded(10))];
+        yield 'unbounded range' => [new Range(null, null)];
         yield 'file' => [new File('bucket', '/path.txt')];
         yield 'set' => [new Set([1, 'two', Uuid::fromString('09748193-048a-4bfb-b825-8528cf74fdc1')])];
         yield 'point' => [new GeometryPoint(1.0, 2.0)];
@@ -156,12 +157,47 @@ final class CborCodecTest extends TestCase
         yield 'geometry-collection' => [new GeometryCollection(new GeometryPoint(1.0, 2.0), $line)];
     }
 
-    #[DataProvider('unsupportedHighTagValueProvider')]
-    public function testHighTagEncodingFailsBeforeProducingMalformedPackageCbor(Value $value): void
+    #[DataProvider('highTagValueProvider')]
+    public function testHighTagValuesRoundTrip(Value $value): void
     {
-        $this->expectException(SerializationException::class);
+        $restored = $this->roundTrip($value);
 
-        $this->serializer->serialize($value);
+        $this->assertInstanceOf($value::class, $restored);
+        $this->assertTrue($value->equals($restored), $value::class . ' did not survive a CBOR round trip');
+    }
+
+    /**
+     * Byte-for-byte fixtures, matching what the JS SDK and the server emit.
+     *
+     * @return iterable<string, array{Value, string}>
+     */
+    public static function highTagFixtureProvider(): iterable
+    {
+        yield 'range 1..10' => [new Range(new BoundIncluded(1), new BoundExcluded(10)), 'd83182d83201d8330a'];
+        yield 'open range' => [new Range(new BoundIncluded(1), null), 'd83182d83201f6'];
+        yield 'record id range' => [
+            new RecordIdRange('person', new BoundIncluded(1), new BoundIncluded(100)),
+            'c88266706572736f6ed83182d83201d8321864',
+        ];
+        yield 'file' => [new File('bucket', '/path.txt'), 'd83782666275636b6574692f706174682e747874'];
+        yield 'set' => [new Set([1, 2, 3]), 'd83883010203'];
+        yield 'point' => [new GeometryPoint(1.0, 2.0), 'd85882fb3ff0000000000000fb4000000000000000'];
+        yield 'line' => [
+            new GeometryLine(new GeometryPoint(0.0, 0.0), new GeometryPoint(1.0, 1.0)),
+            'd85982d85882fb0000000000000000fb0000000000000000d85882fb3ff0000000000000fb3ff0000000000000',
+        ];
+    }
+
+    #[DataProvider('highTagFixtureProvider')]
+    public function testHighTagValuesMatchReferenceHex(Value $value, string $hex): void
+    {
+        $this->assertSame($hex, bin2hex($this->serializer->serialize($value)));
+    }
+
+    public function testEmptyObjectEncodesAsAMap(): void
+    {
+        $this->assertSame('a0', bin2hex($this->serializer->serialize(new \stdClass())));
+        $this->assertSame('80', bin2hex($this->serializer->serialize([])));
     }
 
     private function roundTrip(mixed $value): mixed
