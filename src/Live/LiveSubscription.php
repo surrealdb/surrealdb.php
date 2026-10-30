@@ -23,10 +23,15 @@ abstract class LiveSubscription implements \IteratorAggregate
 
     protected bool $serverKilled = false;
 
+    /** No more notifications are delivered: the session was reset or its principal changed. */
+    protected bool $ended = false;
+
     public function __construct(
         protected readonly ConnectionController $connection,
         protected readonly ?string $session = null,
-    ) {}
+    ) {
+        $connection->registerLive($this, $session);
+    }
 
     /** The live query id the server assigned. */
     abstract public function id(): string;
@@ -36,11 +41,14 @@ abstract class LiveSubscription implements \IteratorAggregate
 
     /**
      * Whether notifications can still arrive: not killed by the client or the
-     * server, and the session still exists.
+     * server, the session not reset, and the session still exists.
      */
     public function isAlive(): bool
     {
-        return !$this->killed && !$this->killedByServer() && $this->connection->state()?->session($this->session) !== null;
+        return !$this->killed
+            && !$this->killedByServer()
+            && !$this->ended
+            && $this->connection->state()?->session($this->session) !== null;
     }
 
     /**
@@ -53,7 +61,7 @@ abstract class LiveSubscription implements \IteratorAggregate
             return;
         }
 
-        if (!$this->killedByServer()) {
+        if (!$this->killedByServer() && !$this->ended) {
             self::killOnServer($this->connection, $this->id(), $this->session);
         }
 
@@ -76,6 +84,21 @@ abstract class LiveSubscription implements \IteratorAggregate
             }
 
             yield $message;
+        }
+    }
+
+    /**
+     * @internal the session was reset, signed out or signed in as someone
+     * else, which ends its live queries
+     */
+    public function sessionEnded(): void
+    {
+        $this->ended = true;
+
+        // Drop what was queued too: it was delivered to whoever the session
+        // was signed in as before.
+        if ($this->feed instanceof LiveFeed) {
+            $this->feed->discard();
         }
     }
 

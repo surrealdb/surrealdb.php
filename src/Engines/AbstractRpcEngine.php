@@ -27,6 +27,7 @@ use SurrealDB\SDK\Telemetry\NullMeter;
 use SurrealDB\SDK\Telemetry\NullTracer;
 use SurrealDB\SDK\Transport\HttpClientResolver;
 use SurrealDB\SDK\Transport\SurrealHttp;
+use SurrealDB\SDK\Types\Uuid;
 use function is_array;
 use function is_string;
 
@@ -169,12 +170,14 @@ abstract class AbstractRpcEngine implements EngineInterface
 
     public function commit(string $txn, ?string $session): void
     {
-        $this->dispatch(new RpcRequest('commit', [$txn], $session));
+        // The server only accepts the id as a UUID value, which JSON cannot
+        // express: committing or cancelling needs the CBOR format.
+        $this->dispatch(new RpcRequest('commit', [Uuid::from($txn)], $session));
     }
 
     public function cancel(string $txn, ?string $session): void
     {
-        $this->dispatch(new RpcRequest('cancel', [$txn], $session));
+        $this->dispatch(new RpcRequest('cancel', [Uuid::from($txn)], $session));
     }
 
     public function query(BoundQuery $query, ?string $session, ?string $txn = null): iterable

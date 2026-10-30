@@ -140,6 +140,59 @@ final class LiveQueryTest extends TestCase
         }
     }
 
+    public function testResettingTheSessionEndsItsLiveQueries(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $managed = $db->live(new Table('person'))->execute();
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $unmanaged = $db->liveOf($id);
+
+            $db->reset();
+
+            self::assertFalse($managed->isAlive());
+            self::assertFalse($unmanaged->isAlive());
+
+            // Iteration ends instead of waiting for notifications that
+            // cannot come.
+            foreach ([$managed, $unmanaged] as $live) {
+                foreach ($live as $message) {
+                    self::assertSame(LiveAction::Killed, $message->action);
+                }
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testSigningOutOrInAsSomeoneElseEndsLiveQueries(): void
+    {
+        foreach ([
+            'invalidate' => static fn (Surreal $db) => $db->invalidate(),
+            'signin' => static fn (Surreal $db) => $db->signin(new RootAuth('root', 'root')),
+        ] as $call => $change) {
+            $db = $this->connect();
+
+            try {
+                $live = $db->live(new Table('person'))->execute();
+                // Received (the next call reads it off the socket) but not
+                // yet iterated: it belongs to the previous principal.
+                $db->create(new RecordId('person', 'before'))->execute();
+                $db->run('RETURN 1');
+                $change($db);
+
+                self::assertFalse($live->isAlive(), "{$call}() should end the live query");
+
+                foreach ($live as $message) {
+                    self::assertSame(LiveAction::Killed, $message->action, "{$call}() should drop queued notifications");
+                }
+            } finally {
+                $db->close();
+            }
+        }
+    }
+
     public function testRemovingTheTableEndsTheSubscription(): void
     {
         $db = $this->connect();
