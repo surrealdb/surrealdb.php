@@ -46,13 +46,7 @@ final class RunQuery extends QueryBuilder
             $query->append('<' . $this->version . '>');
         }
 
-        $query->append('(');
-
-        foreach ($this->args as $arg) {
-            $query->append($query->bind($arg) . ', ');
-        }
-
-        $query->append(')');
+        $query->append('(' . implode(', ', array_map($query->bind(...), $this->args)) . ')');
 
         return $query;
     }
