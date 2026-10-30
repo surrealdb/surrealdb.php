@@ -4,11 +4,14 @@ namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use SurrealDB\SDK\Api\ApiResponse;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Exceptions\AlreadyExistsException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\ThrownException;
+use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
@@ -217,6 +220,63 @@ SURQL);
             $db->import($export);
 
             self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testApiInvokesUserDefinedEndpoints(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        if (!$db->isFeatureSupported(Features::api())) {
+            $db->close();
+            self::markTestSkipped('DEFINE API needs SurrealDB 3.0 or later.');
+        }
+
+        try {
+            $db->run(<<<'SURQL'
+DEFINE API "/v1/hello/:name" FOR get, post THEN {
+    RETURN {
+        status: 200,
+        headers: { "x-greeting": "hi" },
+        body: { name: $request.params.name, method: $request.method, body: $request.body, query: $request.query, trace: $request.headers["x-trace"] }
+    };
+};
+DEFINE API "/v1/missing" FOR get THEN { RETURN { status: 404, body: "nope" } };
+DEFINE API "/v1/body" FOR post THEN { RETURN { status: 200, body: { none: $request.body IS NONE, null: $request.body IS NULL } } };
+SURQL);
+
+            $api = $db->api('/v1');
+            $api->header('x-trace', 'abc');
+
+            $response = $api->post('hello/tobie', ['a' => 1])->query('k', 'v')->execute();
+
+            self::assertInstanceOf(ApiResponse::class, $response);
+            self::assertSame(200, $response->status);
+            self::assertSame('hi', $response->headers['x-greeting'] ?? null);
+            self::assertEquals(
+                ['name' => 'tobie', 'method' => 'post', 'body' => ['a' => 1], 'query' => ['k' => 'v'], 'trace' => 'abc'],
+                $response->body,
+            );
+
+            self::assertSame('get', $api->get('/hello/jaime')->value()->execute()['method'] ?? null);
+
+            self::assertSame(['none' => true, 'null' => false], $api->post('body')->value()->execute());
+            self::assertSame(['none' => false, 'null' => true], $api->post('body', null)->value()->execute());
+
+            $missing = $api->get('missing')->execute();
+            self::assertInstanceOf(ApiResponse::class, $missing);
+            self::assertSame(404, $missing->status);
+
+            try {
+                $api->get('missing')->value()->execute();
+                self::fail('Expected a non-2xx response to throw.');
+            } catch (UnsuccessfulApiException $error) {
+                self::assertSame('/v1/missing', $error->path);
+                self::assertSame('nope', $error->response->body);
+            }
         } finally {
             $db->close();
         }
