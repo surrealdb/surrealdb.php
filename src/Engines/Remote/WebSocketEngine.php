@@ -41,6 +41,8 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
      * scheduler it never is, so the engine itself reports a lost connection.
      */
     private bool $loopRunning = false;
+    /** Incremented on every successful open, identifying the active transport. */
+    private int $generation = 0;
 
     /** @var array<string,Deferred<RpcResponse<mixed>>> */
     private array $calls = [];
@@ -70,12 +72,30 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         $this->transport = $this->createTransport($state);
 
         // Connect once synchronously so the controller can proceed immediately.
-        $this->connectOnce();
+        $connected = $this->connectOnce();
+        $generation = $this->generation;
 
         // Background read + reconnect loop and keepalive pinger. Both are
         // no-ops under the synchronous scheduler (reads are driven on demand).
+        // They must be spawned before `connected` is announced: the controller
+        // answers it with RPCs (version, session restore) whose replies only
+        // the read loop can deliver under an async scheduler.
         $this->context->scheduler->spawn(fn () => $this->runLoop());
         $this->context->scheduler->spawn(fn () => $this->runPinger());
+
+        // An eager scheduler may already have run the read loop, which can
+        // have lost this socket (and announced its replacement itself).
+        if ($connected && $this->isCurrent($generation)) {
+            $this->publisher->publish('connected');
+        }
+    }
+
+    /**
+     * Whether the socket opened as `$generation` is still the live one.
+     */
+    private function isCurrent(int $generation): bool
+    {
+        return $this->active && !$this->terminated && $this->generation === $generation;
     }
 
     public function close(): void
@@ -197,16 +217,26 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         return new WebSocketTransport($this->context, $state->endpoint, $client);
     }
 
-    private function connectOnce(): void
+    /**
+     * Open the transport. The caller announces `connected` once something is
+     * able to read the replies to the RPCs that announcement triggers.
+     *
+     * @phpstan-impure
+     */
+    private function connectOnce(): bool
     {
         try {
             $this->transport?->open();
             $this->active = true;
+            $this->generation++;
             $this->state?->reconnect->reset();
-            $this->publisher->publish('connected');
+
+            return true;
         } catch (\Throwable $error) {
             $this->active = false;
             $this->publisher->publish('error', $error);
+
+            return false;
         }
     }
 
@@ -224,8 +254,17 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
     private function readLoop(): void
     {
         while (!$this->terminated) {
-            if (!$this->active) {
-                $this->connectOnce();
+            // This loop is the only reader, so it cannot itself wait on the
+            // RPCs that restore the session: announce from a separate task.
+            if (!$this->active && $this->connectOnce()) {
+                $generation = $this->generation;
+                $this->context->scheduler->spawn(function () use ($generation): void {
+                    // The socket may have dropped (and a retry begun) before
+                    // this task ran; announcing then would answer a dead link.
+                    if ($this->isCurrent($generation)) {
+                        $this->publisher->publish('connected');
+                    }
+                });
             }
 
             while ($this->active && !$this->terminated) {
