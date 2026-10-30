@@ -3,9 +3,6 @@
 namespace SurrealDB\SDK;
 
 use Psr\Log\NullLogger;
-use SurrealDB\SDK\Auth\Credentials;
-use SurrealDB\SDK\Auth\Token;
-use SurrealDB\SDK\Auth\Tokens;
 use SurrealDB\SDK\Codec\Codec;
 use SurrealDB\SDK\Codec\CborDeserializer;
 use SurrealDB\SDK\Codec\CborSerializer;
@@ -17,48 +14,32 @@ use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverContext;
 use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Connection\Endpoint;
-use SurrealDB\SDK\Contracts\QueryExecutor;
 use SurrealDB\SDK\Enum\CodecEnum;
 use SurrealDB\SDK\Events\EventDispatcher;
 use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
-use SurrealDB\SDK\Live\LiveMessage;
 use SurrealDB\SDK\Protocol\Feature;
-use SurrealDB\SDK\Protocol\NamespaceDatabase;
-use SurrealDB\SDK\Query\AuthQuery;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Query\CreateQuery;
-use SurrealDB\SDK\Query\DeleteQuery;
-use SurrealDB\SDK\Query\InsertQuery;
-use SurrealDB\SDK\Query\RelateQuery;
-use SurrealDB\SDK\Query\RunQuery;
-use SurrealDB\SDK\Query\SelectQuery;
-use SurrealDB\SDK\Query\UpdateQuery;
-use SurrealDB\SDK\Query\UpsertQuery;
 use SurrealDB\SDK\Scheduler\SyncScheduler;
 use SurrealDB\SDK\Telemetry\NullMeter;
 use SurrealDB\SDK\Telemetry\NullTracer;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
 
 /**
- * The primary entry point: connect to SurrealDB, manage the session, and run
- * queries. Connection orchestration is delegated to the {@see ConnectionController};
- * the fluent query builders (companion plan) execute through the
- * {@see QueryExecutor} contract this class implements.
+ * The primary entry point: connect to SurrealDB and run queries in the default
+ * session. Connection orchestration is delegated to the {@see ConnectionController}.
+ *
+ * Everything a {@see SurrealSession} offers (query builders, authentication,
+ * variables, live queries, transactions) applies here to the default session;
+ * {@see self::newSession()} opens further, independent sessions on the same
+ * connection.
  */
-final class Surreal implements QueryExecutor
+final class Surreal extends SurrealSession
 {
-	private readonly ConnectionController $connection;
-
 	public function __construct(?DriverOptions $options = null)
 	{
-		$this->connection = new ConnectionController(
+		parent::__construct(new ConnectionController(
 			self::buildContext($options ?? new DriverOptions()),
-		);
+		));
 	}
 
 	// =================================================================== //
@@ -122,240 +103,58 @@ final class Surreal implements QueryExecutor
 	}
 
 	// =================================================================== //
-	//  Session                                                            //
-	// =================================================================== //
-
-	public function use(?string $namespace, ?string $database = null): void
-	{
-		$this->connection->use(new NamespaceDatabase($namespace, $database));
-	}
-
-	public function let(string $name, mixed $value): void
-	{
-		$this->connection->set($name, $value);
-	}
-
-	public function unset(string $name): void
-	{
-		$this->connection->unset($name);
-	}
-
-	// =================================================================== //
-	//  Authentication                                                     //
+	//  Sessions                                                           //
 	// =================================================================== //
 
 	/**
-	 * @param Credentials|array<string,mixed> $auth
+	 * Open a new session on this connection. It starts with no namespace,
+	 * database, variables or authentication of its own.
 	 */
-	public function signin(Credentials|array $auth): Tokens
+	public function newSession(): SurrealSession
 	{
-		return $this->connection->signin(
-			$auth instanceof Credentials ? $auth->toArray() : $auth,
-		);
+		return new SurrealSession($this->connection, $this->connection->createSession());
 	}
 
 	/**
-	 * @param Credentials|array<string,mixed> $auth
+	 * The ids of the sessions attached to this connection on the server.
+	 *
+	 * @return list<string>
 	 */
-	public function signup(Credentials|array $auth): Tokens
+	public function sessions(): array
 	{
-		return $this->connection->signup(
-			$auth instanceof Credentials ? $auth->toArray() : $auth,
-		);
-	}
-
-	public function authenticate(Token|string $token): void
-	{
-		$this->connection->authenticate((string) $token);
-	}
-
-	public function invalidate(): void
-	{
-		$this->connection->invalidate();
+		return $this->connection->sessions();
 	}
 
 	// =================================================================== //
-	//  Queries                                                            //
+	//  Data management                                                    //
 	// =================================================================== //
 
 	/**
-	 * Execute a bound query, returning one result per statement.
+	 * Import SurrealQL through the HTTP `/import` endpoint (also when connected
+	 * over WebSocket). SurrealDB 3.x requires the script to begin with
+	 * `OPTION IMPORT;`, as {@see self::export()} output does.
 	 *
-	 * @return list<mixed>
+	 * @throws \SurrealDB\SDK\Exceptions\ServerException for the first statement that failed
+	 * @throws \SurrealDB\SDK\Exceptions\HttpConnectionException when the server rejected the import
 	 */
-    public function query(BoundQuery $query): array
+	public function import(string $surql): void
 	{
-		$results = [];
-
-		foreach ($this->connection->query($query) as $chunk) {
-			$results[] = $chunk->resultOrThrow();
-		}
-
-		return $results;
+		$this->connection->importSql($surql);
 	}
 
 	/**
-	 * Execute raw SurrealQL with optional bindings.
+	 * Export the selected database as SurrealQL through the HTTP `/export`
+	 * endpoint.
 	 *
-	 * @param array<string,mixed> $bindings
-     *
-     * @return list<mixed>
+	 * @param array<string,mixed> $options export options, e.g. `['tables' => ['person'], 'records' => false]`
 	 */
-    public function run(string $surql, array $bindings = []): array
+	public function export(array $options = []): string
 	{
-		return $this->query(new BoundQuery($surql, $bindings));
-	}
-
-	// =================================================================== //
-	//  Fluent statement builders                                          //
-	// =================================================================== //
-
-	/**
-	 * Begin a `SELECT` against a table or record. A string is a table name.
-     *
-     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
-     *
-     * @return SelectQuery<mixed>
-	 */
-	public function select(RecordId|RecordIdRange|StringRecordId|Table|string $what): SelectQuery
-	{
-		return new SelectQuery($this, $what);
+		return $this->connection->exportSql($options);
 	}
 
 	/**
-	 * Begin a `CREATE` for a table or record. A string is a table name. A
-	 * record range is not a valid `CREATE` target.
-     *
-     * @param RecordId<string>|StringRecordId|Table<string>|string $what
-     *
-     * @return CreateQuery<mixed>
-	 */
-	public function create(RecordId|StringRecordId|Table|string $what): CreateQuery
-	{
-		return new CreateQuery($this, $what);
-	}
-
-	/**
-	 * Begin an `UPDATE` for a table or record. A string is a table name.
-     *
-     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
-     *
-     * @return UpdateQuery<mixed>
-	 */
-	public function update(RecordId|RecordIdRange|StringRecordId|Table|string $what): UpdateQuery
-	{
-		return new UpdateQuery($this, $what);
-	}
-
-	/**
-	 * Begin an `UPSERT` for a table or record. A string is a table name.
-     *
-     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
-     *
-     * @return UpsertQuery<mixed>
-	 */
-	public function upsert(RecordId|RecordIdRange|StringRecordId|Table|string $what): UpsertQuery
-	{
-		return new UpsertQuery($this, $what);
-	}
-
-	/**
-	 * Begin a `DELETE` for a table or record (defaults to `RETURN BEFORE`). A
-	 * string is a table name.
-     *
-     * @param RecordId<string>|RecordIdRange<string>|StringRecordId|Table<string>|string $what
-     *
-     * @return DeleteQuery<mixed>
-	 */
-	public function delete(RecordId|RecordIdRange|StringRecordId|Table|string $what): DeleteQuery
-	{
-		return new DeleteQuery($this, $what);
-	}
-
-	/**
-	 * Begin an `INSERT`. Pass records directly, or a target table plus records.
-	 *
-     * @param Table<string>|array<string,mixed>|list<array<string,mixed>>|object $tableOrData a target table, or the record(s) to insert
-     * @param array<string,mixed>|list<array<string,mixed>>|object|null $data
-     *
-     * @return InsertQuery<mixed>
-	 */
-	public function insert(
-		array|object $tableOrData,
-		array|object|null $data = null,
-	): InsertQuery {
-		if ($tableOrData instanceof Table) {
-			return new InsertQuery($this, $tableOrData, $data ?? []);
-		}
-
-		return new InsertQuery($this, null, $tableOrData);
-	}
-
-	/**
-	 * Begin a `RELATE`, creating one or many graph edges.
-	 *
-     * @param RecordId<string>|list<RecordId<string>> $from
-     * @param RecordId<string>|Table<string> $edge
-     * @param RecordId<string>|list<RecordId<string>> $to
-	 * @param array<string,mixed>|object|null $data
-     *
-     * @return RelateQuery<mixed>
-	 */
-	public function relate(
-		RecordId|array $from,
-		RecordId|Table $edge,
-		RecordId|array $to,
-		array|object|null $data = null,
-	): RelateQuery {
-		$relate = new RelateQuery($this, $from, $edge, $to);
-
-		if ($data !== null) {
-			$relate->content($data);
-		}
-
-		return $relate;
-	}
-
-	/**
-	 * Invoke a SurrealQL/SurrealML function (`fn::*`, `ml::*`, built-ins).
-	 *
-	 * Named `call()` because {@see self::run()} already executes raw SurrealQL.
-	 *
-	 * @param list<mixed> $args
-     *
-     * @return RunQuery<mixed>
-	 */
-	public function call(
-		string $name,
-		?string $version = null,
-		array $args = [],
-	): RunQuery {
-		return new RunQuery($this, $name, $version, $args);
-	}
-
-	/**
-	 * Select the currently-authenticated record (`SELECT * FROM ONLY $auth`).
-     *
-     * @return AuthQuery<mixed>
-	 */
-	public function auth(): AuthQuery
-	{
-		return new AuthQuery($this);
-	}
-
-	/**
-	 * Subscribe to a live query by its id.
-	 *
-     * @return iterable<LiveMessage<mixed>>
-	 */
-	public function live(string $queryUuid): iterable
-	{
-		return $this->connection->liveQuery($queryUuid);
-	}
-
-	/**
-	 * Access the underlying controller for advanced operations (sessions,
-	 * transactions, import/export).
+	 * Access the underlying controller for low-level operations.
 	 */
 	public function connection(): ConnectionController
 	{

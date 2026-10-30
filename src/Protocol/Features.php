@@ -33,6 +33,28 @@ final class Features
         return new Feature('transactions', '3.0.0');
     }
 
+    /** ISO GQL graph queries through the `gql` RPC method. */
+    public static function gql(): Feature
+    {
+        return new Feature('gql', '3.2.0');
+    }
+
+    /** GraphQL through the `graphql` RPC method. */
+    public static function graphql(): Feature
+    {
+        return new Feature('graphql', '3.2.0');
+    }
+
+    /**
+     * Bound parameters in a `LIVE SELECT`. SurrealDB 2.x evaluates a live
+     * query's condition for each notification, after the request's bindings
+     * are gone.
+     */
+    public static function liveQueryBindings(): Feature
+    {
+        return new Feature('live-query-bindings', '3.0.0');
+    }
+
     public static function exportImportRaw(): Feature
     {
         return new Feature('export-import-raw');

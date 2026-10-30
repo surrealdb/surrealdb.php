@@ -3,9 +3,14 @@
 namespace SurrealDB\SDK\Query;
 
 use SurrealDB\SDK\Contracts\QueryExecutor;
+use SurrealDB\SDK\Contracts\StreamingQueryExecutor;
 use SurrealDB\SDK\Contracts\SurrealType;
 use SurrealDB\SDK\Exceptions\ExpressionException;
 use SurrealDB\SDK\Exceptions\SurrealException;
+use SurrealDB\SDK\Query\Frame\DoneFrame;
+use SurrealDB\SDK\Query\Frame\ErrorFrame;
+use SurrealDB\SDK\Query\Frame\ValueFrame;
+use SurrealDB\SDK\Support\Jsonify;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\RecordIdRange;
 use SurrealDB\SDK\Types\StringRecordId;
@@ -41,9 +46,9 @@ abstract class QueryBuilder
     abstract protected function build(): BoundQuery;
 
     /**
-     * Request JSON-compatible results (loses SurrealDB type information).
-     *
-     * Reserved for codec-aware execution; carried through compilation untouched.
+     * Return plain JSON-compatible values instead of SurrealDB types: record
+     * ids, datetimes, durations and similar become strings, geometries become
+     * GeoJSON and NONE becomes null (see {@see Jsonify}).
      */
     public function json(bool $json = true): static
     {
@@ -72,6 +77,61 @@ abstract class QueryBuilder
     }
 
     /**
+     * Execute and yield the results as frames: for each statement, its
+     * values (one frame per element when it returns a list), then a
+     * {@see DoneFrame}, or an {@see ErrorFrame} if it failed. A failing
+     * statement does not stop the stream. Mirrors the JS SDK's `stream()`.
+     *
+     * An empty object decodes to an empty PHP array, which cannot be told
+     * apart from an empty list, so a statement returning `{}` yields only its
+     * {@see DoneFrame}, like one returning `[]`. Use {@see self::responses()}
+     * when that difference matters.
+     *
+     * @return \Generator<int, ValueFrame<TResult>|ErrorFrame<TResult>|DoneFrame<TResult>>
+     */
+    public function stream(): \Generator
+    {
+        foreach ($this->streamingExecutor()->stream($this->build()) as $chunk) {
+            if ($chunk->error !== null) {
+                yield new ErrorFrame($chunk->index, $chunk->error, $chunk->time);
+
+                continue;
+            }
+
+            $result = $this->result($this->output($chunk->result));
+
+            if (is_array($result) && array_is_list($result)) {
+                foreach ($result as $value) {
+                    yield $this->valueFrame($chunk->index, $value, false);
+                }
+            } else {
+                yield $this->valueFrame($chunk->index, $result, true);
+            }
+
+            yield new DoneFrame($chunk->index, $chunk->time, $chunk->type);
+        }
+    }
+
+    /**
+     * Execute and return every statement's outcome without throwing for
+     * failed statements. Mirrors the JS SDK's `responses()`.
+     *
+     * @return list<QueryResponse<TResult>>
+     */
+    public function responses(): array
+    {
+        $responses = [];
+
+        foreach ($this->streamingExecutor()->stream($this->build()) as $chunk) {
+            $responses[] = $chunk->error !== null
+                ? new QueryResponse(false, error: $chunk->error, time: $chunk->time)
+                : new QueryResponse(true, $this->result($this->output($chunk->result)), time: $chunk->time, type: $chunk->type);
+        }
+
+        return $responses;
+    }
+
+    /**
      * Run the compiled query through the executor, returning one entry per
      * statement.
      *
@@ -85,10 +145,56 @@ abstract class QueryBuilder
             );
         }
 
-        /** @var list<TResult> $results */
         $results = $this->executor->query($this->build());
 
+        if ($this->json) {
+            $results = array_map(Jsonify::value(...), $results);
+        }
+
+        /** @var list<TResult> $results */
         return $results;
+    }
+
+    /**
+     * @return TResult
+     */
+    /**
+     * Turn a statement's result into what this builder returns. A builder
+     * whose {@see self::execute()} reshapes or checks the result overrides
+     * this, so {@see self::stream()} and {@see self::responses()} do the same.
+     *
+     * @return TResult
+     */
+    protected function result(mixed $result): mixed
+    {
+        /** @var TResult */
+        return $result;
+    }
+
+    /**
+     * @return ValueFrame<TResult>
+     */
+    private function valueFrame(int $query, mixed $value, bool $single): ValueFrame
+    {
+        /** @var TResult $value */
+        return new ValueFrame($query, $value, $single);
+    }
+
+    private function output(mixed $value): mixed
+    {
+        /** @var TResult */
+        return $this->json ? Jsonify::value($value) : $value;
+    }
+
+    private function streamingExecutor(): StreamingQueryExecutor
+    {
+        if (!$this->executor instanceof StreamingQueryExecutor) {
+            throw new SurrealException(
+                static::class . ' needs a StreamingQueryExecutor to stream; build it via Surreal or pass one explicitly.',
+            );
+        }
+
+        return $this->executor;
     }
 
     /**

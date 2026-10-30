@@ -128,7 +128,7 @@ final class SurrealWebSocketTest extends TestCase
 
         $transport?->pushIncoming([
             'result' => [
-                'id' => 'live-uuid',
+                'id' => '0191b7ec-1a4c-7a7e-a8f2-4a4c4a7d8f3e',
                 'action' => 'CREATE',
                 'record' => 'person:1',
                 'result' => ['name' => 'Tobie'],
@@ -136,7 +136,7 @@ final class SurrealWebSocketTest extends TestCase
         ]);
 
         $messages = [];
-        foreach ($db->live('live-uuid') as $message) {
+        foreach ($db->liveOf('0191b7ec-1a4c-7a7e-a8f2-4a4c4a7d8f3e') as $message) {
             $messages[] = $message;
             break;
         }
@@ -144,5 +144,32 @@ final class SurrealWebSocketTest extends TestCase
         $this->assertCount(1, $messages);
         $this->assertSame('CREATE', $messages[0]->action->value);
         $this->assertSame(['name' => 'Tobie'], $messages[0]->value);
+    }
+
+    public function testCodecErrorThrowsWithoutDroppingTheConnection(): void
+    {
+        $responder = $this->responder();
+        $disconnected = 0;
+        $db = new Surreal(new DriverOptions(
+            format: CodecEnum::JSON,
+            webSocketTransportFactory: fn (DriverContext $context): FakeDuplexTransport => new FakeDuplexTransport($responder, $context->codec),
+        ));
+        $db->subscribe('disconnected', static function () use (&$disconnected): void {
+            $disconnected++;
+        });
+        $db->connect('ws://localhost:8000/rpc', new ConnectOptions(namespace: 'test', database: 'test'));
+
+        try {
+            // Invalid UTF-8 cannot be encoded as JSON, so the request fails
+            // before anything is written to the socket.
+            $db->run('RETURN $value', ['value' => "\xB1\x31"]);
+            $this->fail('Expected the JSON codec to reject the request.');
+        } catch (\JsonException) {
+            // Expected.
+        }
+
+        $this->assertTrue($db->isConnected());
+        $this->assertSame(0, $disconnected);
+        $this->assertSame([[['id' => 'person:tobie', 'name' => 'Tobie']]], $db->run('SELECT * FROM person'));
     }
 }

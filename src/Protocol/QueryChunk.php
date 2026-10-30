@@ -23,6 +23,8 @@ final class QueryChunk
         public string $status = 'OK',
         public ?string $time = null,
         public ?ServerException $error = null,
+        /** The statement type the server reported (`live`, `kill` or `other`), if any. */
+        public ?string $type = null,
     ) {}
 
     /**
@@ -36,13 +38,16 @@ final class QueryChunk
         $time = isset($result['time']) ? (string) $result['time'] : null;
 
         if ($status === 'OK') {
-            return new self($index, $result['result'] ?? null, 'OK', $time);
+            $type = is_string($result['type'] ?? null) ? $result['type'] : null;
+
+            return new self($index, $result['result'] ?? null, 'OK', $time, type: $type);
         }
 
         $message = is_string($result['result'] ?? null) ? $result['result'] : 'Query execution failed';
         $details = isset($result['details']) && is_array($result['details']) ? $result['details'] : null;
+        $kind = is_string($result['kind'] ?? null) ? $result['kind'] : 'Query';
 
-        return new self($index, null, 'ERR', $time, new ServerException('Query', $message, 0, $details));
+        return new self($index, null, 'ERR', $time, ServerException::create($kind, $message, 0, $details));
     }
 
     public function isError(): bool

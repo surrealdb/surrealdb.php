@@ -4,12 +4,20 @@ namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use SurrealDB\SDK\Api\ApiResponse;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Exceptions\AlreadyExistsException;
+use SurrealDB\SDK\Exceptions\ServerException;
+use SurrealDB\SDK\Exceptions\ThrownException;
+use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
+use SurrealDB\SDK\Protocol\Features;
+use SurrealDB\SDK\Query\Frame\ValueFrame;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use function sprintf;
 
 /**
  * Database-backed coverage for the public SDK surface.
@@ -47,6 +55,22 @@ final class SurrealLocalDatabaseTest extends TestCase
 
             self::assertNotNull($tokens->access);
             self::assertNotSame('', $tokens->access);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testFractionalNumbersSentAsHalfPrecisionFloatsDecode(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            // Over CBOR the server sends each of these as a 16-bit float.
+            self::assertSame(
+                [[0.5, -0.25, 1.5, 0.1, 6.103515625E-5]],
+                $db->run('RETURN [0.5, -0.25, 1.5, 0.1, 0.00006103515625]'),
+            );
         } finally {
             $db->close();
         }
@@ -166,9 +190,232 @@ final class SurrealLocalDatabaseTest extends TestCase
         }
     }
 
+    #[DataProvider('protocols')]
+    public function testCallInvokesFunctionsWithAnyNumberOfArguments(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $db->run(<<<'SURQL'
+DEFINE FUNCTION fn::zero() { RETURN 'zero' };
+DEFINE FUNCTION fn::greet($name: string, $times: int) { RETURN string::repeat('hi ' + $name + ' ', $times) };
+SURQL);
+
+            self::assertSame('zero', $db->call('fn::zero')->execute());
+            self::assertSame('hi Tobie hi Tobie ', $db->call('fn::greet', args: ['Tobie', 2])->execute());
+            self::assertSame(3, $db->call('math::max', args: [[1, 3, 2]])->execute());
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testJsonReturnsPlainValuesInsteadOfSurrealTypes(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $person = new RecordId('person', 'tobie');
+            $db->create($person)->content(['name' => 'Tobie', 'born' => new \SurrealDB\SDK\Types\DateTime(0)])->execute();
+
+            $typed = $db->select($person)->execute();
+            $plain = $db->select($person)->json()->execute();
+
+            self::assertIsArray($typed);
+            self::assertInstanceOf(RecordId::class, $typed['id']);
+            self::assertSame(['born' => '1970-01-01T00:00:00Z', 'id' => 'person:tobie', 'name' => 'Tobie'], $this->sorted($plain));
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @return array<array-key,mixed>
+     */
+    private function sorted(mixed $value): array
+    {
+        self::assertIsArray($value);
+        ksort($value);
+
+        return $value;
+    }
+
+    #[DataProvider('protocols')]
+    public function testImportReportsFailuresAndRoundTripsAnExport(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            // Strict servers only write to defined tables.
+            $db->import("OPTION IMPORT;\nDEFINE TABLE person;\nCREATE person:tobie SET name = 'Tobie';");
+            self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
+
+            try {
+                $db->import("OPTION IMPORT;\nCREATE person:jaime SET name = 'Jaime';\nTHROW 'boom';");
+                self::fail('Expected the import to fail.');
+            } catch (ServerException $error) {
+                self::assertStringContainsString('Import failed at statement', $error->getMessage());
+                self::assertStringContainsString('boom', $error->getMessage());
+
+                // SurrealDB 2.x reports no error kind, so only 3.x is typed.
+                if ($this->serverMajor($db) >= 3) {
+                    self::assertInstanceOf(ThrownException::class, $error);
+                }
+            }
+
+            try {
+                $db->import("OPTION IMPORT;\nCREATE person:tobie SET name = 'Again';");
+                self::fail('Expected the duplicate record to fail the import.');
+            } catch (ServerException $error) {
+                self::assertStringContainsString('already exists', $error->getMessage());
+
+                if ($this->serverMajor($db) >= 3) {
+                    self::assertInstanceOf(AlreadyExistsException::class, $error);
+                }
+            }
+
+            $export = $db->export();
+            self::assertStringContainsString('OPTION IMPORT;', $export);
+            self::assertStringContainsString('Tobie', $export);
+
+            $db->run('REMOVE TABLE person');
+            $db->import($export);
+
+            self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testApiInvokesUserDefinedEndpoints(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        if (!$db->isFeatureSupported(Features::api())) {
+            $db->close();
+            self::markTestSkipped('DEFINE API needs SurrealDB 3.0 or later.');
+        }
+
+        try {
+            $db->run(<<<'SURQL'
+DEFINE API "/v1/hello/:name" FOR get, post THEN {
+    RETURN {
+        status: 200,
+        headers: { "x-greeting": "hi" },
+        body: { name: $request.params.name, method: $request.method, body: $request.body, query: $request.query, trace: $request.headers["x-trace"] }
+    };
+};
+DEFINE API "/v1/missing" FOR get THEN { RETURN { status: 404, body: "nope" } };
+DEFINE API "/v1/body" FOR post THEN { RETURN { status: 200, body: { none: $request.body IS NONE, null: $request.body IS NULL } } };
+SURQL);
+
+            $api = $db->api('/v1');
+            $api->header('x-trace', 'abc');
+
+            $response = $api->post('hello/tobie', ['a' => 1])->query('k', 'v')->execute();
+
+            self::assertInstanceOf(ApiResponse::class, $response);
+            self::assertSame(200, $response->status);
+            self::assertSame('hi', $response->headers['x-greeting'] ?? null);
+            self::assertEquals(
+                ['name' => 'tobie', 'method' => 'post', 'body' => ['a' => 1], 'query' => ['k' => 'v'], 'trace' => 'abc'],
+                $response->body,
+            );
+
+            self::assertSame('get', $api->get('/hello/jaime')->value()->execute()['method'] ?? null);
+
+            self::assertSame(['none' => true, 'null' => false], $api->post('body')->value()->execute());
+            self::assertSame(['none' => false, 'null' => true], $api->post('body', null)->value()->execute());
+
+            $missing = $api->get('missing')->execute();
+            self::assertInstanceOf(ApiResponse::class, $missing);
+            self::assertSame(404, $missing->status);
+
+            try {
+                $api->get('missing')->value()->execute();
+                self::fail('Expected a non-2xx response to throw.');
+            } catch (UnsuccessfulApiException $error) {
+                self::assertSame('/v1/missing', $error->path);
+                self::assertSame('nope', $error->response->body);
+            }
+
+            // Streaming and responses() shape the result like execute().
+            $frames = iterator_to_array($api->get('/hello/jaime')->stream(), false);
+            self::assertInstanceOf(ValueFrame::class, $frames[0]);
+            self::assertInstanceOf(ApiResponse::class, $frames[0]->value);
+            self::assertSame(200, $frames[0]->value->status);
+
+            [$response] = $api->get('/hello/jaime')->value()->responses();
+            self::assertTrue($response->success);
+            self::assertSame('get', $response->result['method'] ?? null);
+
+            try {
+                $api->get('missing')->value()->responses();
+                self::fail('Expected a non-2xx response to throw.');
+            } catch (UnsuccessfulApiException $error) {
+                self::assertSame('nope', $error->response->body);
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testStringTargetsCannotInjectSurrealQl(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $db->create(new RecordId('person', 'tobie'))->content(['name' => 'Tobie'])->execute();
+
+            $hostile = 'person; DELETE person; SELECT * FROM person';
+            // Strict servers only write to defined tables.
+            $db->run('DEFINE TABLE ' . Table::escapeIdent($hostile) . '; DEFINE TABLE ' . Table::escapeIdent('trailing\\'));
+            $created = $db->create($hostile)->content(['name' => 'Hostile'])->execute();
+
+            self::assertIsArray($created);
+            self::assertCount(1, $created);
+            self::assertSame('Hostile', $created[0]['name'] ?? null);
+            self::assertInstanceOf(RecordId::class, $created[0]['id']);
+            self::assertSame($hostile, $created[0]['id']->table);
+
+            $people = $db->select('person')->execute();
+
+            self::assertIsArray($people);
+            self::assertCount(1, $people);
+            self::assertSame('Tobie', $people[0]['name'] ?? null);
+
+            $backslash = $db->create('trailing\\')->content(['ok' => true])->execute();
+
+            self::assertIsArray($backslash);
+            self::assertSame('trailing\\', $backslash[0]['id']->table);
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @return array<array-key,mixed>
+     */
+    private function sorted(mixed $value): array
+    {
+        self::assertIsArray($value);
+        ksort($value);
+
+        return $value;
+    }
+
     /**
      * @param 'http'|'ws' $protocol
      */
+    private function serverMajor(Surreal $db): int
+    {
+        return (int) preg_replace('/^surrealdb-/', '', $db->version());
+    }
+
     private function connect(string $protocol): Surreal
     {
         $db = new Surreal();

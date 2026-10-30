@@ -28,6 +28,12 @@ final class StreamWebSocketClient implements WebSocketClientInterface
     private bool $connected = false;
 
     /**
+     * Bytes taken off the socket while checking the connection, not yet read
+     * as frames. Reads consume them before the socket.
+     */
+    private string $inbox = '';
+
+    /**
      * @param float $pollInterval how long each blocking read waits before it
      *                            checks the socket again; reaching it does not
      *                            close an idle connection
@@ -39,6 +45,8 @@ final class StreamWebSocketClient implements WebSocketClientInterface
 
     public function connect(string $url, array $subprotocols = [], array $headers = []): void
     {
+        $this->inbox = '';
+
         $parts = parse_url($url);
 
         if ($parts === false || !isset($parts['host'])) {
@@ -81,6 +89,76 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         $this->writeFrame(0x9, $payload);
     }
 
+    private function isOpen(): bool
+    {
+        return $this->connected && is_resource($this->socket) && !feof($this->socket);
+    }
+
+    private function takeAvailableBytes(): void
+    {
+        if (!is_resource($this->socket)) {
+            return;
+        }
+
+        stream_set_blocking($this->socket, false);
+
+        try {
+            while (($chunk = @fread($this->socket, 65536)) !== false && $chunk !== '') {
+                $this->inbox .= $chunk;
+            }
+        } finally {
+            if (is_resource($this->socket)) {
+                stream_set_blocking($this->socket, true);
+            }
+        }
+    }
+
+    /**
+     * Whether the complete frames waiting in the inbox include a close frame.
+     */
+    private function closeFrameReceived(): bool
+    {
+        $offset = 0;
+        $available = strlen($this->inbox);
+
+        while ($available - $offset >= 2) {
+            $opcode = ord($this->inbox[$offset]) & 0x0F;
+            $second = ord($this->inbox[$offset + 1]);
+            $length = $second & 0x7F;
+            $header = 2;
+
+            if ($length === 126) {
+                if ($available - $offset < 4) {
+                    return false;
+                }
+
+                $length = (int) unpack('n', $this->inbox, $offset + 2)[1];
+                $header = 4;
+            } elseif ($length === 127) {
+                if ($available - $offset < 10) {
+                    return false;
+                }
+
+                $length = (int) unpack('J', $this->inbox, $offset + 2)[1];
+                $header = 10;
+            }
+
+            $header += ($second & 0x80) !== 0 ? 4 : 0;
+
+            if ($available - $offset < $header + $length) {
+                return false;
+            }
+
+            if ($opcode === 0x8) {
+                return true;
+            }
+
+            $offset += $header + $length;
+        }
+
+        return false;
+    }
+
     public function close(int $code = 1000, string $reason = ''): void
     {
         if ($this->connected && is_resource($this->socket)) {
@@ -99,14 +177,27 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         $this->connected = false;
     }
 
+    /**
+     * Whether the connection is open. A close frame the server already sent
+     * means it is not, though the stream is not at EOF until that frame is
+     * read; so whatever has arrived is taken off the socket (without waiting)
+     * and checked for one. Frames before it are still returned by
+     * {@see self::receive()}.
+     */
     public function isConnected(): bool
     {
-        return $this->connected && is_resource($this->socket) && !feof($this->socket);
+        if (!$this->isOpen()) {
+            return false;
+        }
+
+        $this->takeAvailableBytes();
+
+        return $this->isOpen() && !$this->closeFrameReceived();
     }
 
     public function receive(?float $timeout = null): ?string
     {
-        if (!$this->isConnected()) {
+        if (!$this->isOpen()) {
             return null;
         }
 
@@ -317,10 +408,12 @@ final class StreamWebSocketClient implements WebSocketClientInterface
             return null;
         }
 
+        // Bytes already taken off the socket come first.
+        $data = substr($this->inbox, 0, $length);
+        $this->inbox = substr($this->inbox, strlen($data));
+
         $deadline = $timeout !== null ? microtime(true) + $timeout : null;
         $this->setReadTimeout($timeout ?? $this->pollInterval);
-
-        $data = '';
 
         while (strlen($data) < $length) {
             $chunk = @fread($this->socket, $length - strlen($data));

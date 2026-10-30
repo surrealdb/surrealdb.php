@@ -2,7 +2,7 @@
 
 namespace SurrealDB\SDK\Codec;
 
-use Beau\CborPHP\CborDecoder;
+use SurrealDB\SDK\Codec\Cbor\CborReader;
 use SurrealDB\SDK\Codec\Cbor\CborValueMapper;
 
 final class CborDeserializer implements DeserializerInterface
@@ -13,6 +13,6 @@ final class CborDeserializer implements DeserializerInterface
             return null;
         }
 
-        return CborValueMapper::decode(CborDecoder::decode($data));
+        return CborValueMapper::decode(CborReader::decode($data));
     }
 }
