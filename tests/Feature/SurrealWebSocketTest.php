@@ -128,7 +128,7 @@ final class SurrealWebSocketTest extends TestCase
 
         $transport?->pushIncoming([
             'result' => [
-                'id' => 'live-uuid',
+                'id' => '0191b7ec-1a4c-7a7e-a8f2-4a4c4a7d8f3e',
                 'action' => 'CREATE',
                 'record' => 'person:1',
                 'result' => ['name' => 'Tobie'],
@@ -136,7 +136,7 @@ final class SurrealWebSocketTest extends TestCase
         ]);
 
         $messages = [];
-        foreach ($db->live('live-uuid') as $message) {
+        foreach ($db->liveOf('0191b7ec-1a4c-7a7e-a8f2-4a4c4a7d8f3e') as $message) {
             $messages[] = $message;
             break;
         }
