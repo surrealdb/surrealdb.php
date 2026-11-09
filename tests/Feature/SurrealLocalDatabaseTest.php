@@ -17,6 +17,7 @@ use SurrealDB\SDK\Exceptions\HttpConnectionException;
 use SurrealDB\SDK\Exceptions\InvalidValueException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\ThrownException;
+use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Query\Frame\ValueFrame;
@@ -573,6 +574,29 @@ SURQL);
         } finally {
             $db->close();
             $record?->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testARefreshTokenSignInIsRefusedWhereThereAreNone(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            [$namespace] = $db->run('RETURN session::ns()');
+            $db->run('DEFINE ACCESS account ON DATABASE TYPE RECORD SIGNIN (SELECT * FROM user WHERE name = $name)');
+            $auth = new RecordAccessAuth($namespace, 'db', 'account', ['refresh' => 'surreal-refresh-not-a-real-one']);
+
+            if ($db->isFeatureSupported(Features::refreshTokens())) {
+                // The server's own answer: no such refresh token.
+                $this->expectException(ServerException::class);
+            } else {
+                $this->expectException(UnavailableFeatureException::class);
+            }
+
+            $db->signin($auth);
+        } finally {
+            $db->close();
         }
     }
 

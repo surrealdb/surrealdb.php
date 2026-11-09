@@ -310,6 +310,13 @@ final class ConnectionController
      */
     public function signin(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        // A record access sign-in with a refresh token exchanges it for a new
+        // pair. A server without refresh tokens reads it as one more variable
+        // of the SIGNIN query, and refuses it with an unrelated error.
+        if (isset($auth['refresh'])) {
+            $this->assertFeature(Features::refreshTokens());
+        }
+
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
         $tokens = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->signin($auth, $session));
