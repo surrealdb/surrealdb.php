@@ -10,7 +10,10 @@ use function is_array;
 use function is_bool;
 use function is_float;
 use function is_int;
+use function is_object;
+use function is_resource;
 use function is_string;
+use function strlen;
 
 /**
  * Base class for the SurrealQL value types (the PHP counterpart of the JS SDK's
@@ -141,6 +144,102 @@ abstract class Value implements SurrealType, \JsonSerializable, \Stringable
         }
 
         return $a === $b;
+    }
+
+    /**
+     * A key that two values of this class share exactly when
+     * {@see self::equals()} holds between them, or null when there is none.
+     * {@see Set} uses it to find duplicates without comparing every pair of
+     * members; a value without a key is compared one by one.
+     */
+    protected function hashKey(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * A key that two value objects share exactly when {@see self::equals()}
+     * holds between them: the class and its {@see self::hashKey()}.
+     */
+    protected static function valueKey(self $value): ?string
+    {
+        $key = $value->hashKey();
+
+        return $key === null ? null : 'V' . strlen($value::class) . ':' . $value::class . strlen($key) . ':' . $key;
+    }
+
+    /**
+     * A key that two values share exactly when {@see self::same()} holds
+     * between them, or null when there is none. Every key reads to its own
+     * end, so keys can be joined.
+     */
+    protected static function sameKey(mixed $value): ?string
+    {
+        if ($value instanceof self) {
+            return self::valueKey($value);
+        }
+
+        if (is_float($value)) {
+            if (is_nan($value)) {
+                return null;
+            }
+
+            // A float holding an integer is the same as the integer.
+            return $value >= (float) PHP_INT_MIN && $value < -(float) PHP_INT_MIN && floor($value) === $value
+                ? self::scalarKey((int) $value)
+                : 'f' . pack('E', $value);
+        }
+
+        $map = self::asMap($value);
+
+        if ($map !== null) {
+            ksort($map, SORT_STRING);
+            $key = 'm' . count($map) . '{';
+
+            foreach ($map as $name => $item) {
+                $itemKey = self::sameKey($item);
+
+                if ($itemKey === null) {
+                    return null;
+                }
+
+                $key .= self::scalarKey($name) . $itemKey;
+            }
+
+            return $key . '}';
+        }
+
+        if (is_array($value)) {
+            $key = 'l' . count($value) . '[';
+
+            foreach ($value as $item) {
+                $itemKey = self::sameKey($item);
+
+                if ($itemKey === null) {
+                    return null;
+                }
+
+                $key .= $itemKey;
+            }
+
+            return $key . ']';
+        }
+
+        return is_object($value) || is_resource($value) ? null : self::scalarKey($value);
+    }
+
+    /**
+     * The key of a string, an integer, a boolean or null. It reads to its
+     * own end.
+     */
+    protected static function scalarKey(string|int|bool|null $value): string
+    {
+        return match (true) {
+            is_string($value) => 's' . strlen($value) . ':' . $value,
+            is_int($value) => 'i' . $value . ';',
+            is_bool($value) => $value ? 'T' : 'F',
+            default => 'N',
+        };
     }
 
     /**

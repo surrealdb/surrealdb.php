@@ -28,6 +28,11 @@ final class Table extends Value
         return $other instanceof self && $this->name === $other->name;
     }
 
+    protected function hashKey(): string
+    {
+        return $this->name;
+    }
+
     public function __toString(): string
     {
         return $this->escape();

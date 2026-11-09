@@ -22,6 +22,11 @@ final class None extends Value
         return $other instanceof self;
     }
 
+    protected function hashKey(): string
+    {
+        return '';
+    }
+
     public function __toString(): string
     {
         return 'NONE';

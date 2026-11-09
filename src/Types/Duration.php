@@ -206,6 +206,11 @@ final class Duration extends Value
             && $this->nanoseconds === $other->nanoseconds;
     }
 
+    protected function hashKey(): string
+    {
+        return $this->seconds . ',' . $this->nanoseconds;
+    }
+
     /**
      * The `(seconds, nanoseconds)` tuple, matching the JS SDK's `toCompact()`.
      *

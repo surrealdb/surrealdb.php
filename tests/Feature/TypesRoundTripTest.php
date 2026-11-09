@@ -9,6 +9,7 @@ use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\Duration;
 use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\SDK\Types\Set;
 
 /**
  * Value types sent to and read back from a real server, over HTTP and
@@ -93,6 +94,35 @@ final class TypesRoundTripTest extends TestCase
 
                 self::assertCount(1, $matches, "Id {$index} should equal exactly one id read back");
             }
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * Comparing every member with every other took 12 s for these 20,000
+     * record ids. SurrealDB 2.x has no sets, and returns an array.
+     *
+     * @param 'http'|'ws' $protocol
+     */
+    #[DataProvider('protocols')]
+    public function testALargeSetOfRecordIdsDecodesInLinearTime(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $ids = array_map(static fn (int $i): RecordId => new RecordId('t', $i), range(1, 20_000));
+
+            $started = microtime(true);
+            [$set] = $db->run('RETURN <set> $ids', ['ids' => $ids]);
+            $seconds = microtime(true) - $started;
+
+            $members = $set instanceof Set ? $set->values : $set;
+
+            self::assertIsArray($members);
+            self::assertCount(20_000, $members);
+            self::assertTrue($ids[0]->equals($members[0]));
+            self::assertLessThan(3.0, $seconds, "Sending and decoding 20,000 record ids took {$seconds} s");
         } finally {
             $db->close();
         }

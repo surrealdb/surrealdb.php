@@ -86,6 +86,16 @@ final class Decimal extends Value
         return $other instanceof self && $this->value->isEqualTo($other->value);
     }
 
+    /**
+     * Equal decimals differ only in trailing zeros, such as `2.5` and `2.50`.
+     */
+    protected function hashKey(): string
+    {
+        $text = (string) $this->value;
+
+        return str_contains($text, '.') ? rtrim(rtrim($text, '0'), '.') : $text;
+    }
+
     public function __toString(): string
     {
         return (string) $this->value;

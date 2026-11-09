@@ -5,6 +5,7 @@ namespace SurrealDB\SDK\Types;
 use function is_array;
 use function is_int;
 use function is_object;
+use function strlen;
 
 /**
  * A fully-qualified SurrealDB record identifier (e.g. `person:tobie`).
@@ -72,6 +73,13 @@ final class RecordId extends Value
         return $other instanceof self
             && $this->table === $other->table
             && self::same($this->id, $other->id);
+    }
+
+    protected function hashKey(): ?string
+    {
+        $id = self::sameKey($this->id);
+
+        return $id === null ? null : strlen($this->table) . ':' . $this->table . $id;
     }
 
     public function __toString(): string
