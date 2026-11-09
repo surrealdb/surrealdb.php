@@ -321,8 +321,14 @@ final class WebSocketReconnectTest extends TestCase
 
             $records = [];
 
-            foreach ($live as $message) {
-                $records[] = (string) $message->record;
+            try {
+                foreach ($live as $message) {
+                    $records[] = (string) $message->record;
+                }
+
+                self::fail('Reading past a lost connection should say so.');
+            } catch (ConnectionUnavailableException) {
+                // Once what both sockets delivered has been read.
             }
 
             self::assertSame(['person:early', 'person:late'], $records);
@@ -345,18 +351,24 @@ final class WebSocketReconnectTest extends TestCase
 
             $records = [];
 
-            foreach ($live as $message) {
-                $records[] = (string) $message->record;
+            try {
+                foreach ($live as $message) {
+                    $records[] = (string) $message->record;
 
-                // Still draining the first socket's feed: the second one
-                // receives a notification, then is lost for good.
-                if (count($records) === 1) {
-                    $db->create(new RecordId('person', 'three'))->execute();
-                    $db->run('RETURN 1');
-                    $this->client->refuseConnections();
-                    $this->client->sever();
-                    self::assertSame(ConnectionStatus::Disconnected, $db->status());
+                    // Still draining the first socket's feed: the second one
+                    // receives a notification, then is lost for good.
+                    if (count($records) === 1) {
+                        $db->create(new RecordId('person', 'three'))->execute();
+                        $db->run('RETURN 1');
+                        $this->client->refuseConnections();
+                        $this->client->sever();
+                        self::assertSame(ConnectionStatus::Disconnected, $db->status());
+                    }
                 }
+
+                self::fail('Reading past a lost connection should say so.');
+            } catch (ConnectionUnavailableException) {
+                // Once what both sockets delivered has been read.
             }
 
             self::assertSame(['person:one', 'person:two', 'person:three'], $records);
@@ -720,17 +732,33 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
-    public function testLiveIterationEndsWhenTheConnectionCannotBeRestored(): void
+    public function testLiveIterationThrowsWhenTheConnectionCannotBeRestored(): void
     {
         $db = $this->connect(['attempts' => 1, 'retryDelay' => 0.001]);
         $live = $db->live(new Table('person'))->execute();
         $db->create(new RecordId('person', 'one'))->execute();
         $received = 0;
 
-        foreach ($live as $_) {
-            $received++;
-            $this->client->refuseConnections();
-            $this->client->sever();
+        try {
+            foreach ($live as $_) {
+                $received++;
+                $this->client->refuseConnections();
+                $this->client->sever();
+            }
+
+            self::fail('Iteration ended as if the query had been killed.');
+        } catch (ConnectionUnavailableException $error) {
+            self::assertStringContainsString('could not be established again', $error->getMessage());
+        }
+
+        // Read again, it says so again; a killed one ends quietly.
+        try {
+            foreach ($live as $_) {
+                self::fail('Nothing more can arrive.');
+            }
+
+            self::fail('Iteration ended as if the query had been killed.');
+        } catch (ConnectionUnavailableException) {
         }
 
         self::assertSame(1, $received);
@@ -1289,6 +1317,78 @@ SURQL);
             self::assertFalse($live->isAlive());
         } finally {
             $db->close();
+        }
+    }
+
+    public function testALiveOfSubscriptionSaysSoOnceItsConnectionIsLost(): void
+    {
+        $db = $this->connect();
+
+        try {
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $live = $db->liveOf($id);
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            // Not started again on the new connection: reading it used to end
+            // as if it had been killed.
+            $this->expectException(ConnectionUnavailableException::class);
+            $this->expectExceptionMessage('liveOf()');
+
+            foreach ($live as $_) {
+                self::fail('Nothing can arrive.');
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testALiveQueryTheServerRefusesToRestartSaysSo(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $this->client->sever();
+
+            // Gone while the connection was down: strict mode refuses the LIVE.
+            $other = new Surreal();
+            $other->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc', new ConnectOptions(
+                authentication: new RootAuth('root', 'root'),
+                namespace: $this->namespace,
+                database: 'db',
+            ));
+            $other->run('REMOVE TABLE person');
+            $other->close();
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertFalse($live->isAlive());
+
+            $this->expectException(ConnectionUnavailableException::class);
+            $this->expectExceptionMessage('refused to start the live query again');
+
+            foreach ($live as $_) {
+                self::fail('Nothing can arrive.');
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testClosingTheConnectionEndsIterationQuietly(): void
+    {
+        $db = $this->connect();
+        $live = $db->live(new Table('person'))->execute();
+        [$id] = $db->run('LIVE SELECT * FROM person');
+        $attached = $db->liveOf($id);
+        $db->close();
+
+        foreach ([$live, $attached] as $subscription) {
+            foreach ($subscription as $_) {
+                self::fail('Nothing can arrive.');
+            }
+
+            self::assertFalse($subscription->isAlive());
         }
     }
 

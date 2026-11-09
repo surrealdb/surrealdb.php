@@ -79,6 +79,12 @@ final class ConnectionController
      * (the version is then unknown, and {@see self::$cachedVersion} null).
      */
     private bool $versionAsked = false;
+
+    /**
+     * Whether the connection is being closed on purpose, as opposed to lost
+     * for good (reconnecting gave up, or is off).
+     */
+    private bool $closing = false;
     private ?\Throwable $lastError = null;
 
     private Credentials|Token|AuthProviderInterface|\Closure|string|null $authProvider = null;
@@ -190,6 +196,7 @@ final class ConnectionController
         $engine = $this->registry->create($endpoint->scheme, $this->context);
 
         $this->disconnect();
+        $this->closing = false;
 
         // Callbacks still running for the previous connection must not
         // mistake this one for theirs.
@@ -246,6 +253,7 @@ final class ConnectionController
 
     public function disconnect(): void
     {
+        $this->closing = true;
         $this->engine?->close();
     }
 
@@ -797,7 +805,9 @@ final class ConnectionController
             // another user's view of the table.
             if ($origin !== null && $ownerState !== null && Jwt::identity($ownerState->auth->accessToken) !== $origin['identity']) {
                 unset($this->managedLive[$subscription]);
-                $subscription->connectionClosed();
+                $subscription->connectionClosed(new ConnectionUnavailableException(
+                    'The connection was lost, and the live query was not started again: its session is now signed in as someone else, or signed out.',
+                ));
 
                 continue;
             }
@@ -828,7 +838,10 @@ final class ConnectionController
                 }
 
                 unset($this->managedLive[$subscription]);
-                $subscription->connectionClosed();
+                $subscription->connectionClosed(new ConnectionUnavailableException(
+                    'The connection was lost, and the server refused to start the live query again: ' . $error->getMessage(),
+                    $error,
+                ));
                 $this->onError($error);
 
                 // An error listener closed the connection.
@@ -895,6 +908,24 @@ final class ConnectionController
         }
 
         $this->unsubscribers = [];
+
+        // Closed on purpose, iteration over the live queries ends. Lost, it
+        // throws: changes may have been missed.
+        $lost = $this->closing ? null : new ConnectionUnavailableException('The connection was lost, and could not be established again.');
+        /** @var \WeakMap<LiveSubscription, true> $live */
+        $live = new \WeakMap();
+
+        foreach ($this->managedLive as $subscription => $_) {
+            $live[$subscription] = true;
+        }
+
+        foreach ($this->state?->allSessions() ?? [] as $session) {
+            foreach ($session->live as $subscription => $_) {
+                $live[$subscription] = true;
+            }
+        }
+
+        $this->managedLive = new \WeakMap();
         $this->state = null;
         $this->engine = null;
         $this->renewAt = [];
@@ -911,8 +942,6 @@ final class ConnectionController
         // for itself.
         $renewing = $this->renewing;
         $this->renewing = [];
-        $live = $this->managedLive;
-        $this->managedLive = new \WeakMap();
 
         // Announced before waking anyone: a woken task can run straight away
         // (OpenSwoole) and connect again, which this must not then undo.
@@ -929,7 +958,7 @@ final class ConnectionController
             }
 
             foreach ($live as $subscription => $_) {
-                $subscription->connectionClosed();
+                $subscription->connectionClosed($lost);
             }
         }
     }
@@ -950,6 +979,18 @@ final class ConnectionController
 
         foreach ($this->managedLive as $subscription => $_) {
             $subscription->suspend($this->context->scheduler);
+        }
+
+        // One attached with liveOf() is not started again: the SDK does not
+        // know its query.
+        foreach ($this->state?->allSessions() ?? [] as $session) {
+            foreach ($session->live as $subscription => $_) {
+                if (!$subscription->isManaged()) {
+                    $subscription->connectionClosed(new ConnectionUnavailableException(
+                        'The connection was lost. A live query attached with liveOf() is not started again on the new connection.',
+                    ));
+                }
+            }
         }
 
         // A listener that throws must not stop the reconnect half way, which

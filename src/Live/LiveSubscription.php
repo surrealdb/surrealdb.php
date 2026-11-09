@@ -41,6 +41,13 @@ abstract class LiveSubscription implements \IteratorAggregate
     /** The connection closed for good, or the session was reset or its principal changed. */
     protected bool $ended = false;
 
+    /**
+     * Why the subscription ended, when the connection was lost rather than
+     * closed or the query killed: reading it then throws this, since changes
+     * may have been missed. The first end counts.
+     */
+    private ?\Throwable $endedBy = null;
+
     /** @var Deferred<bool>|null settled once a reconnect's replay is done */
     private ?Deferred $replayed = null;
 
@@ -141,6 +148,8 @@ abstract class LiveSubscription implements \IteratorAggregate
             }
 
             if ($this->ended) {
+                $this->throwIfLost();
+
                 return;
             }
 
@@ -157,8 +166,21 @@ abstract class LiveSubscription implements \IteratorAggregate
             }
 
             if ($this->finished() || ($this->feed === $feed && $this->backlog === [])) {
+                $this->throwIfLost();
+
                 return;
             }
+        }
+    }
+
+    /**
+     * Ended by a lost connection: say so, rather than end as if the query
+     * had been killed.
+     */
+    private function throwIfLost(): void
+    {
+        if ($this->endedBy !== null && !$this->killed && !$this->serverKilled) {
+            throw $this->endedBy;
         }
     }
 
@@ -187,9 +209,17 @@ abstract class LiveSubscription implements \IteratorAggregate
     /**
      * @internal the connection closed for good, or the subscription cannot
      * be carried over to a new one
+     *
+     * @param \Throwable|null $lost why, when the connection was lost rather
+     *                              than closed: reading the subscription then
+     *                              throws it
      */
-    public function connectionClosed(): void
+    public function connectionClosed(?\Throwable $lost = null): void
     {
+        if (!$this->ended && !$this->killed && !$this->killedByServer()) {
+            $this->endedBy = $lost;
+        }
+
         $this->ended = true;
         $this->endFeed();
 
