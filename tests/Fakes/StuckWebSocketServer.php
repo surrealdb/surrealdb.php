@@ -4,8 +4,8 @@ namespace SurrealDB\Tests\Fakes;
 
 /**
  * A WebSocket server, in a child process, that completes the upgrade
- * handshake and then reads nothing: a write larger than the socket buffers
- * never finishes.
+ * handshake, runs `$then` with the connection in `$conn`, and then reads
+ * nothing: a write larger than the socket buffers never finishes.
  */
 final class StuckWebSocketServer
 {
@@ -17,7 +17,7 @@ final class StuckWebSocketServer
 
     public readonly string $address;
 
-    public function __construct()
+    public function __construct(string $then = '')
     {
         $code = <<<'PHP'
             $server = stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
@@ -34,8 +34,8 @@ final class StuckWebSocketServer
             fwrite($conn, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                 . (isset($protocol[1]) ? "Sec-WebSocket-Protocol: {$protocol[1]}\r\n" : '')
                 . "Sec-WebSocket-Accept: {$accept}\r\n\r\n");
-            sleep(60);
             PHP;
+        $code .= "\n{$then}\nsleep(60);";
 
         $process = proc_open([PHP_BINARY, '-r', $code], [1 => ['pipe', 'w']], $pipes);
 

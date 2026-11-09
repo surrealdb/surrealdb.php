@@ -15,13 +15,48 @@ use SurrealDB\SDK\Scheduler\Swoole\SwooleScheduler;
 use SurrealDB\SDK\Transport\Swoole\SwooleWebSocketTransport;
 use SurrealDB\Tests\Fakes\StuckWebSocketServer;
 
-final class SwooleWebSocketTransportWriteTest extends TestCase
+final class SwooleWebSocketTransportTest extends TestCase
 {
     protected function setUp(): void
     {
         if (!extension_loaded('openswoole')) {
             $this->markTestSkipped('The openswoole extension is not installed.');
         }
+    }
+
+    public function testAServerCloseFrameEndsTheStream(): void
+    {
+        $server = new StuckWebSocketServer('fwrite($conn, chr(0x88) . chr(2) . pack("n", 1000));');
+        $frames = [];
+
+        try {
+            \OpenSwoole\Coroutine::run(static function () use ($server, &$frames): void {
+                $transport = new SwooleWebSocketTransport(self::context(), Endpoint::parse($server->url()));
+                $transport->open();
+
+                // It used to be read as an empty message, which then failed
+                // to decode as CBOR.
+                $frames[] = $transport->receiveFrame(2.0);
+                $frames[] = $transport->isConnected();
+            });
+        } finally {
+            $server->stop();
+        }
+
+        self::assertSame([null, false], $frames);
+    }
+
+    private static function context(): DriverContext
+    {
+        return new DriverContext(
+            options: new DriverOptions(),
+            codec: Codec::cbor(),
+            format: CodecEnum::CBOR,
+            events: new EventDispatcher(),
+            logger: new NullLogger(),
+            scheduler: new SwooleScheduler(),
+            uniqueId: static fn (): string => '1',
+        );
     }
 
     public function testAWriteTheServerStopsReadingEndsInsteadOfHanging(): void

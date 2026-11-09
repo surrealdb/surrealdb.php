@@ -3,6 +3,7 @@
 namespace SurrealDB\SDK\Transport\Swoole;
 
 use OpenSwoole\Coroutine\Http\Client;
+use OpenSwoole\WebSocket\CloseFrame;
 use OpenSwoole\WebSocket\Frame;
 use SurrealDB\SDK\Connection\DriverContext;
 use SurrealDB\SDK\Connection\Endpoint;
@@ -92,6 +93,14 @@ final class SwooleWebSocketTransport implements DuplexTransportInterface
         }
 
         $frame = $this->client->recv($timeout ?? -1.0);
+
+        // The server closing the connection is the end of the stream, not a
+        // message: read as one, its empty payload failed to decode.
+        if ($frame instanceof CloseFrame) {
+            $this->client->close();
+
+            return null;
+        }
 
         if ($frame instanceof Frame) {
             return (string) $frame->data;
