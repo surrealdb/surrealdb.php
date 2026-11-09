@@ -2,7 +2,9 @@
 
 namespace SurrealDB\SDK\Types;
 
+use Brick\Math\BigInteger;
 use SurrealDB\SDK\Exceptions\InvalidValueException;
+use function is_int;
 use function strlen;
 
 /**
@@ -13,6 +15,11 @@ use function strlen;
  * syntax (e.g. `1h30m`, `500ms`, `0ns`). There is no suitable native PHP type
  * (`DateInterval` cannot represent sub-second precision or this syntax), so this
  * is a purpose-built value object.
+ *
+ * As in SurrealDB, the seconds and the nanoseconds are kept apart, so a
+ * duration is not limited to a 64-bit count of nanoseconds (about 292 years).
+ * It holds up to PHP_INT_MAX seconds; anything longer throws
+ * {@see InvalidValueException}.
  */
 final class Duration extends Value
 {
@@ -61,11 +68,27 @@ final class Duration extends Value
     public readonly int $seconds;
     public readonly int $nanoseconds;
 
+    /**
+     * Whole seconds are carried out of the nanoseconds, which leaves them
+     * under one second and with the same sign as the seconds.
+     *
+     * @throws InvalidValueException when the duration is over PHP_INT_MAX seconds
+     */
     public function __construct(int $seconds = 0, int $nanoseconds = 0)
     {
-        $total = $seconds * self::SECOND + $nanoseconds;
-        $this->seconds = intdiv($total, self::SECOND);
-        $this->nanoseconds = $total % self::SECOND;
+        $seconds = self::checked($seconds + intdiv($nanoseconds, self::SECOND));
+        $nanoseconds %= self::SECOND;
+
+        if ($seconds > 0 && $nanoseconds < 0) {
+            $seconds--;
+            $nanoseconds += self::SECOND;
+        } elseif ($seconds < 0 && $nanoseconds > 0) {
+            $seconds++;
+            $nanoseconds -= self::SECOND;
+        }
+
+        $this->seconds = $seconds;
+        $this->nanoseconds = $nanoseconds;
     }
 
     /**
@@ -85,12 +108,12 @@ final class Duration extends Value
 
     public static function microseconds(int $value): self
     {
-        return new self(0, $value * self::MICROSECOND);
+        return self::ofUnit($value, self::MICROSECOND);
     }
 
     public static function milliseconds(int $value): self
     {
-        return new self(0, $value * self::MILLISECOND);
+        return self::ofUnit($value, self::MILLISECOND);
     }
 
     public static function seconds(int $value): self
@@ -100,61 +123,80 @@ final class Duration extends Value
 
     public static function minutes(int $value): self
     {
-        return new self($value * intdiv(self::MINUTE, self::SECOND), 0);
+        return self::ofUnit($value, self::MINUTE);
     }
 
     public static function hours(int $value): self
     {
-        return new self($value * intdiv(self::HOUR, self::SECOND), 0);
+        return self::ofUnit($value, self::HOUR);
     }
 
     public static function days(int $value): self
     {
-        return new self($value * intdiv(self::DAY, self::SECOND), 0);
+        return self::ofUnit($value, self::DAY);
     }
 
     public static function weeks(int $value): self
     {
-        return new self($value * intdiv(self::WEEK, self::SECOND), 0);
+        return self::ofUnit($value, self::WEEK);
     }
 
     public static function years(int $value): self
     {
-        return new self($value * intdiv(self::YEAR, self::SECOND), 0);
+        return self::ofUnit($value, self::YEAR);
     }
 
     public function add(self $other): self
     {
-        return new self($this->seconds + $other->seconds, $this->nanoseconds + $other->nanoseconds);
+        return new self(
+            self::checked($this->seconds + $other->seconds),
+            $this->nanoseconds + $other->nanoseconds,
+        );
     }
 
     public function sub(self $other): self
     {
-        return new self($this->seconds - $other->seconds, $this->nanoseconds - $other->nanoseconds);
+        return new self(
+            self::checked($this->seconds - $other->seconds),
+            $this->nanoseconds - $other->nanoseconds,
+        );
     }
 
     public function mul(int $factor): self
     {
-        $totalNs = ($this->seconds * self::SECOND + $this->nanoseconds) * $factor;
-
-        return new self(0, $totalNs);
+        return self::fromTotal($this->total()->multipliedBy($factor));
     }
 
+    /**
+     * Divide, rounding towards zero to whole nanoseconds.
+     */
     public function div(int $divisor): self
     {
         if ($divisor === 0) {
             throw new InvalidValueException('Division by zero.');
         }
 
-        $totalNs = intdiv($this->seconds * self::SECOND + $this->nanoseconds, $divisor);
-
-        return new self(0, $totalNs);
+        return self::fromTotal($this->total()->quotient($divisor));
     }
 
-    /** Total nanoseconds in this duration. */
+    /**
+     * Total nanoseconds in this duration.
+     *
+     * @throws InvalidValueException when that is more than a PHP integer holds,
+     *                               past about 292 years; read the seconds and
+     *                               nanoseconds properties instead
+     */
     public function totalNanoseconds(): int
     {
-        return $this->seconds * self::SECOND + $this->nanoseconds;
+        $total = $this->total();
+
+        if ($total->isGreaterThan(PHP_INT_MAX) || $total->isLessThan(PHP_INT_MIN)) {
+            throw new InvalidValueException(
+                "Duration {$this} has more nanoseconds than a PHP integer holds; read its seconds and nanoseconds instead.",
+            );
+        }
+
+        return $total->toInt();
     }
 
     public function equals(mixed $other): bool
@@ -193,6 +235,7 @@ final class Duration extends Value
             }
         }
 
+        // Under a minute is left, so this cannot overflow.
         $remainingNanoseconds = $remainingSeconds * self::SECOND + $this->nanoseconds;
 
         foreach (self::FORMAT_UNITS as [$unit, $size]) {
@@ -228,6 +271,9 @@ final class Duration extends Value
     }
 
     /**
+     * Whole units are added up in seconds and sub-second units apart, as
+     * SurrealDB does, carrying whole seconds out of the nanoseconds.
+     *
      * @return array{int, int} `[seconds, nanoseconds]`
      */
     private static function parse(string $input): array
@@ -235,7 +281,7 @@ final class Duration extends Value
         $seconds = 0;
         $nanoseconds = 0;
         $left = $input;
-        $pattern = '/^(\d+)\.?\d*(' . self::unitAlternation() . ')/u';
+        $pattern = '/^([0-9]+)\.?[0-9]*(' . self::unitAlternation() . ')/u';
 
         while ($left !== '') {
             if (preg_match($pattern, $left, $matches) !== 1) {
@@ -243,21 +289,77 @@ final class Duration extends Value
             }
 
             $amount = (int) $matches[1];
-            $factor = self::UNITS[$matches[2]];
+            $unit = self::UNITS[$matches[2]];
 
-            if ($factor >= self::SECOND) {
-                $seconds += $amount * intdiv($factor, self::SECOND);
-            } else {
-                $nanoseconds += $amount * $factor;
+            // The cast stops at PHP_INT_MAX: a larger amount, such as
+            // 10000000000000000000ns, is counted exactly instead.
+            $part = $amount === PHP_INT_MAX && ltrim($matches[1], '0') !== (string) PHP_INT_MAX
+                ? self::fromTotal(BigInteger::of($matches[1])->multipliedBy($unit))
+                : self::ofUnit($amount, $unit);
+            $seconds = self::checked($seconds + $part->seconds);
+            $nanoseconds += $part->nanoseconds;
+
+            if ($nanoseconds >= self::SECOND) {
+                $seconds = self::checked($seconds + 1);
+                $nanoseconds -= self::SECOND;
             }
 
             $left = substr($left, strlen($matches[0]));
         }
 
-        $seconds += intdiv($nanoseconds, self::SECOND);
-        $nanoseconds %= self::SECOND;
-
         return [$seconds, $nanoseconds];
+    }
+
+    /**
+     * `$amount` units of `$unit` nanoseconds each, without first multiplying
+     * out a count of nanoseconds that could overflow.
+     */
+    private static function ofUnit(int $amount, int $unit): self
+    {
+        if ($unit >= self::SECOND) {
+            return new self(self::checked($amount * intdiv($unit, self::SECOND)));
+        }
+
+        $perSecond = intdiv(self::SECOND, $unit);
+
+        return new self(intdiv($amount, $perSecond), ($amount % $perSecond) * $unit);
+    }
+
+    /**
+     * This duration in nanoseconds, as an integer of any size.
+     */
+    private function total(): BigInteger
+    {
+        return BigInteger::of($this->seconds)->multipliedBy(self::SECOND)->plus($this->nanoseconds);
+    }
+
+    private static function fromTotal(BigInteger $nanoseconds): self
+    {
+        [$seconds, $remainder] = $nanoseconds->quotientAndRemainder(self::SECOND);
+
+        if ($seconds->isGreaterThan(PHP_INT_MAX) || $seconds->isLessThan(PHP_INT_MIN)) {
+            throw self::tooLong();
+        }
+
+        return new self($seconds->toInt(), $remainder->toInt());
+    }
+
+    /**
+     * A count of seconds from integer arithmetic, which PHP turns into a
+     * float when it overflows.
+     */
+    private static function checked(int|float $seconds): int
+    {
+        if (!is_int($seconds)) {
+            throw self::tooLong();
+        }
+
+        return $seconds;
+    }
+
+    private static function tooLong(): InvalidValueException
+    {
+        return new InvalidValueException('Duration is longer than ' . PHP_INT_MAX . ' seconds, the most a PHP integer holds.');
     }
 
     private static function unitAlternation(): string

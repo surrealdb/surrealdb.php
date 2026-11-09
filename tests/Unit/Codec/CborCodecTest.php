@@ -209,6 +209,25 @@ final class CborCodecTest extends TestCase
         $this->assertSame($hex, bin2hex($this->serializer->serialize($value)));
     }
 
+    public function testDecodesADurationLongerThan292Years(): void
+    {
+        // Tag 14 [9460800000, 0], as every server sends for `RETURN 300y`.
+        $compact = $this->deserializer->deserialize(hex2bin('ce821b0000000233e85a0000'));
+        // Tag 13 "600y".
+        $text = $this->deserializer->deserialize(hex2bin('cd6436303079'));
+
+        $this->assertInstanceOf(Duration::class, $compact);
+        $this->assertSame('300y', (string) $compact);
+        $this->assertInstanceOf(Duration::class, $text);
+        $this->assertSame([18_921_600_000, 0], $text->toCompact());
+    }
+
+    public function testEncodesADurationLongerThan292Years(): void
+    {
+        $this->assertSame('ce821b0000000233e85a0000', bin2hex($this->serializer->serialize(Duration::years(300))));
+        $this->assertTrue(Duration::years(300)->equals($this->roundTrip(Duration::years(300))));
+    }
+
     public function testEmptyObjectEncodesAsAMap(): void
     {
         $this->assertSame('a0', bin2hex($this->serializer->serialize(new \stdClass())));
