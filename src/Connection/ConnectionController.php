@@ -1222,17 +1222,15 @@ final class ConnectionController
             return false;
         }
 
-        if ($this->skipRenewal) {
-            $this->abortAuthentication($session);
-
-            return false;
-        }
-
         // Each step below can wait (on the server, or on an auth provider),
         // and an explicit sign-in or sign-out meanwhile takes precedence.
         $auth = $sessionState->auth;
         $generation = $auth->generation;
         $token = $auth->accessToken;
+
+        if ($this->skipRenewal) {
+            return $this->applyWithoutRenewal($session, $auth, $generation, $keepValidToken);
+        }
 
         if ($token !== null) {
             $expiry = Jwt::expiry($token);
@@ -1330,12 +1328,55 @@ final class ConnectionController
         return null;
     }
 
+    /**
+     * Authentication with renewal off (`invalidateOnExpiry`): a token is used
+     * for as long as it is valid, on a new socket too, and the session is
+     * signed out once it expires, not renewed. Signing a session in for the
+     * first time with the auth provider is not renewal, and still happens.
+     *
+     * @return bool whether it kept a valid token (renewal)
+     */
+    private function applyWithoutRenewal(?string $session, AuthState $auth, int $generation, bool $keepValidToken): bool
+    {
+        $token = $auth->accessToken;
+        $expiry = $token === null ? null : Jwt::expiry($token);
+
+        if ($token !== null && ($expiry === null || $expiry > time())) {
+            if ($keepValidToken) {
+                return true;
+            }
+
+            try {
+                $this->authenticate($token, $session, true);
+
+                return false;
+            } catch (ServerException) {
+                // Refused: signed out below.
+            }
+        }
+
+        // A session signed out when its token expired is overridden (see
+        // abortAuthentication()), so it is not signed back in here.
+        if ($token === null && !$auth->overridden && $this->applyAuthProvider($session, $auth, $generation)) {
+            return false;
+        }
+
+        if ($this->isCurrentAuth($session, $auth, $generation)) {
+            $this->abortAuthentication($session);
+        }
+
+        return false;
+    }
+
     private function abortAuthentication(?string $session): void
     {
         $sessionState = $this->state?->session($session);
 
+        // With renewal off this is the token expiring, which signs the session
+        // out for good: the auth provider does not sign it back in. Otherwise
+        // the provider may still, once it has new credentials.
         if ($sessionState?->auth->accessToken !== null) {
-            $this->invalidate($session, true);
+            $this->invalidate($session, !$this->skipRenewal);
         }
     }
 

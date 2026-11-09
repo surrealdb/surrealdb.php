@@ -9,6 +9,7 @@ use SurrealDB\SDK\Connection\DriverContext;
 use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Enum\CodecEnum;
 use SurrealDB\SDK\Events\Connected;
+use SurrealDB\SDK\Exceptions\SerializationException;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\Tests\Fakes\FakeDuplexTransport;
 
@@ -43,6 +44,41 @@ final class SurrealWebSocketTest extends TestCase
         $transport = $captured;
 
         return $db;
+    }
+
+    public function testAnUnreadableReplyFailsTheCallAndTheConnectionCarriesOn(): void
+    {
+        $responder = $this->responder();
+        $transport = null;
+        $db = new Surreal(new DriverOptions(
+            webSocketTransportFactory: function () use ($responder, &$transport): FakeDuplexTransport {
+                return $transport = new FakeDuplexTransport(
+                    static function (string $method, array $params, ?string $id) use ($responder): ?array {
+                        // Not answered: the frame pushed below stands in for the reply.
+                        if ($method === 'query' && ($params[0] ?? null) === 'RETURN "unreadable"') {
+                            return null;
+                        }
+
+                        return $responder($method, $params, $id);
+                    },
+                );
+            },
+        ));
+        $db->connect('ws://localhost:8000/rpc', new ConnectOptions(namespace: 'test', database: 'test'));
+        self::assertInstanceOf(FakeDuplexTransport::class, $transport);
+
+        // Text said to be 4 bytes long, with 2 of them.
+        $transport->pushRawIncoming("\x64ab");
+
+        try {
+            $db->run('RETURN "unreadable"');
+            self::fail('Expected the unreadable reply to fail the call.');
+        } catch (SerializationException $error) {
+            self::assertStringContainsString('Malformed CBOR', $error->getMessage());
+        }
+
+        self::assertTrue($db->isConnected());
+        self::assertCount(1, $db->run('RETURN 1'));
     }
 
     public function testConnectPerformsVersionHandshakeAndEmitsConnected(): void

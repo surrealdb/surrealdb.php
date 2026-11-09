@@ -10,6 +10,7 @@ use SurrealDB\SDK\Contracts\TimerScheduler;
 use SurrealDB\SDK\Engines\AbstractRpcEngine;
 use SurrealDB\SDK\Events\LiveMessageReceived;
 use SurrealDB\SDK\Exceptions\CallTerminatedException;
+use SurrealDB\SDK\Exceptions\SerializationException;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Live\LiveAction;
 use SurrealDB\SDK\Live\LiveFeed;
@@ -541,7 +542,18 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return false;
         }
 
-        $decoded = $this->context->codec->deserialize($frame);
+        try {
+            $decoded = $this->context->codec->deserialize($frame);
+        } catch (SerializationException $error) {
+            // A frame that cannot be read cannot be routed either. Like an
+            // error without an id, it fails the calls still waiting rather
+            // than leave the one it answered waiting forever, and the socket
+            // carries on.
+            $this->failAllCalls($error);
+            $this->publisher->publish('error', $error);
+
+            return true;
+        }
 
         if (is_array($decoded)) {
             $this->handleMessage($decoded);

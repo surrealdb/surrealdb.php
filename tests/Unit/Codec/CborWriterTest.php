@@ -66,6 +66,14 @@ final class CborWriterTest extends TestCase
         $this->assertSame(303, strlen($encoded));
     }
 
+    public function testRejectsTextThatIsNotUtf8(): void
+    {
+        $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Bytes');
+
+        CborWriter::encode(['avatar' => "\x00\xff"]);
+    }
+
     public function testRejectsUnsupportedValues(): void
     {
         $this->expectException(SerializationException::class);

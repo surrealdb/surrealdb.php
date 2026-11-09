@@ -251,11 +251,11 @@ final class WebSocketReconnectTest extends TestCase
 
             // Delivered to the feed (while waiting for the next call's
             // reply), but not iterated before the socket drops.
-            $db->create(new RecordId('person', 'before'))->execute();
+            $db->create(new RecordId('person', 'early'))->execute();
             $db->run('RETURN 1');
             $this->client->sever();
             self::assertSame(ConnectionStatus::Connected, $db->status());
-            $db->create(new RecordId('person', 'after'))->execute();
+            $db->create(new RecordId('person', 'late'))->execute();
 
             $records = [];
 
@@ -267,7 +267,7 @@ final class WebSocketReconnectTest extends TestCase
                 }
             }
 
-            self::assertSame(['person:before', 'person:after'], $records);
+            self::assertSame(['person:early', 'person:late'], $records);
         } finally {
             $db->close();
         }
@@ -306,12 +306,12 @@ final class WebSocketReconnectTest extends TestCase
 
         try {
             $live = $db->live(new Table('person'))->execute();
-            $db->create(new RecordId('person', 'before'))->execute();
+            $db->create(new RecordId('person', 'early'))->execute();
             $db->run('RETURN 1');
             $this->client->sever();
             self::assertSame(ConnectionStatus::Connected, $db->status());
 
-            $db->create(new RecordId('person', 'after'))->execute();
+            $db->create(new RecordId('person', 'late'))->execute();
             $db->run('RETURN 1');
             $this->client->refuseConnections();
             $this->client->sever();
@@ -323,7 +323,7 @@ final class WebSocketReconnectTest extends TestCase
                 $records[] = (string) $message->record;
             }
 
-            self::assertSame(['person:before', 'person:after'], $records);
+            self::assertSame(['person:early', 'person:late'], $records);
         } finally {
             $db->close();
         }
@@ -504,10 +504,10 @@ final class WebSocketReconnectTest extends TestCase
             self::assertSame(['reconnecting', 'reconnecting', 'connected'], $events);
             self::assertTrue($live->isAlive());
 
-            $db->create(new RecordId('person', 'after'))->execute();
+            $db->create(new RecordId('person', 'late'))->execute();
 
             foreach ($live as $message) {
-                self::assertSame('person:after', (string) $message->record);
+                self::assertSame('person:late', (string) $message->record);
 
                 break;
             }
@@ -789,6 +789,78 @@ final class WebSocketReconnectTest extends TestCase
             self::assertSame([1], $db->run('RETURN 1'));
             self::assertNotNull($token);
             self::assertSame($token, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffTheAuthProviderStillSignsIn(): void
+    {
+        $db = $this->connect(invalidateOnExpiry: true);
+
+        try {
+            self::assertNotNull($db->accessToken());
+            self::assertIsArray($db->run('INFO FOR ROOT')[0] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffAReconnectKeepsAValidToken(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(define: false, invalidateOnExpiry: true);
+
+        try {
+            $db->signin(new NamespaceAuth($this->namespace, 'renew', 'secret'));
+            $token = $db->accessToken();
+
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertNotNull($token);
+            self::assertSame($token, $db->accessToken());
+            self::assertIsArray($db->run('INFO FOR NS')[0] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffAnExpiredSessionStaysSignedOut(): void
+    {
+        $setup = $this->connect();
+
+        try {
+            $setup->run("DEFINE USER brief ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h");
+        } finally {
+            $setup->close();
+        }
+
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'brief', 'secret'), define: false, invalidateOnExpiry: true);
+
+        try {
+            self::assertNotNull($db->accessToken());
+
+            // The next call finds the token expired, and signs the session out.
+            sleep(3);
+            $db->run('RETURN 1');
+            self::assertNull($db->accessToken());
+
+            // A reconnect does not sign it back in with the auth provider.
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertNull($db->accessToken());
         } finally {
             $db->close();
         }

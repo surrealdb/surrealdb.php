@@ -91,4 +91,10 @@ final class FakeDuplexTransport implements DuplexTransportInterface
     {
         $this->inbox[] = $this->codec->serialize($frame);
     }
+
+    /** Inject raw bytes as an incoming frame, encoded or not. */
+    public function pushRawIncoming(string $frame): void
+    {
+        $this->inbox[] = $frame;
+    }
 }
