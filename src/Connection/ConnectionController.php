@@ -1321,8 +1321,14 @@ final class ConnectionController
                     $this->refresh($tokens, $session, true);
 
                     return false;
-                } catch (ServerException) {
-                    // Fall through to the next strategy.
+                } catch (ServerException $error) {
+                    // Expired, revoked or spent: it will not work again, and
+                    // trying it at every renewal and reconnect only fails.
+                    if ($this->isCurrentAuth($session, $auth, $generation) && $auth->refreshToken === $tokens->refresh) {
+                        $auth->refreshToken = null;
+                    }
+
+                    $this->onError(new AuthenticationException('The refresh token was refused', $error));
                 }
             }
         }

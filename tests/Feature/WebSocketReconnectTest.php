@@ -21,6 +21,7 @@ use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
 use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\Tests\Fakes\MethodLog;
 use SurrealDB\Tests\Fakes\SeverableWebSocketClient;
 use function count;
 
@@ -973,6 +974,56 @@ SURQL);
             sleep(2);
 
             self::assertSame(['bert'], $db->run('RETURN $auth.name'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testARefusedRefreshTokenIsDroppedAndReported(): void
+    {
+        $db = $this->connect();
+
+        try {
+            if (!$db->isFeatureSupported(Features::refreshTokens())) {
+                self::markTestSkipped('Refresh tokens need SurrealDB 3.0 or later.');
+            }
+
+            // Due for renewal at once, valid for half a minute.
+            $db->run(<<<'SURQL'
+DEFINE ACCESS IF NOT EXISTS brief ON DATABASE TYPE RECORD
+    SIGNUP (CREATE user SET name = $name)
+    SIGNIN (SELECT * FROM user WHERE name = $name)
+    WITH REFRESH DURATION FOR TOKEN 30s;
+DEFINE TABLE IF NOT EXISTS user SCHEMALESS PERMISSIONS FULL;
+SURQL);
+
+            $log = new MethodLog();
+            $user = new Surreal(new DriverOptions(middleware: [$log]));
+            $user->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
+            $tokens = $user->signup(new RecordAccessAuth($this->namespace, 'db', 'brief', ['name' => 'ada']));
+            $errors = [];
+            $user->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+                $errors[] = $error->getMessage();
+            });
+
+            // Refresh tokens are single use: another client spends it.
+            $other = new Surreal();
+            $other->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
+            $other->connection()->refresh($tokens);
+            $other->close();
+
+            try {
+                self::assertSame(['ada'], $user->run('RETURN $auth.name'));
+                self::assertSame(['ada'], $user->run('RETURN $auth.name'));
+
+                // Refused once, dropped, reported; the access token carries on.
+                self::assertSame(['The refresh token was refused'], $errors);
+                self::assertNull($user->connection()->state()?->rootSession->auth->refreshToken);
+                self::assertSame($tokens->access, $user->accessToken());
+                self::assertSame(1, $log->count('refresh'));
+            } finally {
+                $user->close();
+            }
         } finally {
             $db->close();
         }
