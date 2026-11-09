@@ -387,8 +387,15 @@ final class ConnectionController
     public function revoke(Tokens $tokens, ?string $session = null): void
     {
         $this->assertFeature(Features::refreshTokens());
-        $this->requireSession($session);
+        $sessionState = $this->requireSession($session);
         $this->requireEngine()->revoke($tokens, $session);
+
+        // Revoking the session's own refresh token: renewing and restoring
+        // the session must not send it again. Its access token stays good
+        // until it expires.
+        if ($tokens->refresh !== null && $sessionState->auth->refreshToken === $tokens->refresh) {
+            $sessionState->auth->refreshToken = null;
+        }
     }
 
     public function set(string $name, mixed $value, ?string $session = null): void

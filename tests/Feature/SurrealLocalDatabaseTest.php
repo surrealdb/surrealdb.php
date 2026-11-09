@@ -576,6 +576,39 @@ SURQL);
         }
     }
 
+    #[DataProvider('protocols')]
+    public function testRevokingTheSessionsRefreshTokenForgetsIt(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            if (!$db->isFeatureSupported(Features::refreshTokens())) {
+                self::markTestSkipped('Refresh tokens need SurrealDB 3.0 or later.');
+            }
+
+            [$namespace] = $db->run('RETURN session::ns()');
+            $db->run(<<<'SURQL'
+DEFINE TABLE user SCHEMALESS PERMISSIONS FULL;
+DEFINE ACCESS account ON DATABASE TYPE RECORD
+    SIGNUP (CREATE user SET name = $name)
+    SIGNIN (SELECT * FROM user WHERE name = $name)
+    WITH REFRESH;
+SURQL);
+            $tokens = $db->signup(new RecordAccessAuth($namespace, 'db', 'account', ['name' => 'ada']));
+            self::assertNotNull($tokens->refresh);
+
+            $db->connection()->revoke($tokens);
+
+            // Renewal and reconnects would have sent the revoked token.
+            $auth = $db->connection()->state()?->rootSession->auth;
+            self::assertNull($auth?->refreshToken);
+            self::assertSame($tokens->access, $auth?->accessToken);
+            self::assertSame(['ada'], $db->run('RETURN $auth.name'));
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testATokenConnectsThroughAProxyThatRequiresOne(): void
     {
         $root = $this->connect('http');
