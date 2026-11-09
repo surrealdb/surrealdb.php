@@ -5,6 +5,7 @@ namespace SurrealDB\SDK\Live;
 use SurrealDB\SDK\Connection\ConnectionController;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\SDK\Support\Jwt;
 
 /**
  * A live subscription whose `LIVE SELECT` the SDK issued. Created by
@@ -14,6 +15,14 @@ use SurrealDB\SDK\Query\BoundQuery;
 final class ManagedLiveSubscription extends LiveSubscription
 {
     private string $id = '';
+
+    /**
+     * Where, and as whom, the query first started: a replay after a reconnect
+     * runs it there again, and not as anyone else.
+     *
+     * @var array{namespace: ?string, database: ?string, identity: array<string, mixed>|null}|null
+     */
+    private ?array $origin = null;
 
     public function __construct(
         ConnectionController $connection,
@@ -29,6 +38,15 @@ final class ManagedLiveSubscription extends LiveSubscription
     public function start(): void
     {
         $result = null;
+
+        if ($this->origin === null) {
+            $state = $this->connection->state()?->session($this->session);
+            $this->origin = [
+                'namespace' => $state?->namespace,
+                'database' => $state?->database,
+                'identity' => Jwt::identity($state?->auth->accessToken),
+            ];
+        }
 
         foreach ($this->connection->query($this->query, $this->session) as $chunk) {
             $result = $chunk->resultOrThrow();
@@ -79,6 +97,16 @@ final class ManagedLiveSubscription extends LiveSubscription
     public function id(): string
     {
         return $this->id;
+    }
+
+    /**
+     * @internal where, and as whom, the query first started
+     *
+     * @return array{namespace: ?string, database: ?string, identity: array<string, mixed>|null}|null
+     */
+    public function origin(): ?array
+    {
+        return $this->origin;
     }
 
     public function isManaged(): bool

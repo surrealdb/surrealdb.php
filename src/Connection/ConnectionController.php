@@ -325,7 +325,7 @@ final class ConnectionController
             return $tokens;
         }
 
-        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride, $tokens->access);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
@@ -345,7 +345,7 @@ final class ConnectionController
             return $tokens;
         }
 
-        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride, $tokens->access);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
@@ -362,7 +362,7 @@ final class ConnectionController
             return;
         }
 
-        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride, $token);
         $sessionState->auth->accessToken = $token;
 
         // A token given explicitly may belong to someone else: keeping the
@@ -386,6 +386,8 @@ final class ConnectionController
             return $refreshed;
         }
 
+        // Refreshing the session's own pair keeps who it is; another's does not.
+        $this->endLiveQueriesUnlessRenewing($session, true, $refreshed->access);
         $this->applyTokens($session, $refreshed, $skipOverride);
 
         return $refreshed;
@@ -788,8 +790,36 @@ final class ConnectionController
                 continue;
             }
 
+            $origin = $subscription->origin();
+            $ownerState = $this->state?->session($subscription->session());
+
+            // Restarted as whoever the session is now, it would deliver
+            // another user's view of the table.
+            if ($origin !== null && $ownerState !== null && Jwt::identity($ownerState->auth->accessToken) !== $origin['identity']) {
+                unset($this->managedLive[$subscription]);
+                $subscription->connectionClosed();
+
+                continue;
+            }
+
+            // The session may have moved to another namespace or database
+            // since: the query runs where it started, and the session goes
+            // back to its own selection after.
+            $moved = $origin !== null && $ownerState !== null
+                && [$origin['namespace'], $origin['database']] !== [$ownerState->namespace, $ownerState->database];
+
             try {
-                $subscription->replay();
+                if ($moved) {
+                    $this->requireEngine()->use(new NamespaceDatabase($origin['namespace'], $origin['database']), $ownerState->id);
+                }
+
+                try {
+                    $subscription->replay();
+                } finally {
+                    if ($moved && $this->isCurrentConnection($epoch)) {
+                        $this->requireEngine()->use(new NamespaceDatabase($ownerState->namespace, $ownerState->database), $ownerState->id);
+                    }
+                }
             } catch (\Throwable $error) {
                 // The new socket was lost too: the subscriptions stay
                 // tracked and waiting, for the next connection to replay.
@@ -965,14 +995,21 @@ final class ConnectionController
     }
 
     /**
-     * An explicit sign-in changes who the session is; renewing (the SDK's
-     * own sign-in with the same credentials or token) does not.
+     * An explicit sign-in changes who the session is. Renewing (the SDK's own
+     * sign-in with the auth provider, or with a refresh token) usually does
+     * not, but can: an auth provider may hand out another user's credentials,
+     * and a refresh may be given another user's pair. The live queries the
+     * session started end whenever who it is changes.
      */
-    private function endLiveQueriesUnlessRenewing(?string $session, bool $renewing): void
+    private function endLiveQueriesUnlessRenewing(?string $session, bool $renewing, ?string $newToken = null): void
     {
         $sessionState = $this->state?->session($session);
 
-        if (!$renewing && $sessionState !== null) {
+        if ($sessionState === null) {
+            return;
+        }
+
+        if (!$renewing || Jwt::identity($sessionState->auth->accessToken) !== Jwt::identity($newToken)) {
             $this->endLiveQueries($sessionState);
         }
     }

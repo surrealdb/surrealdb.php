@@ -1214,6 +1214,84 @@ SURQL);
         }
     }
 
+    public function testALiveQueryIsRestartedInTheDatabaseItStartedIn(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->run("USE DB other; DEFINE TABLE IF NOT EXISTS person SCHEMALESS PERMISSIONS FULL; USE DB db;");
+            $live = $db->live(new Table('person'))->execute();
+            $db->use($this->namespace, 'other');
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+                // The call that finds the socket dead.
+            }
+
+            // One change in each database, from another client.
+            $writer = new Surreal();
+            $writer->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc', new ConnectOptions(
+                authentication: new RootAuth('root', 'root'),
+                namespace: $this->namespace,
+                database: 'other',
+            ));
+            $writer->create(new RecordId('person', 'other'))->execute();
+            $writer->use($this->namespace, 'db');
+            $writer->create(new RecordId('person', 'db'))->execute();
+            $writer->close();
+
+            // Restarted in whatever the session had selected, it reported
+            // the change in the other database.
+            foreach ($live as $message) {
+                self::assertEquals(new RecordId('person', 'db'), $message->record);
+
+                break;
+            }
+
+            // The session itself stays where it was moved to.
+            self::assertSame([[$this->namespace, 'other']], $db->run('RETURN [session::ns(), session::db()]'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testARenewalThatSignsInAsSomeoneElseEndsTheLiveQueries(): void
+    {
+        $setup = $this->connect();
+        $setup->run(<<<'SURQL'
+DEFINE USER first ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h;
+DEFINE USER second ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h;
+SURQL);
+        $setup->close();
+
+        $user = 'first';
+        $namespace = $this->namespace;
+        // A provider whose credentials change to another user's.
+        $provider = static function () use (&$user, $namespace): NamespaceAuth {
+            return new NamespaceAuth($namespace, $user, 'secret');
+        };
+        $db = $this->connect(auth: $provider, define: false);
+
+        try {
+            $db->use($namespace, 'db');
+            $db->run('DEFINE TABLE IF NOT EXISTS person SCHEMALESS PERMISSIONS FULL');
+            $live = $db->live(new Table('person'))->execute();
+            self::assertTrue($live->isAlive());
+            self::assertSame('first', Jwt::parse((string) $db->accessToken())['ID'] ?? null);
+            $user = 'second';
+            sleep(3);
+
+            // Renews, as the second user. The query was started as the first.
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame('second', Jwt::parse((string) $db->accessToken())['ID'] ?? null);
+            self::assertFalse($live->isAlive());
+        } finally {
+            $db->close();
+        }
+    }
+
     private function defineShortLivedUser(): void
     {
         $setup = $this->connect();
