@@ -1005,29 +1005,15 @@ final class ConnectionController
             return;
         }
 
-        $renewal = $this->renewing[$key] ?? null;
-
-        if ($renewal !== null) {
+        if (isset($this->renewing[$key])) {
             // Another task is renewing: wait for its token rather than send
-            // the old one. The renewing task itself (an auth provider that
-            // queries, say) goes ahead.
-            if ($renewal['task'] !== self::currentTask()) {
-                /** @var Deferred<mixed> $done */
-                $done = $this->context->scheduler->defer();
-                $this->renewing[$key]['waiters'][] = $done;
-
-                try {
-                    $done->await();
-                } catch (\Throwable) {
-                    // The renewing task reports its own failure.
-                }
-            }
+            // the old one.
+            $this->awaitRenewal($key);
 
             return;
         }
 
-        $guard = new \stdClass();
-        $this->renewing[$key] = ['task' => self::currentTask(), 'guard' => $guard, 'waiters' => []];
+        $guard = $this->claimRenewal($key);
 
         try {
             // A new token schedules the next deadline, and signing out clears
@@ -1067,16 +1053,62 @@ final class ConnectionController
 
             $this->onError(new AuthenticationException('Token renewal failed', $error));
         } finally {
-            // Unless the connection was closed meanwhile, which released the
-            // waiters and may have let a new connection start its own.
-            if ($this->ownsRenewal($key, $guard)) {
-                $waiters = $this->renewing[$key]['waiters'];
-                unset($this->renewing[$key]);
+            $this->releaseRenewal($key, $guard);
+        }
+    }
 
-                foreach ($waiters as $waiter) {
-                    $waiter->resolve(true);
-                }
-            }
+    /**
+     * Wait for the renewal another task has in flight for `$key`, if any.
+     * The renewing task itself (an auth provider that queries, say) goes
+     * ahead: waiting for itself would never end.
+     */
+    private function awaitRenewal(string $key): void
+    {
+        $renewal = $this->renewing[$key] ?? null;
+
+        if ($renewal === null || $renewal['task'] === self::currentTask()) {
+            return;
+        }
+
+        /** @var Deferred<mixed> $done */
+        $done = $this->context->scheduler->defer();
+        $this->renewing[$key]['waiters'][] = $done;
+
+        try {
+            $done->await();
+        } catch (\Throwable) {
+            // The renewing task reports its own failure.
+        }
+    }
+
+    /**
+     * Mark the current task as renewing `$key`; the guard identifies this
+     * claim to {@see self::releaseRenewal()}.
+     */
+    private function claimRenewal(string $key): object
+    {
+        $guard = new \stdClass();
+        $this->renewing[$key] = ['task' => self::currentTask(), 'guard' => $guard, 'waiters' => []];
+
+        return $guard;
+    }
+
+    /**
+     * End a claim and wake the tasks waiting on it. Unless the connection was
+     * closed meanwhile, which released the waiters and may have let a new
+     * connection start its own.
+     */
+    private function releaseRenewal(string $key, object $guard): void
+    {
+        if (!$this->ownsRenewal($key, $guard)) {
+            return;
+        }
+
+        $waiters = $this->renewing[$key]['waiters'];
+        unset($this->renewing[$key]);
+
+        foreach ($waiters as $waiter) {
+            $waiter->resolve(true);
         }
     }
 
@@ -1371,7 +1403,7 @@ final class ConnectionController
         // Authenticate first: a server that refuses guests (the SurrealDB 2.x
         // default) rejects USE and LET from an anonymous session.
         if (!$fork || !$this->authenticateWithCopiedToken($session)) {
-            $this->applyAuthentication($session->id);
+            $this->restoreAuthentication($session->id);
         }
 
         if ($session->namespace !== null || $session->database !== null) {
@@ -1380,6 +1412,38 @@ final class ConnectionController
 
         foreach ($session->variables as $name => $value) {
             $this->requireEngine()->set($name, $value, $session->id);
+        }
+    }
+
+    /**
+     * Authenticate a session on a new socket as the session's renewal: one
+     * already in flight is waited for, and one that falls due meanwhile waits
+     * for this, so the two never spend the same single-use refresh token. The
+     * second to spend it would fail, and sign the session out.
+     */
+    private function restoreAuthentication(?string $session): void
+    {
+        $key = $session ?? '';
+
+        // Waiting can end with another task's renewal under way.
+        while (isset($this->renewing[$key]) && $this->renewing[$key]['task'] !== self::currentTask()) {
+            $this->awaitRenewal($key);
+        }
+
+        // A renewal that lost its socket restores it in passing (the
+        // synchronous scheduler reconnects inline), and holds the claim.
+        if (isset($this->renewing[$key])) {
+            $this->applyAuthentication($session);
+
+            return;
+        }
+
+        $guard = $this->claimRenewal($key);
+
+        try {
+            $this->applyAuthentication($session);
+        } finally {
+            $this->releaseRenewal($key, $guard);
         }
     }
 

@@ -5,13 +5,17 @@ namespace SurrealDB\Tests\Runtime\FrankenPHP;
 use PHPUnit\Framework\TestCase;
 use Revolt\EventLoop;
 use SurrealDB\SDK\Auth\NamespaceAuth;
+use SurrealDB\SDK\Auth\RecordAccessAuth;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectionState;
 use SurrealDB\SDK\Connection\ConnectionStatus;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverContext;
+use SurrealDB\SDK\Contracts\MiddlewareInterface;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Protocol\Features;
+use SurrealDB\SDK\Rpc\RpcRequest;
+use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Runtime\Runtime;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Transport\Amp\AmpWebSocketTransport;
@@ -259,6 +263,90 @@ final class AmpWebSocketEngineTest extends TestCase
         });
 
         $this->assertSame(['renewed', 'query', 'query'], $order);
+    }
+
+    public function testARestoreWaitsForARenewalAlreadyInFlight(): void
+    {
+        $result = $this->inLoop(function (): ?array {
+            $namespace = 'amp_restore_' . bin2hex(random_bytes(4));
+            $setup = new Surreal(Runtime::amp());
+            $this->connect($setup);
+
+            try {
+                if (!$setup->isFeatureSupported(Features::refreshTokens())) {
+                    return null;
+                }
+
+                // Record tokens with a refresh token, due for renewal about a
+                // second in. The server takes each refresh token only once.
+                $setup->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db; USE DB db;"
+                    . ' DEFINE ACCESS account ON DATABASE TYPE RECORD SIGNUP (CREATE user SET name = $name)'
+                    . ' SIGNIN (SELECT * FROM user WHERE name = $name) WITH REFRESH DURATION FOR TOKEN 61s;'
+                    . ' DEFINE TABLE user SCHEMALESS PERMISSIONS FULL;');
+            } finally {
+                $setup->close();
+            }
+
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $refreshes = 0;
+            $held = null;
+
+            // The renewal's refresh is held while the socket drops, and goes
+            // out on the new socket once the restore there has begun (with
+            // `version`), before the restore's own refresh would.
+            $before = static function (RpcRequest $request) use (&$transports, &$refreshes, &$held): void {
+                if ($request->method === 'version' && $held !== null) {
+                    $held->resume();
+                    $held = null;
+                }
+
+                if ($request->method === 'refresh' && ++$refreshes === 1) {
+                    $held = EventLoop::getSuspension();
+                    $transports[0]->close();
+                    $held->suspend();
+                }
+            };
+
+            $options = Runtime::amp();
+            $options->middleware = [new class ($before) implements MiddlewareInterface {
+                public function __construct(private readonly \Closure $before) {}
+
+                public function process(RpcRequest $request, callable $next): RpcResponse
+                {
+                    ($this->before)($request);
+
+                    return $next($request);
+                }
+            }];
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+
+            try {
+                $db->use($namespace, 'db');
+                $db->signup(new RecordAccessAuth($namespace, 'db', 'account', ['name' => 'ada']));
+
+                $this->waitFor(static function () use (&$transports, &$refreshes, $db): bool {
+                    return $refreshes >= 1 && count($transports) >= 2 && $db->status() === ConnectionStatus::Connected;
+                });
+
+                return [$db->accessToken(), $db->run('RETURN $auth.name')];
+            } finally {
+                $db->close();
+            }
+        });
+
+        if ($result === null) {
+            $this->markTestSkipped('Refresh tokens need SurrealDB 3.0 or later.');
+        }
+
+        [$token, $name] = $result;
+        $this->assertNotNull($token);
+        $this->assertSame(['ada'], $name);
     }
 
     public function testAConnectionReplacedDuringARenewalRenewsForItself(): void
