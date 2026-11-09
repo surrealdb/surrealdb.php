@@ -6,6 +6,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Exceptions\ExpressionException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Live\LiveMessage;
 use SurrealDB\SDK\Surreal;
@@ -110,6 +111,56 @@ final class QueryBuilderSafetyTest extends TestCase
             }
 
             $live->kill();
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @param 'ws'|'http' $protocol
+     */
+    #[DataProvider('protocols')]
+    public function testAStatementKeywordIsNotCalledAsAFunction(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            foreach (['DELETE', 'UPDATE', 'CREATE', 'UPSERT', 'RETURN', '::'] as $name) {
+                try {
+                    $db->call($name, null, [new Table('item')])->execute();
+                    self::fail("{$name} should be refused as a function name.");
+                } catch (ExpressionException $error) {
+                    self::assertStringContainsString('Invalid function name', $error->getMessage());
+                }
+            }
+
+            try {
+                $db->call('fn::greet', '1..0')->execute();
+                self::fail('1..0 should be refused as a function version.');
+            } catch (ExpressionException $error) {
+                self::assertStringContainsString('Invalid function version', $error->getMessage());
+            }
+
+            self::assertSame(['item:1', 'item:2', 'item:3'], $this->ids($db->select('item')->execute()));
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @param 'ws'|'http' $protocol
+     */
+    #[DataProvider('protocols')]
+    public function testBuiltInAndNamespacedFunctionsAreStillCalled(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            self::assertSame(3, $db->call('count', args: [[1, 2, 3]])->execute());
+            self::assertFalse($db->call('not', args: [true])->execute());
+            self::assertIsFloat($db->call('rand')->execute());
+            self::assertSame(3, $db->call('string::len', args: ['abc'])->execute());
+            self::assertSame(3, $db->call('math::max', args: [[1, 3, 2]])->execute());
         } finally {
             $db->close();
         }

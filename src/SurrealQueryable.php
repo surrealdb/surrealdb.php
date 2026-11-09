@@ -237,6 +237,9 @@ abstract class SurrealQueryable implements StreamingQueryExecutor
 
     /**
      * Invoke a SurrealQL/SurrealML function (`fn::*`, `ml::*`, built-ins).
+     * The name has segments joined by `::`, except the built-ins `count`,
+     * `not`, `rand` and `sleep`, and a version is `major.minor.patch`; see
+     * {@see RunQuery}.
      *
      * Named `call()` because {@see self::run()} already executes raw SurrealQL.
      *
