@@ -64,9 +64,15 @@ final class RelateQuery extends QueryBuilder
         return $this->mutate(Mutation::CONTENT, $data);
     }
 
+    protected function result(mixed $result): mixed
+    {
+        /** @var TResult */
+        return $this->oneRecordResult($result, !$this->isMultiple());
+    }
+
     protected function build(): BoundQuery
     {
-        $isMultiple = is_array($this->from) || is_array($this->to);
+        $isMultiple = $this->isMultiple();
 
         if ($isMultiple && $this->edge instanceof RecordId) {
             throw new ExpressionException('Edge must be a table when relating multiple records');
@@ -74,7 +80,7 @@ final class RelateQuery extends QueryBuilder
 
         $query = new BoundQuery('RELATE ');
 
-        if (!$isMultiple) {
+        if (!$isMultiple && $this->takesOnly()) {
             $query->append('ONLY ');
         }
 
@@ -88,5 +94,13 @@ final class RelateQuery extends QueryBuilder
         $this->applyVersion($query);
 
         return $query;
+    }
+
+    /**
+     * Whether either end is a list, so the statement makes many edges.
+     */
+    private function isMultiple(): bool
+    {
+        return is_array($this->from) || is_array($this->to);
     }
 }

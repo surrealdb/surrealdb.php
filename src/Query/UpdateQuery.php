@@ -60,10 +60,16 @@ final class UpdateQuery extends QueryBuilder
         return $this->mutate(Mutation::PATCH, $patches);
     }
 
+    protected function result(mixed $result): mixed
+    {
+        /** @var TResult */
+        return $this->oneRecordResult($result, self::isOneRecord($this->what));
+    }
+
     protected function build(): BoundQuery
     {
         $query = new BoundQuery('UPDATE ');
-        $this->appendTarget($query, $this->what);
+        $this->appendTarget($query, $this->what, $this->takesOnly());
         $this->applyMutation($query);
         $this->applyWhere($query);
         $this->applyOutput($query);
