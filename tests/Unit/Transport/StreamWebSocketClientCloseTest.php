@@ -3,6 +3,7 @@
 namespace SurrealDB\Tests\Unit\Transport;
 
 use PHPUnit\Framework\TestCase;
+use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Transport\StreamWebSocketClient;
 
 /**
@@ -111,6 +112,49 @@ final class StreamWebSocketClientCloseTest extends TestCase
         } finally {
             $client->close();
         }
+    }
+
+    public function testAWriteTheServerStopsReadingEndsInsteadOfHanging(): void
+    {
+        // Completes the handshake, then reads nothing.
+        $url = $this->startServer('sleep(30);');
+
+        $client = new StreamWebSocketClient(connectTimeout: 5.0, writeTimeout: 0.5);
+        $client->connect($url);
+        $started = microtime(true);
+
+        try {
+            // Far more than the socket buffers hold.
+            $client->send(str_repeat('x', 16 * 1024 * 1024), binary: true);
+            self::fail('The write should have run out of time.');
+        } catch (SurrealException $error) {
+            self::assertStringContainsString('stopped reading', $error->getMessage());
+        }
+
+        // The connection is closed: nothing can follow half a frame.
+        self::assertFalse($client->isConnected());
+        $client->close();
+        self::assertLessThan(5.0, microtime(true) - $started);
+    }
+
+    public function testClosingAConnectionTheServerStopsReadingDoesNotHang(): void
+    {
+        $url = $this->startServer('sleep(30);');
+
+        $client = new StreamWebSocketClient(connectTimeout: 5.0, writeTimeout: 0.5);
+        $client->connect($url);
+
+        // Fill the socket buffers, one frame at a time, without timing out.
+        try {
+            for ($i = 0; $i < 4096; $i++) {
+                $client->send(str_repeat('x', 16 * 1024), binary: true);
+            }
+        } catch (SurrealException) {
+        }
+
+        $started = microtime(true);
+        $client->close();
+        self::assertLessThan(3.0, microtime(true) - $started);
     }
 
     /**

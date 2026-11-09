@@ -19,6 +19,12 @@ final class DroppingTransport implements DuplexTransportInterface
     /** Arm {@see self::$dropOnNextReply} once a payload containing this is sent. */
     public ?string $dropAfterSending = null;
 
+    /**
+     * Throw this instead of returning the next reply, as a client does for a
+     * socket that fails mid-read rather than at the end of the stream.
+     */
+    public ?\Throwable $throwOnNextReply = null;
+
     public function __construct(private readonly DuplexTransportInterface $inner) {}
 
     public function open(): void
@@ -54,6 +60,13 @@ final class DroppingTransport implements DuplexTransportInterface
     public function receiveFrame(?float $timeout = null): ?string
     {
         $frame = $this->inner->receiveFrame($timeout);
+
+        if ($frame !== null && $this->throwOnNextReply !== null) {
+            $error = $this->throwOnNextReply;
+            $this->throwOnNextReply = null;
+
+            throw $error;
+        }
 
         if ($frame !== null && $this->dropOnNextReply) {
             $this->dropOnNextReply = false;

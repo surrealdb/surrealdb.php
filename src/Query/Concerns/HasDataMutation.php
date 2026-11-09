@@ -23,12 +23,20 @@ trait HasDataMutation
         return $this;
     }
 
+    /**
+     * An empty PHP array would go out as a list, which no server takes as a
+     * record ("Cannot use [] in a CONTENT clause"). For `CONTENT`, `MERGE`
+     * and `REPLACE` it is sent as an empty object, meaning an empty record;
+     * an empty `PATCH` stays an empty list of operations.
+     */
     protected function applyMutation(BoundQuery $query): void
     {
         if ($this->mutation === null) {
             return;
         }
 
-        $query->append(' ' . $this->mutation->toSql() . ' ' . $query->bind($this->data));
+        $data = $this->data === [] && $this->mutation !== Mutation::PATCH ? new \stdClass() : $this->data;
+
+        $query->append(' ' . $this->mutation->toSql() . ' ' . $query->bind($data));
     }
 }

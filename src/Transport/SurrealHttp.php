@@ -4,6 +4,8 @@ namespace SurrealDB\SDK\Transport;
 
 use Psr\Http\Message\ResponseInterface;
 use SurrealDB\SDK\Exceptions\HttpConnectionException;
+use function sprintf;
+use function strlen;
 
 /**
  * Performs a single PSR-18 HTTP exchange against a SurrealDB endpoint, throwing
@@ -51,12 +53,36 @@ final class SurrealHttp
     }
 
     /**
+     * Read the whole response body. A body that ends before the length the
+     * response declared broke off: some clients (Guzzle without curl) pass
+     * it off as complete, and an export cut short would read as a whole one.
+     */
+    public static function body(ResponseInterface $response): string
+    {
+        $content = (string) $response->getBody();
+        $declared = $response->getHeaderLine('Content-Length');
+
+        // A body the client decompressed has another length than declared.
+        $encoded = $response->hasHeader('Content-Encoding') || $response->hasHeader('X-Encoded-Content-Encoding');
+
+        if (!$encoded && ctype_digit($declared) && strlen($content) < (int) $declared) {
+            throw new HttpConnectionException(
+                sprintf('The response ended after %d of its %d bytes.', strlen($content), (int) $declared),
+                $response->getStatusCode(),
+                $response->getReasonPhrase(),
+            );
+        }
+
+        return $content;
+    }
+
+    /**
      * @param string|null $content the response body, when the caller has
      *                             already consumed it from the stream
      */
     public static function failure(ResponseInterface $response, ?string $message = null, ?string $content = null): HttpConnectionException
     {
-        $content ??= (string) $response->getBody();
+        $content ??= self::body($response);
 
         return new HttpConnectionException(
             $message ?? ($content !== '' ? $content : $response->getReasonPhrase()),

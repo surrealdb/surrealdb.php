@@ -295,8 +295,20 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return false;
         }
 
+        $transport = $this->transport;
+
         try {
-            $this->transport->open();
+            $transport->open();
+
+            // Closed while the socket opened, which an async scheduler lets
+            // close() do: it found nothing open to close, so close it here,
+            // or it would stay open (and keep the event loop alive).
+            if ($this->terminated) {
+                $transport->close();
+
+                return false;
+            }
+
             $this->active = true;
             $this->generation++;
 
@@ -534,7 +546,27 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return false;
         }
 
-        $frame = $this->transport->receiveFrame();
+        $transport = $this->transport;
+
+        try {
+            $frame = $transport->receiveFrame();
+        } catch (\Exception $error) {
+            // The socket failed mid-read rather than at the end of the
+            // stream: closed in the middle of a message, a message over the
+            // client's size limit, a pong that could not be written. It is
+            // lost all the same; left to escape, it ended the read loop
+            // (async) or left the connection reporting itself up (sync). An
+            // \Error is a bug, not the socket, and still escapes.
+            $this->publisher->publish('error', $error);
+
+            try {
+                $transport->close();
+            } catch (\Throwable) {
+                // Already gone.
+            }
+
+            $frame = null;
+        }
 
         if ($frame === null) {
             $this->connectionLost();

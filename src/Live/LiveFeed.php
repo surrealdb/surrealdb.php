@@ -154,7 +154,9 @@ final class LiveFeed implements \IteratorAggregate
                 }
             }
 
-            if ($this->closed || $this->ended || !($this->isOpen)()) {
+            // Killed: everything up to the KILLED message was yielded, and
+            // nothing follows it, so an iteration after a break on it ends.
+            if ($this->closed || $this->ended || $this->killed || !($this->isOpen)()) {
                 return;
             }
 

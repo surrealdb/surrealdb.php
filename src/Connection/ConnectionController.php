@@ -24,13 +24,16 @@ use SurrealDB\SDK\Events\Disconnected;
 use SurrealDB\SDK\Events\NamespaceDatabaseSelected;
 use SurrealDB\SDK\Events\Reconnecting;
 use SurrealDB\SDK\Exceptions\AuthenticationException;
+use SurrealDB\SDK\Exceptions\CallTerminatedException;
 use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
+use SurrealDB\SDK\Exceptions\HttpConnectionException;
 use SurrealDB\SDK\Exceptions\InvalidSessionException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedVersionException;
+use SurrealDB\SDK\Exceptions\ValidationException;
 use SurrealDB\SDK\Live\LiveSubscription;
 use SurrealDB\SDK\Live\ManagedLiveSubscription;
 use SurrealDB\SDK\Protocol\Feature;
@@ -44,7 +47,9 @@ use SurrealDB\SDK\Support\Publisher;
 use SurrealDB\SDK\Support\Version;
 use SurrealDB\SDK\Types\File;
 use SurrealDB\SDK\Types\Set;
+use SurrealDB\SDK\Types\Value;
 use Symfony\Component\Uid\Uuid;
+use function in_array;
 use function is_array;
 use function is_string;
 
@@ -68,6 +73,18 @@ final class ConnectionController
     private ?EngineInterface $engine = null;
     private ConnectionStatus $status = ConnectionStatus::Disconnected;
     private ?string $cachedVersion = null;
+
+    /**
+     * Whether the version request has been answered, or refused by a proxy
+     * (the version is then unknown, and {@see self::$cachedVersion} null).
+     */
+    private bool $versionAsked = false;
+
+    /**
+     * Whether the connection is being closed on purpose, as opposed to lost
+     * for good (reconnecting gave up, or is off).
+     */
+    private bool $closing = false;
     private ?\Throwable $lastError = null;
 
     private Credentials|Token|AuthProviderInterface|\Closure|string|null $authProvider = null;
@@ -93,6 +110,9 @@ final class ConnectionController
 
     /** How long to wait before retrying a renewal that failed. */
     private const RENEWAL_RETRY_SECONDS = 5;
+
+    /** Variables the server keeps for itself, and refuses to set. */
+    private const array PROTECTED_VARIABLES = ['access', 'auth', 'token', 'session'];
 
     /**
      * When each session's token is due for renewal (Unix time), keyed by
@@ -176,6 +196,7 @@ final class ConnectionController
         $engine = $this->registry->create($endpoint->scheme, $this->context);
 
         $this->disconnect();
+        $this->closing = false;
 
         // Callbacks still running for the previous connection must not
         // mistake this one for theirs.
@@ -187,6 +208,7 @@ final class ConnectionController
         $this->checkVersion = $options->versionCheck;
         $this->lastError = null;
         $this->cachedVersion = null;
+        $this->versionAsked = false;
         $this->state = new ConnectionState(
             $endpoint,
             ExponentialBackoffReconnect::fromOption($options->reconnect),
@@ -231,6 +253,7 @@ final class ConnectionController
 
     public function disconnect(): void
     {
+        $this->closing = true;
         $this->engine?->close();
     }
 
@@ -251,7 +274,7 @@ final class ConnectionController
 
     public function assertFeature(Feature $feature): void
     {
-        if ($this->engine === null || $this->cachedVersion === null) {
+        if ($this->engine === null || !$this->versionAsked) {
             throw new ConnectionUnavailableException();
         }
 
@@ -259,7 +282,7 @@ final class ConnectionController
             throw new UnsupportedFeatureException($feature);
         }
 
-        if (!$feature->supports($this->cachedVersion)) {
+        if ($this->cachedVersion !== null && !$feature->supports($this->cachedVersion)) {
             throw new UnavailableFeatureException($feature, $this->cachedVersion);
         }
     }
@@ -295,6 +318,13 @@ final class ConnectionController
      */
     public function signin(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        // A record access sign-in with a refresh token exchanges it for a new
+        // pair. A server without refresh tokens reads it as one more variable
+        // of the SIGNIN query, and refuses it with an unrelated error.
+        if (isset($auth['refresh'])) {
+            $this->assertFeature(Features::refreshTokens());
+        }
+
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
         $tokens = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->signin($auth, $session));
@@ -303,7 +333,7 @@ final class ConnectionController
             return $tokens;
         }
 
-        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride, $tokens->access);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
@@ -323,14 +353,14 @@ final class ConnectionController
             return $tokens;
         }
 
-        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride, $tokens->access);
         $this->selectFromCredentials($auth, $session);
         $this->applyTokens($session, $tokens, $skipOverride);
 
         return $tokens;
     }
 
-    public function authenticate(string $token, ?string $session = null, bool $skipOverride = false): void
+    public function authenticate(#[\SensitiveParameter] string $token, ?string $session = null, bool $skipOverride = false): void
     {
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
@@ -340,7 +370,7 @@ final class ConnectionController
             return;
         }
 
-        $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
+        $this->endLiveQueriesUnlessRenewing($session, $skipOverride, $token);
         $sessionState->auth->accessToken = $token;
 
         // A token given explicitly may belong to someone else: keeping the
@@ -364,6 +394,8 @@ final class ConnectionController
             return $refreshed;
         }
 
+        // Refreshing the session's own pair keeps who it is; another's does not.
+        $this->endLiveQueriesUnlessRenewing($session, true, $refreshed->access);
         $this->applyTokens($session, $refreshed, $skipOverride);
 
         return $refreshed;
@@ -372,14 +404,32 @@ final class ConnectionController
     public function revoke(Tokens $tokens, ?string $session = null): void
     {
         $this->assertFeature(Features::refreshTokens());
-        $this->requireSession($session);
+        $sessionState = $this->requireSession($session);
         $this->requireEngine()->revoke($tokens, $session);
+
+        // Revoking the session's own refresh token: renewing and restoring
+        // the session must not send it again. Its access token stays good
+        // until it expires.
+        if ($tokens->refresh !== null && $sessionState->auth->refreshToken === $tokens->refresh) {
+            $sessionState->auth->refreshToken = null;
+        }
     }
 
     public function set(string $name, mixed $value, ?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
+
+        // The server refuses these over a WebSocket. HTTP keeps variables
+        // itself and would send one with every query, each then refused.
+        if (in_array($name, self::PROTECTED_VARIABLES, true)) {
+            throw new ValidationException('Validation', "'{$name}' is a protected variable and cannot be set", -32602);
+        }
+
         $this->assertSendable($value);
+        // HTTP sends the session's variables with every query, and a reconnect
+        // replays them: both must send the value as it was now, as a WebSocket
+        // does, not as the caller changes it later.
+        $value = self::snapshot($value);
         $this->renewIfDue($session);
         $this->requireEngine()->set($name, $value, $session);
         $sessionState->variables[$name] = $value;
@@ -561,17 +611,35 @@ final class ConnectionController
 
     public function createSession(?string $clone = null): string
     {
-        return $this->attachSession($clone === null ? null : $this->requireSession($clone));
+        return $clone === null ? $this->attachSession(null) : $this->forkSession($clone);
     }
 
     /**
      * Create a session that starts with a copy of another session's namespace,
      * database, variables and authentication. Unlike {@see self::createSession()},
      * the source may be the default session (null).
+     *
+     * @throws AuthenticationException when the source is signed in with an
+     *                                 access token that has expired, and
+     *                                 renewing it did not replace it
      */
     public function forkSession(?string $source): string
     {
-        return $this->attachSession($this->requireSession($source));
+        $sourceState = $this->requireSession($source);
+
+        // The fork signs in with the source's access token. One due for
+        // renewal is renewed first (for the source, which keeps the new pair).
+        $this->renewIfDue($source);
+        $token = $sourceState->auth->accessToken;
+        $expiry = $token === null ? null : Jwt::expiry($token);
+
+        if ($expiry !== null && $expiry <= time()) {
+            throw new AuthenticationException(
+                'The session\'s access token has expired, so a fork cannot sign in with it. Sign the session in again first.',
+            );
+        }
+
+        return $this->attachSession($sourceState);
     }
 
     /**
@@ -612,13 +680,11 @@ final class ConnectionController
     {
         $epoch = $this->connectionEpoch;
 
-        try {
-            $version = $this->requireEngine()->version()->version;
-            $this->cachedVersion = $version;
+        // A connection that was up before: restoring it must not undo it.
+        $reconnect = $this->status === ConnectionStatus::Reconnecting;
 
-            if ($this->checkVersion && !Version::isSupported($version)) {
-                throw new UnsupportedVersionException($version, Version::MINIMUM, Version::MAXIMUM);
-            }
+        try {
+            $version = $this->askVersion();
 
             foreach ($this->requireState()->allSessions() as $session) {
                 // A new socket starts without the old one's transactions.
@@ -628,7 +694,14 @@ final class ConnectionController
                     $this->requireEngine()->attach($session->id);
                 }
 
-                $this->restoreSession($session);
+                $this->restoreSession($session, reconnect: $reconnect);
+            }
+
+            // Asked before signing in, the version request carried no token,
+            // which a proxy in front of the server may refuse. Signed in now,
+            // so ask again; if it is still refused, the version stays unknown.
+            if ($this->cachedVersion === null) {
+                $version = $this->askVersion();
             }
 
             $this->requireEngine()->ready();
@@ -641,8 +714,8 @@ final class ConnectionController
             }
 
             $this->status = ConnectionStatus::Connected;
-            $this->events->publish('connected', $version);
-            $this->context->events->dispatch(new Connected($version));
+            $this->events->publish('connected', $version ?? '');
+            $this->context->events->dispatch(new Connected($version ?? ''));
         } catch (\Throwable $error) {
             // This socket was lost while restoring: the engine is already
             // reconnecting (or has reconnected), and a later socket announces
@@ -654,6 +727,38 @@ final class ConnectionController
             $this->onError($error);
             $this->engine?->close();
         }
+    }
+
+    /**
+     * Learn the server's version, and refuse one the SDK does not support.
+     *
+     * @return string|null null when a proxy in front of the server refused
+     *                     the request (an HTTP 4xx): features are then not
+     *                     gated by version, and the server has the last word
+     */
+    private function askVersion(): ?string
+    {
+        try {
+            $version = $this->requireEngine()->version()->version;
+        } catch (HttpConnectionException $error) {
+            if ($error->status < 400 || $error->status >= 500) {
+                throw $error;
+            }
+
+            $this->cachedVersion = null;
+            $this->versionAsked = true;
+
+            return null;
+        }
+
+        $this->cachedVersion = $version;
+        $this->versionAsked = true;
+
+        if ($this->checkVersion && !Version::isSupported($version)) {
+            throw new UnsupportedVersionException($version, Version::MINIMUM, Version::MAXIMUM);
+        }
+
+        return $version;
     }
 
     /**
@@ -693,8 +798,38 @@ final class ConnectionController
                 continue;
             }
 
+            $origin = $subscription->origin();
+            $ownerState = $this->state?->session($subscription->session());
+
+            // Restarted as whoever the session is now, it would deliver
+            // another user's view of the table.
+            if ($origin !== null && $ownerState !== null && Jwt::identity($ownerState->auth->accessToken) !== $origin['identity']) {
+                unset($this->managedLive[$subscription]);
+                $subscription->connectionClosed(new ConnectionUnavailableException(
+                    'The connection was lost, and the live query was not started again: its session is now signed in as someone else, or signed out.',
+                ));
+
+                continue;
+            }
+
+            // The session may have moved to another namespace or database
+            // since: the query runs where it started, and the session goes
+            // back to its own selection after.
+            $moved = $origin !== null && $ownerState !== null
+                && [$origin['namespace'], $origin['database']] !== [$ownerState->namespace, $ownerState->database];
+
             try {
-                $subscription->replay();
+                if ($moved) {
+                    $this->requireEngine()->use(new NamespaceDatabase($origin['namespace'], $origin['database']), $ownerState->id);
+                }
+
+                try {
+                    $subscription->replay();
+                } finally {
+                    if ($moved && $this->isCurrentConnection($epoch)) {
+                        $this->requireEngine()->use(new NamespaceDatabase($ownerState->namespace, $ownerState->database), $ownerState->id);
+                    }
+                }
             } catch (\Throwable $error) {
                 // The new socket was lost too: the subscriptions stay
                 // tracked and waiting, for the next connection to replay.
@@ -703,7 +838,10 @@ final class ConnectionController
                 }
 
                 unset($this->managedLive[$subscription]);
-                $subscription->connectionClosed();
+                $subscription->connectionClosed(new ConnectionUnavailableException(
+                    'The connection was lost, and the server refused to start the live query again: ' . $error->getMessage(),
+                    $error,
+                ));
                 $this->onError($error);
 
                 // An error listener closed the connection.
@@ -770,6 +908,24 @@ final class ConnectionController
         }
 
         $this->unsubscribers = [];
+
+        // Closed on purpose, iteration over the live queries ends. Lost, it
+        // throws: changes may have been missed.
+        $lost = $this->closing ? null : new ConnectionUnavailableException('The connection was lost, and could not be established again.');
+        /** @var \WeakMap<LiveSubscription, true> $live */
+        $live = new \WeakMap();
+
+        foreach ($this->managedLive as $subscription => $_) {
+            $live[$subscription] = true;
+        }
+
+        foreach ($this->state?->allSessions() ?? [] as $session) {
+            foreach ($session->live as $subscription => $_) {
+                $live[$subscription] = true;
+            }
+        }
+
+        $this->managedLive = new \WeakMap();
         $this->state = null;
         $this->engine = null;
         $this->renewAt = [];
@@ -786,8 +942,6 @@ final class ConnectionController
         // for itself.
         $renewing = $this->renewing;
         $this->renewing = [];
-        $live = $this->managedLive;
-        $this->managedLive = new \WeakMap();
 
         // Announced before waking anyone: a woken task can run straight away
         // (OpenSwoole) and connect again, which this must not then undo.
@@ -804,7 +958,7 @@ final class ConnectionController
             }
 
             foreach ($live as $subscription => $_) {
-                $subscription->connectionClosed();
+                $subscription->connectionClosed($lost);
             }
         }
     }
@@ -825,6 +979,18 @@ final class ConnectionController
 
         foreach ($this->managedLive as $subscription => $_) {
             $subscription->suspend($this->context->scheduler);
+        }
+
+        // One attached with liveOf() is not started again: the SDK does not
+        // know its query.
+        foreach ($this->state?->allSessions() ?? [] as $session) {
+            foreach ($session->live as $subscription => $_) {
+                if (!$subscription->isManaged()) {
+                    $subscription->connectionClosed(new ConnectionUnavailableException(
+                        'The connection was lost. A live query attached with liveOf() is not started again on the new connection.',
+                    ));
+                }
+            }
         }
 
         // A listener that throws must not stop the reconnect half way, which
@@ -870,14 +1036,21 @@ final class ConnectionController
     }
 
     /**
-     * An explicit sign-in changes who the session is; renewing (the SDK's
-     * own sign-in with the same credentials or token) does not.
+     * An explicit sign-in changes who the session is. Renewing (the SDK's own
+     * sign-in with the auth provider, or with a refresh token) usually does
+     * not, but can: an auth provider may hand out another user's credentials,
+     * and a refresh may be given another user's pair. The live queries the
+     * session started end whenever who it is changes.
      */
-    private function endLiveQueriesUnlessRenewing(?string $session, bool $renewing): void
+    private function endLiveQueriesUnlessRenewing(?string $session, bool $renewing, ?string $newToken = null): void
     {
         $sessionState = $this->state?->session($session);
 
-        if (!$renewing && $sessionState !== null) {
+        if ($sessionState === null) {
+            return;
+        }
+
+        if (!$renewing || Jwt::identity($sessionState->auth->accessToken) !== Jwt::identity($newToken)) {
             $this->endLiveQueries($sessionState);
         }
     }
@@ -1258,8 +1431,14 @@ final class ConnectionController
                     $this->refresh($tokens, $session, true);
 
                     return false;
-                } catch (ServerException) {
-                    // Fall through to the next strategy.
+                } catch (ServerException $error) {
+                    // Expired, revoked or spent: it will not work again, and
+                    // trying it at every renewal and reconnect only fails.
+                    if ($this->isCurrentAuth($session, $auth, $generation) && $auth->refreshToken === $tokens->refresh) {
+                        $auth->refreshToken = null;
+                    }
+
+                    $this->onError(new AuthenticationException('The refresh token was refused', $error));
                 }
             }
         }
@@ -1268,8 +1447,22 @@ final class ConnectionController
             return false;
         }
 
-        if (!$sessionState->auth->overridden && $this->applyAuthProvider($session, $auth, $generation)) {
-            return false;
+        if (!$sessionState->auth->overridden) {
+            try {
+                if ($this->applyAuthProvider($session, $auth, $generation)) {
+                    return false;
+                }
+            } catch (ServerException $error) {
+                // Refused: a fixed token that has expired, or a password that
+                // changed. Restoring a session reports that to the caller.
+                // Renewing it carries on with the token while it lasts, and
+                // signs the session out after, rather than retry forever.
+                if (!$keepValidToken) {
+                    throw $error;
+                }
+
+                $this->onError(new AuthenticationException('The auth provider\'s sign-in was refused', $error));
+            }
         }
 
         if (!$this->isCurrentAuth($session, $auth, $generation)) {
@@ -1482,12 +1675,29 @@ final class ConnectionController
      * @param bool $fork whether the session's tokens were copied from another
      *                   session, which still holds them
      */
-    private function restoreSession(SessionState $session, bool $fork = false): void
+    private function restoreSession(SessionState $session, bool $fork = false, bool $reconnect = false): void
     {
+        $epoch = $this->connectionEpoch;
+
         // Authenticate first: a server that refuses guests (the SurrealDB 2.x
         // default) rejects USE and LET from an anonymous session.
         if (!$fork || !$this->authenticateWithCopiedToken($session)) {
-            $this->restoreAuthentication($session->id);
+            try {
+                $this->restoreAuthentication($session->id);
+            } catch (\Throwable $error) {
+                // On a reconnect, a session nothing can sign in again comes
+                // back signed out, rather than take the connection down with
+                // it. Connecting, or attaching a session, reports it instead.
+                if (!$reconnect || !$this->isCurrentConnection($epoch)
+                    || $error instanceof ConnectionUnavailableException || $error instanceof CallTerminatedException
+                ) {
+                    throw $error;
+                }
+
+                $this->endLiveQueries($session);
+                $this->handleAuthInvalidate($session->id);
+                $this->onError(new AuthenticationException('Could not sign the session in again after reconnecting', $error));
+            }
         }
 
         if ($session->namespace !== null || $session->database !== null) {
@@ -1589,6 +1799,36 @@ final class ConnectionController
     private function requireSession(?string $session): SessionState
     {
         return $this->requireState()->session($session) ?? throw new InvalidSessionException($session);
+    }
+
+    /**
+     * A copy of a value that later changes to the original do not reach.
+     * Arrays are copied by value already, but the objects in them are not.
+     * The SDK's own value types are immutable, and anything else the encoder
+     * refuses anyway.
+     */
+    private static function snapshot(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return array_map(self::snapshot(...), $value);
+        }
+
+        if ($value instanceof \stdClass) {
+            $copy = new \stdClass();
+
+            foreach (get_object_vars($value) as $key => $item) {
+                $copy->{$key} = self::snapshot($item);
+            }
+
+            return $copy;
+        }
+
+        // Encoded as what it serializes to, so that is what is kept.
+        if ($value instanceof \JsonSerializable && !$value instanceof Value) {
+            return self::snapshot($value->jsonSerialize());
+        }
+
+        return $value;
     }
 
     /**

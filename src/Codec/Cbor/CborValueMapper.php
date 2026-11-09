@@ -36,6 +36,18 @@ use function strlen;
 
 final class CborValueMapper
 {
+	/**
+	 * SurrealDB decimals hold at most 28 digits after the point.
+	 */
+	private const int DECIMAL_SCALE = 28;
+
+	/**
+	 * The most digits a decoded decimal may have. SurrealDB decimals have at
+	 * most 29 significant digits; this leaves room to spare, and keeps
+	 * brick/math from building a huge number out of hostile text.
+	 */
+	private const int MAX_DECIMAL_DIGITS = 64;
+
 	public static function encode(mixed $data): mixed
 	{
 		return match (true) {
@@ -55,7 +67,7 @@ final class CborValueMapper
 			]),
 			$data instanceof Decimal => self::tag(
 				CborTag::DECIMAL,
-				(string) $data,
+				self::decimalText($data),
 			),
 			$data instanceof DateTime => self::tag(
 				CborTag::CUSTOM_DATETIME,
@@ -212,7 +224,7 @@ final class CborValueMapper
 			CborTag::TABLE => new Table(self::text($tagged->value)),
 			CborTag::RECORD_ID => self::decodeRecordId($tagged->value),
 			CborTag::STRING_UUID => Uuid::fromString(self::text($tagged->value)),
-			CborTag::DECIMAL => new Decimal(self::text($tagged->value)),
+			CborTag::DECIMAL => self::decodeDecimal($tagged->value),
 			CborTag::CUSTOM_DATETIME => self::decodeDateTime($tagged->value),
 			CborTag::STRING_DURATION => Duration::fromString(
 				self::text($tagged->value),
@@ -284,6 +296,65 @@ final class CborValueMapper
 		}
 
 		return new RecordId($table, $id);
+	}
+
+	/**
+	 * The decimal's text with any zeros past {@see self::DECIMAL_SCALE}
+	 * digits after the point dropped, which leaves the number the same:
+	 * 0.000000000000000000000000000000 is sent with 28 zeros. No other digit
+	 * is dropped.
+	 */
+	private static function decimalText(Decimal $decimal): string
+	{
+		$text = (string) $decimal;
+		$point = strpos($text, ".");
+
+		if ($point === false) {
+			return $text;
+		}
+
+		$excess = strlen($text) - $point - 1 - self::DECIMAL_SCALE;
+
+		if ($excess <= 0) {
+			return $text;
+		}
+
+		return substr($text, 0, -$excess) . rtrim(substr($text, -$excess), "0");
+	}
+
+	/**
+	 * A decimal from tag 10, whose text is checked before brick/math reads
+	 * it: an exponent such as 1e999999999 would exhaust memory, which no
+	 * caller can catch, and text brick/math refuses would escape as its own
+	 * exception.
+	 */
+	private static function decodeDecimal(mixed $value): Decimal
+	{
+		$text = self::text($value);
+		$valid = preg_match(
+			'/^[+-]?([0-9]+)(?:\.([0-9]+))?(?:[eE][+-]?[0-9]{1,2})?$/D',
+			$text,
+			$matches,
+		) === 1;
+
+		if (!$valid || strlen($matches[1]) + strlen($matches[2] ?? "") > self::MAX_DECIMAL_DIGITS) {
+			throw new SerializationException(
+				"Serialization",
+				"Invalid decimal in a SurrealDB CBOR tag: " . self::excerpt($text),
+			);
+		}
+
+		return new Decimal($text);
+	}
+
+	/**
+	 * At most 64 bytes of untrusted text, safe to put in a message.
+	 */
+	private static function excerpt(string $text): string
+	{
+		$excerpt = json_encode(substr($text, 0, 64), JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
+
+		return ($excerpt === false ? "\"\"" : $excerpt) . (strlen($text) > 64 ? "..." : "");
 	}
 
 	private static function decodeDateTime(mixed $value): DateTime

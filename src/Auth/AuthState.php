@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Auth;
 
+use SurrealDB\SDK\Support\Redacted;
+
 /**
  * Mutable per-session authentication state owned by the connection controller.
  *
@@ -20,10 +22,26 @@ final class AuthState
     public int $pending = 0;
 
     public function __construct(
+        #[\SensitiveParameter]
         public ?string $accessToken = null,
+        #[\SensitiveParameter]
         public ?string $refreshToken = null,
         public bool $overridden = false,
     ) {}
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        return [
+            'accessToken' => Redacted::value($this->accessToken),
+            'refreshToken' => Redacted::value($this->refreshToken),
+            'overridden' => $this->overridden,
+            'generation' => $this->generation,
+            'pending' => $this->pending,
+        ];
+    }
 
     public function tokens(): ?Tokens
     {

@@ -64,6 +64,31 @@ final class LiveSubscriptionTest extends TestCase
         self::assertSame([], $this->kills, 'No KILL is sent for a query the server already ended.');
     }
 
+    public function testIteratingAgainAfterBreakingOffOnKilledEnds(): void
+    {
+        $db = $this->connect();
+        $live = $db->liveOf(self::FIRST);
+        $this->notify(self::FIRST, 'KILLED');
+        $db->run('RETURN 1');
+
+        foreach ($live as $message) {
+            self::assertSame(LiveAction::Killed, $message->action);
+
+            break;
+        }
+
+        // The feed went on waiting for notifications that could not come,
+        // reading the socket: under the synchronous scheduler that blocked.
+        $reads = $this->transport?->receives ?? 0;
+
+        foreach ($live as $_) {
+            self::fail('Nothing follows KILLED.');
+        }
+
+        self::assertSame($reads, $this->transport?->receives ?? 0);
+        self::assertFalse($live->isAlive());
+    }
+
     public function testAnAbandonedSubscriptionReleasesItsFeed(): void
     {
         $db = $this->connect();

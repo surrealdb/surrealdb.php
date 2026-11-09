@@ -72,8 +72,14 @@ final class WebSocketConnectionLossTest extends TestCase
 
             $actions = [];
 
-            foreach ($live as $message) {
-                $actions[] = $message->action;
+            try {
+                foreach ($live as $message) {
+                    $actions[] = $message->action;
+                }
+
+                self::fail('Reading past a lost connection should say so.');
+            } catch (ConnectionUnavailableException) {
+                // Once what arrived before the close has been read.
             }
 
             self::assertSame([LiveAction::Create], $actions);

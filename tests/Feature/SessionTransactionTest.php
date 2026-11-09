@@ -179,6 +179,36 @@ final class SessionTransactionTest extends TestCase
         }
     }
 
+    public function testAForkOfASessionWhoseTokenExpiredSignsInWithTheRenewedOne(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->run('DEFINE TABLE user SCHEMALESS PERMISSIONS FULL;'
+                . ' DEFINE ACCESS account ON DATABASE TYPE RECORD'
+                . ' SIGNUP (CREATE user SET name = $name)'
+                . ' SIGNIN (SELECT * FROM user WHERE name = $name)'
+                . ' WITH REFRESH DURATION FOR TOKEN 2s');
+
+            $source = $db->newSession();
+            $tokens = $source->signup(new RecordAccessAuth($this->namespace, 'db', 'account', ['name' => 'ada']));
+            self::assertNotNull($tokens->refresh);
+
+            // Idle past its expiry, with a good refresh token.
+            sleep(3);
+            $fork = $source->forkSession();
+
+            // The fork took the expired token, failed to sign in with it and
+            // came back signed out, with no error.
+            self::assertNotNull($fork->accessToken());
+            self::assertNotSame($tokens->access, $fork->accessToken());
+            self::assertSame($source->accessToken(), $fork->accessToken());
+            self::assertSame(['ada'], $fork->run('RETURN $auth.name'));
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testASessionWhoseRestoreFailsIsNotLeft(): void
     {
         $db = $this->connect(authentication: static function (?string $session): RootAuth {

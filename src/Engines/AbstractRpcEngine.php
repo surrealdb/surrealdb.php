@@ -26,6 +26,7 @@ use SurrealDB\SDK\Support\Publisher;
 use SurrealDB\SDK\Telemetry\NullMeter;
 use SurrealDB\SDK\Telemetry\NullTracer;
 use SurrealDB\SDK\Transport\HttpClientResolver;
+use SurrealDB\SDK\Transport\SessionHeaders;
 use SurrealDB\SDK\Transport\SurrealHttp;
 use SurrealDB\SDK\Types\Uuid;
 use function is_array;
@@ -128,7 +129,7 @@ abstract class AbstractRpcEngine implements EngineInterface
         return $this->parseTokens($this->dispatch(new RpcRequest('signin', [$auth], $session)));
     }
 
-    public function authenticate(string $token, ?string $session): void
+    public function authenticate(#[\SensitiveParameter] string $token, ?string $session): void
     {
         $this->dispatch(new RpcRequest('authenticate', [$token], $session));
     }
@@ -240,7 +241,7 @@ abstract class AbstractRpcEngine implements EngineInterface
         $response = $this->http()->send($url, 'POST', $data, $this->httpHeaders($state->rootSession, accept: 'application/json'));
         $status = $response->getStatusCode();
         // Read once: a non-seekable stream would be empty on a second read.
-        $content = (string) $response->getBody();
+        $content = SurrealHttp::body($response);
 
         // SurrealDB 2.x answers a successful import with every statement's
         // result, records included, and decoding all of that takes several
@@ -300,7 +301,7 @@ abstract class AbstractRpcEngine implements EngineInterface
             accept: 'text/plain',
         ));
 
-        return (string) $response->getBody();
+        return SurrealHttp::body($response);
     }
 
     // ----------------------------------------------------------------- //
@@ -365,19 +366,7 @@ abstract class AbstractRpcEngine implements EngineInterface
             $headers['Content-Type'] = $contentType;
         }
 
-        if ($session->namespace !== null) {
-            $headers['Surreal-NS'] = $session->namespace;
-        }
-
-        if ($session->database !== null) {
-            $headers['Surreal-DB'] = $session->database;
-        }
-
-        if ($session->auth->accessToken !== null) {
-            $headers['Authorization'] = 'Bearer ' . $session->auth->accessToken;
-        }
-
-        return $headers;
+        return [...$headers, ...SessionHeaders::of($session)];
     }
 
     protected function http(): SurrealHttp

@@ -36,10 +36,16 @@ final class DeleteQuery extends QueryBuilder
         $this->output = Output::BEFORE;
     }
 
+    protected function result(mixed $result): mixed
+    {
+        /** @var TResult */
+        return $this->oneRecordResult($result, self::isOneRecord($this->what));
+    }
+
     protected function build(): BoundQuery
     {
         $query = new BoundQuery('DELETE ');
-        $this->appendTarget($query, $this->what);
+        $this->appendTarget($query, $this->what, $this->takesOnly());
         $this->applyOutput($query);
         $this->applyTimeout($query);
         $this->applyVersion($query);

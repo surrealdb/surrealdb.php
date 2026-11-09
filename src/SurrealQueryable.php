@@ -211,7 +211,8 @@ abstract class SurrealQueryable implements StreamingQueryExecutor
     }
 
     /**
-     * Begin a `RELATE`, creating one or many graph edges.
+     * Begin a `RELATE`, creating one or many graph edges. A record range is
+     * refused at either end: select the records and pass their ids.
      *
      * @param RecordId<string>|list<RecordId<string>> $from
      * @param RecordId<string>|Table<string> $edge
@@ -237,6 +238,9 @@ abstract class SurrealQueryable implements StreamingQueryExecutor
 
     /**
      * Invoke a SurrealQL/SurrealML function (`fn::*`, `ml::*`, built-ins).
+     * The name has segments joined by `::`, except the built-ins `count`,
+     * `not`, `rand` and `sleep`, and a version is `major.minor.patch`; see
+     * {@see RunQuery}.
      *
      * Named `call()` because {@see self::run()} already executes raw SurrealQL.
      *

@@ -70,14 +70,15 @@ final class LiveSelectQuery extends QueryBuilder implements \IteratorAggregate
     }
 
     /**
-     * Filter the notifications. A {@see BoundQuery} condition with bound
-     * values needs SurrealDB 3.0 or later: 2.x evaluates the condition for
-     * each notification, after the bindings are gone, so {@see self::execute()}
+     * Filter the notifications. Each call adds a condition, and a change must
+     * meet them all. A {@see BoundQuery} condition with bound values needs
+     * SurrealDB 3.0 or later: 2.x evaluates the condition for each
+     * notification, after the bindings are gone, so {@see self::execute()}
      * refuses it there. Inline the values in a string condition instead.
      */
     public function where(string|BoundQuery $cond): static
     {
-        $this->cond = $cond;
+        $this->conditions[] = $cond;
 
         return $this;
     }

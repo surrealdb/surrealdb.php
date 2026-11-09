@@ -42,6 +42,11 @@ final class Bytes extends Value
         return $other instanceof self && $this->bytes === $other->bytes;
     }
 
+    protected function hashKey(): string
+    {
+        return $this->bytes;
+    }
+
     public function __toString(): string
     {
         return $this->bytes;
