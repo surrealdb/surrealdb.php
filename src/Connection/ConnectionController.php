@@ -26,6 +26,7 @@ use SurrealDB\SDK\Events\Reconnecting;
 use SurrealDB\SDK\Exceptions\AuthenticationException;
 use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
+use SurrealDB\SDK\Exceptions\HttpConnectionException;
 use SurrealDB\SDK\Exceptions\InvalidSessionException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
@@ -71,6 +72,12 @@ final class ConnectionController
     private ?EngineInterface $engine = null;
     private ConnectionStatus $status = ConnectionStatus::Disconnected;
     private ?string $cachedVersion = null;
+
+    /**
+     * Whether the version request has been answered, or refused by a proxy
+     * (the version is then unknown, and {@see self::$cachedVersion} null).
+     */
+    private bool $versionAsked = false;
     private ?\Throwable $lastError = null;
 
     private Credentials|Token|AuthProviderInterface|\Closure|string|null $authProvider = null;
@@ -193,6 +200,7 @@ final class ConnectionController
         $this->checkVersion = $options->versionCheck;
         $this->lastError = null;
         $this->cachedVersion = null;
+        $this->versionAsked = false;
         $this->state = new ConnectionState(
             $endpoint,
             ExponentialBackoffReconnect::fromOption($options->reconnect),
@@ -257,7 +265,7 @@ final class ConnectionController
 
     public function assertFeature(Feature $feature): void
     {
-        if ($this->engine === null || $this->cachedVersion === null) {
+        if ($this->engine === null || !$this->versionAsked) {
             throw new ConnectionUnavailableException();
         }
 
@@ -265,7 +273,7 @@ final class ConnectionController
             throw new UnsupportedFeatureException($feature);
         }
 
-        if (!$feature->supports($this->cachedVersion)) {
+        if ($this->cachedVersion !== null && !$feature->supports($this->cachedVersion)) {
             throw new UnavailableFeatureException($feature, $this->cachedVersion);
         }
     }
@@ -630,12 +638,7 @@ final class ConnectionController
         $epoch = $this->connectionEpoch;
 
         try {
-            $version = $this->requireEngine()->version()->version;
-            $this->cachedVersion = $version;
-
-            if ($this->checkVersion && !Version::isSupported($version)) {
-                throw new UnsupportedVersionException($version, Version::MINIMUM, Version::MAXIMUM);
-            }
+            $version = $this->askVersion();
 
             foreach ($this->requireState()->allSessions() as $session) {
                 // A new socket starts without the old one's transactions.
@@ -648,6 +651,13 @@ final class ConnectionController
                 $this->restoreSession($session);
             }
 
+            // Asked before signing in, the version request carried no token,
+            // which a proxy in front of the server may refuse. Signed in now,
+            // so ask again; if it is still refused, the version stays unknown.
+            if ($this->cachedVersion === null) {
+                $version = $this->askVersion();
+            }
+
             $this->requireEngine()->ready();
 
             // Before announcing the connection, so a listener that writes in
@@ -658,8 +668,8 @@ final class ConnectionController
             }
 
             $this->status = ConnectionStatus::Connected;
-            $this->events->publish('connected', $version);
-            $this->context->events->dispatch(new Connected($version));
+            $this->events->publish('connected', $version ?? '');
+            $this->context->events->dispatch(new Connected($version ?? ''));
         } catch (\Throwable $error) {
             // This socket was lost while restoring: the engine is already
             // reconnecting (or has reconnected), and a later socket announces
@@ -671,6 +681,38 @@ final class ConnectionController
             $this->onError($error);
             $this->engine?->close();
         }
+    }
+
+    /**
+     * Learn the server's version, and refuse one the SDK does not support.
+     *
+     * @return string|null null when a proxy in front of the server refused
+     *                     the request (an HTTP 4xx): features are then not
+     *                     gated by version, and the server has the last word
+     */
+    private function askVersion(): ?string
+    {
+        try {
+            $version = $this->requireEngine()->version()->version;
+        } catch (HttpConnectionException $error) {
+            if ($error->status < 400 || $error->status >= 500) {
+                throw $error;
+            }
+
+            $this->cachedVersion = null;
+            $this->versionAsked = true;
+
+            return null;
+        }
+
+        $this->cachedVersion = $version;
+        $this->versionAsked = true;
+
+        if ($this->checkVersion && !Version::isSupported($version)) {
+            throw new UnsupportedVersionException($version, Version::MINIMUM, Version::MAXIMUM);
+        }
+
+        return $version;
     }
 
     /**

@@ -57,7 +57,7 @@ final class HttpTransport implements TransportInterface
             $this->state->endpoint->httpUri(),
             'POST',
             $body,
-            $this->headers($session, $request->method),
+            $this->headers($session, $request),
         );
 
         $decoded = $this->context->codec->deserialize((string) $response->getBody());
@@ -72,13 +72,13 @@ final class HttpTransport implements TransportInterface
     /**
      * @return array<string,string>
      */
-    private function headers(SessionState $session, string $method): array
+    private function headers(SessionState $session, RpcRequest $request): array
     {
         $headers = [
             'Content-Type' => $this->context->format->contentType(),
             'Accept' => $this->context->format->contentType(),
         ];
 
-        return [...$headers, ...SessionHeaders::forRequest($session, $method)];
+        return [...$headers, ...SessionHeaders::forRequest($session, $request)];
     }
 }

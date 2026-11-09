@@ -4,7 +4,9 @@ namespace SurrealDB\SDK\Transport;
 
 use SurrealDB\SDK\Connection\SessionState;
 use SurrealDB\SDK\Exceptions\InvalidValueException;
+use SurrealDB\SDK\Rpc\RpcRequest;
 use function in_array;
+use function is_string;
 use function sprintf;
 
 /**
@@ -25,9 +27,22 @@ final class SessionHeaders
     /**
      * @return array<string,string>
      */
-    public static function forRequest(SessionState $session, string $method): array
+    public static function forRequest(SessionState $session, RpcRequest $request): array
     {
-        return self::of($session, !in_array($method, self::SIGN_IN_METHODS, true));
+        if (!in_array($request->method, self::SIGN_IN_METHODS, true)) {
+            return self::of($session);
+        }
+
+        $headers = self::of($session, bearer: false);
+        $token = $request->params[0] ?? null;
+
+        // The token being authenticated is the bearer a proxy in front of
+        // the server may ask for.
+        if ($request->method === 'authenticate' && is_string($token)) {
+            $headers['Authorization'] = 'Bearer ' . $token;
+        }
+
+        return $headers;
     }
 
     /**

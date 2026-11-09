@@ -9,7 +9,9 @@ use SurrealDB\SDK\Api\ApiResponse;
 use SurrealDB\SDK\Auth\DatabaseAuth;
 use SurrealDB\SDK\Auth\RecordAccessAuth;
 use SurrealDB\SDK\Auth\RootAuth;
+use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Exceptions\AlreadyExistsException;
 use SurrealDB\SDK\Exceptions\InvalidValueException;
 use SurrealDB\SDK\Exceptions\ServerException;
@@ -23,6 +25,7 @@ use SurrealDB\SDK\Types\Bytes;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use SurrealDB\Tests\Fakes\AuthProxyClient;
 use function sprintf;
 
 /**
@@ -568,6 +571,40 @@ SURQL);
         } finally {
             $db->close();
             $record?->close();
+        }
+    }
+
+    public function testATokenConnectsThroughAProxyThatRequiresOne(): void
+    {
+        $root = $this->connect('http');
+        $token = $root->accessToken();
+        [$namespace] = $root->run('RETURN session::ns()');
+        $root->close();
+        self::assertNotNull($token);
+
+        foreach ([true, false] as $versionCheck) {
+            $proxy = new AuthProxyClient(new \GuzzleHttp\Client());
+            $db = new Surreal(new DriverOptions(httpClient: $proxy));
+
+            // The version request went out before the token, the proxy
+            // refused it, and connect() failed with its 401.
+            $db->connect($this->url('http'), new ConnectOptions(
+                namespace: $namespace,
+                database: 'db',
+                authentication: new Token($token),
+                versionCheck: $versionCheck,
+            ));
+
+            try {
+                self::assertSame([1], $db->run('RETURN 1'));
+                // Asked again once signed in, the version is known, and
+                // features are gated by it.
+                self::assertStringStartsWith('surrealdb-', $db->version());
+                self::assertSame($this->serverMajor($db) >= 3, $db->isFeatureSupported(Features::refreshTokens()));
+                self::assertSame(['/rpc'], $proxy->refused);
+            } finally {
+                $db->close();
+            }
         }
     }
 
