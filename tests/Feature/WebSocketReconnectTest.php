@@ -794,6 +794,78 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testWithRenewalOffTheAuthProviderStillSignsIn(): void
+    {
+        $db = $this->connect(invalidateOnExpiry: true);
+
+        try {
+            self::assertNotNull($db->accessToken());
+            self::assertIsArray($db->run('INFO FOR ROOT')[0] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffAReconnectKeepsAValidToken(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(define: false, invalidateOnExpiry: true);
+
+        try {
+            $db->signin(new NamespaceAuth($this->namespace, 'renew', 'secret'));
+            $token = $db->accessToken();
+
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertNotNull($token);
+            self::assertSame($token, $db->accessToken());
+            self::assertIsArray($db->run('INFO FOR NS')[0] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffAnExpiredSessionStaysSignedOut(): void
+    {
+        $setup = $this->connect();
+
+        try {
+            $setup->run("DEFINE USER brief ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h");
+        } finally {
+            $setup->close();
+        }
+
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'brief', 'secret'), define: false, invalidateOnExpiry: true);
+
+        try {
+            self::assertNotNull($db->accessToken());
+
+            // The next call finds the token expired, and signs the session out.
+            sleep(3);
+            $db->run('RETURN 1');
+            self::assertNull($db->accessToken());
+
+            // A reconnect does not sign it back in with the auth provider.
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertNull($db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testARenewalWhileSigningOutDoesNotSignBackIn(): void
     {
         $this->defineShortLivedUser();
