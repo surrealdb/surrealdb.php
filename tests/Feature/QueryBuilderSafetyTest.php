@@ -271,6 +271,47 @@ final class QueryBuilderSafetyTest extends TestCase
     }
 
     /**
+     * SurrealDB 3.x and 4.x made one edge to the range itself, and 2.x
+     * refused it as a parse error.
+     *
+     * @param 'ws'|'http' $protocol
+     */
+    #[DataProvider('protocols')]
+    public function testARangeIsRefusedAsAnEndOfARelation(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+        $one = new RecordId('person', 1);
+        $range = new RecordId('person', new Range(new BoundIncluded(1), new BoundExcluded(3)));
+
+        try {
+            foreach ([[$one, $range], [$range, $one], [$one, [new RecordId('person', 4), $range]]] as [$from, $to]) {
+                try {
+                    $db->relate($from, new Table('likes'), $to)->execute();
+                    self::fail('A range should be refused as an end of a relation.');
+                } catch (ExpressionException $error) {
+                    self::assertStringContainsString('select the records', $error->getMessage());
+                }
+            }
+
+            try {
+                $db->relate($one, new Table('likes'), [new StringRecordId('person:1..3')])->execute();
+                self::fail('A range written as text should be refused as an end of a relation.');
+            } catch (ExpressionException $error) {
+                self::assertStringContainsString('RecordIdRange', $error->getMessage());
+            }
+
+            self::assertSame([], $db->select('likes')->execute());
+
+            $edges = $db->relate($one, new Table('likes'), [new RecordId('person', 2), new RecordId('person', 3)])->execute();
+
+            self::assertIsArray($edges);
+            self::assertCount(2, $edges);
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
      * The ids of the records in a result, as text.
      *
      * @return list<string>

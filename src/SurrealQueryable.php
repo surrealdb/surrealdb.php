@@ -211,7 +211,8 @@ abstract class SurrealQueryable implements StreamingQueryExecutor
     }
 
     /**
-     * Begin a `RELATE`, creating one or many graph edges.
+     * Begin a `RELATE`, creating one or many graph edges. A record range is
+     * refused at either end: select the records and pass their ids.
      *
      * @param RecordId<string>|list<RecordId<string>> $from
      * @param RecordId<string>|Table<string> $edge

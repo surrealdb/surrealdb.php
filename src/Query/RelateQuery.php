@@ -16,7 +16,8 @@ use function is_array;
 /**
  * Fluent `RELATE` builder, creating graph edges between records. Pass arrays of
  * record IDs for `from`/`to` to relate many at once (the edge must then be a
- * {@see Table}).
+ * {@see Table}). A record range is refused at either end: select the records
+ * and pass their ids.
  *
  * @template TResult
  * @extends QueryBuilder<TResult>
@@ -76,6 +77,18 @@ final class RelateQuery extends QueryBuilder
 
         if ($isMultiple && $this->edge instanceof RecordId) {
             throw new ExpressionException('Edge must be a table when relating multiple records');
+        }
+
+        // SurrealDB 3.x and 4.x make one edge to a range rather than one per
+        // record in it, and 2.x cannot parse it.
+        foreach ([$this->from, $this->to] as $end) {
+            foreach (is_array($end) ? $end : [$end] as $record) {
+                if (self::isRange($record)) {
+                    throw new ExpressionException(
+                        'relate() relates records, not a record range: select the records and pass their ids.',
+                    );
+                }
+            }
         }
 
         $query = new BoundQuery('RELATE ');
