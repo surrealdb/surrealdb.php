@@ -301,7 +301,11 @@ SURQL);
                 $db->import("OPTION IMPORT;\nCREATE person:jaime SET name = 'Jaime';\nTHROW 'boom';");
                 self::fail('Expected the import to fail.');
             } catch (ServerException $error) {
-                self::assertStringContainsString('Import failed at statement', $error->getMessage());
+                // SurrealDB 2.x lists every statement's result, so it can say
+                // which one failed (counted from 0, OPTION IMPORT aside); 3.x
+                // lists only the failures.
+                $where = $this->serverMajor($db) >= 3 ? 'Import failed: ' : 'Import failed at statement 1: ';
+                self::assertStringStartsWith($where, $error->getMessage());
                 self::assertStringContainsString('boom', $error->getMessage());
 
                 // SurrealDB 2.x reports no error kind, so only 3.x is typed.

@@ -52,6 +52,8 @@ final class ImportErrorTest extends TestCase
             $db->import('OPTION IMPORT; CREATE a:1; CREATE a:1;');
             self::fail('Expected the import to fail.');
         } catch (AlreadyExistsException $error) {
+            // A 422 lists only the failures, so it says nothing of where.
+            self::assertSame('Import failed: Database record `a:1` already exists', $error->getMessage());
             self::assertSame('AlreadyExists', $error->kind);
             self::assertSame(['kind' => 'Record', 'details' => ['id' => 'a:1']], $error->details);
         }

@@ -257,15 +257,21 @@ abstract class AbstractRpcEngine implements EngineInterface
         }
 
         if (is_array($body) && array_is_list($body)) {
+            // A 2xx body lists every statement's result (SurrealDB 2.x and
+            // 3.0). From 3.1 the 422 lists only the failures, with nothing to
+            // say where in the script they were.
+            $everyStatement = $status >= 200 && $status < 300;
+
             foreach ($body as $index => $result) {
                 $chunk = is_array($result) ? QueryChunk::fromResult($index, $result) : null;
 
                 if ($chunk?->error !== null) {
                     $error = $chunk->error;
+                    $where = $everyStatement ? " at statement {$index}" : '';
 
                     throw ServerException::create(
                         $error->kind,
-                        "Import failed at statement {$index}: {$error->getMessage()}",
+                        "Import failed{$where}: {$error->getMessage()}",
                         $error->getCode(),
                         $error->details,
                     );
