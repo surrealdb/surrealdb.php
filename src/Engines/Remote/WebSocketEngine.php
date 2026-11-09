@@ -315,7 +315,14 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
                 break;
             }
 
-            $this->announceReconnecting();
+            // The lost socket's calls fail only once the loss is announced
+            // (see connectionLost()).
+            try {
+                $this->announceReconnecting();
+            } finally {
+                $this->failAllCalls(new CallTerminatedException());
+            }
+
             $this->context->scheduler->delay($reconnect->nextDelay());
 
             // A listener or another task may have closed the engine meanwhile.
@@ -328,9 +335,13 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
         if (!$this->terminated) {
             $this->active = false;
-            $this->failAllCalls(new CallTerminatedException());
-            $this->publisher->publish('disconnected');
-            $this->closeFeeds();
+
+            try {
+                $this->publisher->publish('disconnected');
+            } finally {
+                $this->failAllCalls(new CallTerminatedException());
+                $this->closeFeeds();
+            }
         }
     }
 
@@ -553,20 +564,25 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
     }
 
     /**
-     * The socket closed or failed. Pending calls fail; when a background loop
-     * is running it owns reconnection. Otherwise (synchronous scheduler) the
-     * engine reconnects here, and if it cannot, the connection is closed and
-     * `disconnected` is published so the controller's status no longer
-     * reports it as connected.
+     * The socket closed or failed. When a background loop is running it owns
+     * reconnection, and fails the pending calls itself once it has announced
+     * `reconnecting` or `disconnected`: OpenSwoole resumes a waiting caller
+     * inside fail(), and a caller restoring the session or replaying a live
+     * query must already see the socket as lost, not take the loss for an
+     * error of its own. Otherwise (synchronous scheduler) the pending calls
+     * fail here, the engine reconnects, and if it cannot, the connection is
+     * closed and `disconnected` is published so the controller's status no
+     * longer reports it as connected.
      */
     private function connectionLost(): void
     {
         $this->active = false;
-        $this->failAllCalls(new CallTerminatedException());
 
         if ($this->loopRunning || $this->terminated) {
             return;
         }
+
+        $this->failAllCalls(new CallTerminatedException());
 
         // Also done if a `reconnecting` listener closed the engine.
         if ($this->reconnectInline() || $this->terminated) {

@@ -1,0 +1,214 @@
+<?php
+
+namespace SurrealDB\Tests\Runtime\OpenSwoole;
+
+use PHPUnit\Framework\TestCase;
+use SurrealDB\SDK\Auth\RootAuth;
+use SurrealDB\SDK\Connection\ConnectionState;
+use SurrealDB\SDK\Connection\ConnectionStatus;
+use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Connection\DriverContext;
+use SurrealDB\SDK\Connection\DriverOptions;
+use SurrealDB\SDK\Contracts\DuplexTransportInterface;
+use SurrealDB\SDK\Runtime\Runtime;
+use SurrealDB\SDK\Surreal;
+use SurrealDB\SDK\Transport\Swoole\SwooleWebSocketTransport;
+use SurrealDB\SDK\Types\Table;
+use SurrealDB\Tests\Fakes\DroppingTransport;
+use function count;
+
+/**
+ * Reconnects under OpenSwoole, where failing a pending call resumes its
+ * coroutine straight away: a socket lost while the next one restores the
+ * session or replays live queries must lead to another reconnect, not end
+ * the connection or its subscriptions.
+ *
+ * Self-skips when the openswoole extension is not installed.
+ */
+final class SwooleWebSocketReconnectTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        if (!extension_loaded('openswoole')) {
+            $this->markTestSkipped('The openswoole extension is not installed.');
+        }
+    }
+
+    public function testLosingTheSocketWhileRestoringTheSessionReconnectsAgain(): void
+    {
+        $namespace = $this->defineNamespace();
+
+        [$events, $status, $greeting] = $this->inCoroutine(function () use ($namespace): array {
+            $transports = [];
+            $db = $this->connect($transports, static function (DroppingTransport $replacement): void {
+                // The first reply on the new socket answers a restore request.
+                $replacement->dropOnNextReply = true;
+            });
+
+            try {
+                $db->use($namespace, 'db');
+                $db->let('greeting', 'hello');
+                $events = $this->record($db);
+
+                $transports[0]->close();
+                $this->waitUntil(static function () use (&$transports, $db): bool {
+                    return count($transports) >= 3 && $db->status() === ConnectionStatus::Connected;
+                });
+
+                return [$events->getArrayCopy(), $db->status(), $db->run('RETURN $greeting')];
+            } finally {
+                $db->close();
+            }
+        });
+
+        self::assertSame(['reconnecting', 'reconnecting', 'connected'], $events);
+        self::assertSame(ConnectionStatus::Connected, $status);
+        self::assertSame(['hello'], $greeting);
+    }
+
+    public function testLosingTheSocketWhileReplayingKeepsTheLiveQuery(): void
+    {
+        $namespace = $this->defineNamespace();
+
+        [$events, $alive] = $this->inCoroutine(function () use ($namespace): array {
+            $transports = [];
+            $db = $this->connect($transports, static function (DroppingTransport $replacement): void {
+                $replacement->dropAfterSending = 'LIVE SELECT';
+            });
+
+            try {
+                $db->use($namespace, 'db');
+                $live = $db->live(new Table('person'))->execute();
+                $events = $this->record($db);
+
+                $transports[0]->close();
+                $this->waitUntil(static function () use (&$transports, $db): bool {
+                    return count($transports) >= 3 && $db->status() === ConnectionStatus::Connected;
+                });
+
+                return [$events->getArrayCopy(), $live->isAlive()];
+            } finally {
+                $db->close();
+            }
+        });
+
+        self::assertSame(['reconnecting', 'reconnecting', 'connected'], $events);
+        self::assertTrue($alive);
+    }
+
+    /**
+     * Connect as a guest, without the pinger: a signed-in session's renewal
+     * timer, or the pinger's sleep, would keep Coroutine::run() waiting after
+     * close().
+     *
+     * @param list<DroppingTransport> $transports
+     * @param \Closure(DroppingTransport): void $armReplacement called with the first replacement socket
+     */
+    private function connect(array &$transports, \Closure $armReplacement): Surreal
+    {
+        $options = Runtime::swoole(new DriverOptions(pingInterval: 0), enableHooks: false);
+        $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports, $armReplacement): DuplexTransportInterface {
+            $transport = new DroppingTransport(new SwooleWebSocketTransport($context, $state->endpoint));
+
+            if (count($transports) === 1) {
+                $armReplacement($transport);
+            }
+
+            return $transports[] = $transport;
+        };
+
+        $db = new Surreal($options);
+        $db->connect($this->url(), new ConnectOptions(reconnect: ['retryDelay' => 0.01, 'attempts' => 5]));
+
+        return $db;
+    }
+
+    /**
+     * @return \ArrayObject<int, string>
+     */
+    private function record(Surreal $db): \ArrayObject
+    {
+        /** @var \ArrayObject<int, string> $events */
+        $events = new \ArrayObject();
+
+        foreach (['reconnecting', 'connected', 'disconnected', 'error'] as $event) {
+            $db->subscribe($event, static function () use ($events, $event): void {
+                $events[] = $event;
+            });
+        }
+
+        return $events;
+    }
+
+    /**
+     * @param \Closure(): bool $condition
+     */
+    private function waitUntil(\Closure $condition): void
+    {
+        $deadline = microtime(true) + 5;
+
+        while (!$condition() && microtime(true) < $deadline) {
+            \OpenSwoole\Coroutine::usleep(20_000);
+        }
+    }
+
+    /**
+     * A namespace with a table guests can watch, defined over a separate,
+     * synchronous root connection. Also where an unavailable server skips
+     * (or, in CI, fails) the test.
+     */
+    private function defineNamespace(): string
+    {
+        $namespace = 'swoole_' . bin2hex(random_bytes(4));
+        $db = new Surreal();
+
+        try {
+            $db->connect($this->url(), new ConnectOptions(authentication: new RootAuth('root', 'root')));
+            $db->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db; USE DB db; DEFINE TABLE person SCHEMALESS PERMISSIONS FULL;");
+        } catch (\Throwable $error) {
+            if (getenv('SURREALDB_REQUIRE_LOCAL') === '1') {
+                self::fail('Local SurrealDB test database is required but unavailable: ' . $error->getMessage());
+            }
+
+            self::markTestSkipped('Local SurrealDB test database is not available: ' . $error->getMessage());
+        } finally {
+            $db->close();
+        }
+
+        return $namespace;
+    }
+
+    /**
+     * Run a test body in a coroutine and rethrow whatever it threw.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $body
+     *
+     * @return T
+     */
+    private function inCoroutine(\Closure $body): mixed
+    {
+        $result = null;
+        $error = null;
+
+        \OpenSwoole\Coroutine::run(static function () use ($body, &$result, &$error): void {
+            try {
+                $result = $body();
+            } catch (\Throwable $caught) {
+                $error = $caught;
+            }
+        });
+
+        if ($error !== null) {
+            throw $error;
+        }
+
+        return $result;
+    }
+
+    private function url(): string
+    {
+        return getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc';
+    }
+}
