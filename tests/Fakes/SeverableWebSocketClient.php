@@ -14,6 +14,8 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
 {
     private bool $severed = false;
 
+    private bool $closing = false;
+
     private bool $refusing = false;
 
     public int $connects = 0;
@@ -40,7 +42,18 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
     public function sever(): void
     {
         $this->severed = true;
+        $this->closing = false;
         $this->inner->close();
+    }
+
+    /**
+     * Close the connection the way a server does: it is no longer connected,
+     * but the frames that already arrived can still be read, and only then
+     * does reading report the end.
+     */
+    public function closeFromServer(): void
+    {
+        $this->closing = true;
     }
 
     /** Make later connection attempts fail, as if the server were down. */
@@ -58,6 +71,7 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
         }
 
         $this->severed = false;
+        $this->closing = false;
         $this->inner->connect($url, $subprotocols, $headers);
     }
 
@@ -80,6 +94,17 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
 
     public function receive(?float $timeout = null): ?string
     {
+        if ($this->closing) {
+            // Whatever already arrived, then the end.
+            $frame = $this->inner->receive(0.2);
+
+            if ($frame === null) {
+                $this->sever();
+            }
+
+            return $frame;
+        }
+
         return $this->severed ? null : $this->inner->receive($timeout);
     }
 
@@ -95,6 +120,6 @@ final class SeverableWebSocketClient implements WebSocketClientInterface
 
     public function isConnected(): bool
     {
-        return !$this->severed && $this->inner->isConnected();
+        return !$this->severed && !$this->closing && $this->inner->isConnected();
     }
 }

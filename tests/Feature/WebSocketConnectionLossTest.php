@@ -9,7 +9,10 @@ use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Exceptions\SurrealException;
+use SurrealDB\SDK\Live\LiveAction;
 use SurrealDB\SDK\Surreal;
+use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\SDK\Types\Table;
 use SurrealDB\Tests\Fakes\SeverableWebSocketClient;
 
 /**
@@ -39,6 +42,44 @@ final class WebSocketConnectionLossTest extends TestCase
 
         $this->expectException(ConnectionUnavailableException::class);
         $db->run('RETURN 1');
+    }
+
+    public function testAStatusCheckKeepsNotificationsThatArrivedBeforeTheClose(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $namespace = 'loss_' . bin2hex(random_bytes(4));
+            $db->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db;");
+            $db->use($namespace, 'db');
+            $db->run('DEFINE TABLE person SCHEMALESS PERMISSIONS FULL');
+            $live = $db->live(new Table('person'))->execute();
+
+            $other = new Surreal();
+            $other->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc', new ConnectOptions(
+                authentication: new RootAuth('root', 'root'),
+                namespace: $namespace,
+                database: 'db',
+            ));
+            $other->create(new RecordId('person', 'one'))->execute();
+            $other->close();
+
+            // The notification is on its way, then the server closes.
+            usleep(300_000);
+            $this->client->closeFromServer();
+
+            self::assertSame(ConnectionStatus::Disconnected, $db->status());
+
+            $actions = [];
+
+            foreach ($live as $message) {
+                $actions[] = $message->action;
+            }
+
+            self::assertSame([LiveAction::Create], $actions);
+        } finally {
+            $db->close();
+        }
     }
 
     public function testCallOnADeadSocketFailsAndDisconnects(): void

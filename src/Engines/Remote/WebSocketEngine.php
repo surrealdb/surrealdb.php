@@ -164,8 +164,21 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
     public function probe(): void
     {
-        if ($this->active && !$this->loopRunning && $this->transport?->isConnected() !== true) {
+        if (!$this->active || $this->loopRunning || $this->transport?->isConnected() === true) {
+            return;
+        }
+
+        if ($this->transport === null) {
             $this->connectionLost();
+
+            return;
+        }
+
+        // Frames that arrived before the server closed the socket, such as
+        // live notifications, are still dispatched; reading past them finds
+        // the close and reports the loss. The socket is closed, so no read
+        // here waits for more.
+        while ($this->readAndDispatchOnce()) {
         }
     }
 
