@@ -223,9 +223,11 @@ foreach ($live as $message) {
 
 Live queries the SDK started are re-issued after a reconnect, and iteration carries on across it. `liveOf($id)` attaches to a live query started elsewhere (for example by `LIVE SELECT` in `run()`), and `kill($id)` stops one by id.
 
+> Earlier 2.0 alphas took a live query id in `live($id)`. That is now `liveOf($id)`: `live()` builds a `LIVE SELECT`, and iterating the builder instead of what `execute()` returns throws.
+
 ## Connections
 
-`ConnectOptions::$reconnect` (on by default) reconnects with exponential backoff and restores every session's namespace, database and variables. It restores a session's authentication when it can. It reuses an access token that expires more than a minute from now. Failing that, it uses a refresh token, or, for a session you didn't sign in explicitly, signs in again with `ConnectOptions::$authentication`. A session where none of these works comes back signed out, and an `auth` event reports `null`. One example is a session signed in explicitly with a token about to expire and no refresh token. Under the default synchronous scheduler the SDK notices a dropped connection when it next uses it. A call that finds the socket dead fails, and the next one runs on the new connection; `status()` checks the socket and reconnects on the spot, so it reports `Connected` once that has worked.
+`ConnectOptions::$reconnect` (on by default) reconnects with exponential backoff and restores every session's namespace, database and variables. It restores a session's authentication when it can. It reuses an access token that expires more than a minute from now. Failing that, it uses a refresh token, or, for a session you didn't sign in or out explicitly, signs in again with `ConnectOptions::$authentication`. A session where none of these works comes back signed out, and an `auth` event reports `null`. One example is a session signed in explicitly with a token about to expire and no refresh token. Under the default synchronous scheduler the SDK notices a dropped connection when it next uses it. A call that finds the socket dead fails, and the next one runs on the new connection; `status()` checks the socket and reconnects on the spot, so it reports `Connected` once that has worked.
 
 ```php
 $db->connect('wss://example.com/rpc', new ConnectOptions(
@@ -344,7 +346,7 @@ app()->terminating(static fn () => $telemetry->forceFlush());
 ### Requirements
 - PHP 8.4 or higher
 - Composer
-- A SurrealDB server for the integration tests (CI runs v2.6.2, v3.3.4 and nightly)
+- A SurrealDB server for the integration tests (CI runs v2.6.2, v3.3.4, v4.0.0 and nightly)
 
 ### Run static analysis and the code style check
 ```bash

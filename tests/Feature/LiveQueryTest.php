@@ -5,6 +5,7 @@ namespace SurrealDB\Tests\Feature;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Live\LiveAction;
@@ -264,6 +265,23 @@ final class LiveQueryTest extends TestCase
 
         /** @var array<string,array<int,LiveMessage<mixed>>> */
         return (new \ReflectionProperty($engine, 'unclaimedLive'))->getValue($engine);
+    }
+
+    public function testIteratingTheBuilderInsteadOfTheSubscriptionThrows(): void
+    {
+        $db = $this->connect();
+
+        try {
+            // As code written for live($id), which followed a query by id.
+            $this->expectException(SurrealException::class);
+            $this->expectExceptionMessage('liveOf($id)');
+
+            foreach ($db->live('0189d6e3-8eac-703a-9a48-d9faa78b44b9') as $_) {
+                self::fail('Expected nothing to be yielded.');
+            }
+        } finally {
+            $db->close();
+        }
     }
 
     public function testHttpConnectionsCannotUseLiveQueries(): void

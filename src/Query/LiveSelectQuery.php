@@ -19,8 +19,9 @@ use function is_string;
  * and returns a {@see ManagedLiveSubscription} to iterate.
  *
  * @extends QueryBuilder<ManagedLiveSubscription>
+ * @implements \IteratorAggregate<int, never>
  */
-final class LiveSelectQuery extends QueryBuilder
+final class LiveSelectQuery extends QueryBuilder implements \IteratorAggregate
 {
     use HasCondition;
 
@@ -87,6 +88,21 @@ final class LiveSelectQuery extends QueryBuilder
         $this->fetch = array_values($fields);
 
         return $this;
+    }
+
+    /**
+     * Not iterable: the builder starts nothing until {@see self::execute()},
+     * whose subscription is what to iterate. Earlier 2.0 alphas took a live
+     * query id here and were iterated directly; following a live query by id
+     * is now {@see \SurrealDB\SDK\SurrealSession::liveOf()}. Without this,
+     * `foreach` would quietly walk the builder's public properties.
+     */
+    public function getIterator(): never
+    {
+        throw new SurrealException(
+            'A live query builder is not iterable: call execute() and iterate the subscription it returns. '
+            . 'To follow a live query started elsewhere by its id, use liveOf($id).',
+        );
     }
 
     /**
