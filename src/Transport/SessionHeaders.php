@@ -4,6 +4,7 @@ namespace SurrealDB\SDK\Transport;
 
 use SurrealDB\SDK\Connection\SessionState;
 use SurrealDB\SDK\Exceptions\InvalidValueException;
+use function in_array;
 use function sprintf;
 
 /**
@@ -14,9 +15,25 @@ use function sprintf;
 final class SessionHeaders
 {
     /**
+     * Requests that bring their own credentials. The server refuses a request
+     * whose bearer token has expired before reading it, so sending the
+     * session's token with these would stop it signing in again once that
+     * token expired.
+     */
+    private const array SIGN_IN_METHODS = ['signin', 'signup', 'authenticate', 'refresh'];
+
+    /**
      * @return array<string,string>
      */
-    public static function of(SessionState $session): array
+    public static function forRequest(SessionState $session, string $method): array
+    {
+        return self::of($session, !in_array($method, self::SIGN_IN_METHODS, true));
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    public static function of(SessionState $session, bool $bearer = true): array
     {
         $headers = [];
 
@@ -28,7 +45,7 @@ final class SessionHeaders
             $headers['Surreal-DB'] = self::carriable('database', $session->database);
         }
 
-        if ($session->auth->accessToken !== null) {
+        if ($bearer && $session->auth->accessToken !== null) {
             $headers['Authorization'] = 'Bearer ' . $session->auth->accessToken;
         }
 

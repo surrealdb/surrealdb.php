@@ -59,7 +59,7 @@ final class AmpHttpTransport implements TransportInterface
         $ampRequest = new Request($this->state->endpoint->httpUri(), 'POST');
         $ampRequest->setBody($this->context->codec->serialize($request->toWire()));
 
-        foreach ($this->headers($session) as $name => $value) {
+        foreach ($this->headers($session, $request->method) as $name => $value) {
             $ampRequest->setHeader($name, $value);
         }
 
@@ -83,13 +83,13 @@ final class AmpHttpTransport implements TransportInterface
     /**
      * @return array<string,string>
      */
-    private function headers(SessionState $session): array
+    private function headers(SessionState $session, string $method): array
     {
         $headers = [
             'Content-Type' => $this->context->format->contentType(),
             'Accept' => $this->context->format->contentType(),
         ];
 
-        return [...$headers, ...SessionHeaders::of($session)];
+        return [...$headers, ...SessionHeaders::forRequest($session, $method)];
     }
 }

@@ -6,6 +6,8 @@ use Beau\CborPHP\classes\TaggedValue;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Api\ApiResponse;
+use SurrealDB\SDK\Auth\DatabaseAuth;
+use SurrealDB\SDK\Auth\RecordAccessAuth;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Exceptions\AlreadyExistsException;
@@ -519,6 +521,53 @@ SURQL);
             self::assertSame([1], $db->run('RETURN 1'));
         } finally {
             $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testASessionSignsInAgainOnceItsTokenHasExpired(string $protocol): void
+    {
+        $root = $this->connect($protocol);
+        [$namespace] = $root->run('RETURN session::ns()');
+        $root->run(<<<'SURQL'
+DEFINE USER app ON DATABASE PASSWORD 'pw' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h;
+DEFINE TABLE user SCHEMALESS PERMISSIONS FULL;
+SURQL);
+        $refreshTokens = $root->isFeatureSupported(Features::refreshTokens());
+
+        if ($refreshTokens) {
+            $root->run(<<<'SURQL'
+DEFINE ACCESS account ON DATABASE TYPE RECORD
+    SIGNUP (CREATE user SET name = $name)
+    SIGNIN (SELECT * FROM user WHERE name = $name)
+    WITH REFRESH DURATION FOR TOKEN 2s, FOR SESSION 1h;
+SURQL);
+        }
+
+        $root->close();
+
+        // Signed in by the auth provider.
+        $db = new Surreal();
+        $db->connect($this->url($protocol), new ConnectOptions(
+            authentication: new DatabaseAuth($namespace, 'db', 'app', 'pw'),
+        ));
+        // Signed in explicitly, renewed with its refresh token.
+        $record = $refreshTokens ? new Surreal() : null;
+        $record?->connect($this->url($protocol));
+        $record?->signup(new RecordAccessAuth($namespace, 'db', 'account', ['name' => 'ada']));
+
+        try {
+            self::assertSame([1], $db->run('RETURN 1'));
+            sleep(3);
+
+            // HTTP sent the expired token with the sign-in, and the server
+            // refused it with a 401 before reading the credentials.
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame($refreshTokens ? ['ada'] : [], $record?->run('RETURN $auth.name') ?? []);
+        } finally {
+            $db->close();
+            $record?->close();
         }
     }
 
