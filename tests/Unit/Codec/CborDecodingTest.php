@@ -2,16 +2,18 @@
 
 namespace SurrealDB\Tests\Unit\Codec;
 
-use Beau\CborPHP\classes\TaggedValue;
-use Beau\CborPHP\exceptions\CborException;
-use Beau\CborPHP\utils\CborByteString;
+use Beau\CborPHP\CborDecoder;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Codec\Cbor\CborReader;
 use SurrealDB\SDK\Codec\CborDeserializer;
 use SurrealDB\SDK\Exceptions\SerializationException;
+use SurrealDB\SDK\Types\Bytes;
+use SurrealDB\SDK\Types\Table;
 
-final class CborReaderTest extends TestCase
+/**
+ * What the SDK reads from the server, through welpie21/cbor.php.
+ */
+final class CborDecodingTest extends TestCase
 {
     /**
      * @return iterable<string,array{string,float}>
@@ -33,31 +35,29 @@ final class CborReaderTest extends TestCase
     #[DataProvider('halfPrecisionFloats')]
     public function testHalfPrecisionFloatsDecode(string $hex, float $expected): void
     {
-        self::assertSame($expected, CborReader::decode((string) hex2bin($hex)));
+        // SurrealDB sends a float as 16 bits when that loses nothing: RETURN 0.5.
+        self::assertSame($expected, $this->decode($hex));
     }
 
     public function testHalfPrecisionSpecialValues(): void
     {
-        self::assertNan(CborReader::decode((string) hex2bin('f97e00')));
+        self::assertNan($this->decode('f97e00'));
 
-        $negativeZero = CborReader::decode((string) hex2bin('f98000'));
+        $negativeZero = $this->decode('f98000');
         self::assertSame(-0.0, $negativeZero);
         self::assertSame('-0', (string) $negativeZero);
     }
 
     public function testOtherItemsDecode(): void
     {
-        // {"a": [1, -2, "x", h'01', true, null, 1.1], "b": 6("y")}
-        $data = hex2bin('a2' . '6161' . '87' . '01' . '21' . '6178' . '4101' . 'f5' . 'f6' . 'fb3ff199999999999a'
-            . '6162' . 'c6' . '6179');
-
-        $decoded = CborReader::decode((string) $data);
+        // {"a": [1, -2, "x", h'01', true, null, 1.1], "b": 7("y")}
+        $decoded = $this->decode('a2' . '6161' . '87' . '01' . '21' . '6178' . '4101' . 'f5' . 'f6' . 'fb3ff199999999999a'
+            . '6162' . 'c7' . '6179');
 
         self::assertIsArray($decoded);
-        self::assertEquals([1, -2, 'x', new CborByteString("\x01"), true, null, 1.1], $decoded['a']);
-        self::assertInstanceOf(TaggedValue::class, $decoded['b']);
-        self::assertSame(6, $decoded['b']->tag);
-        self::assertSame('y', $decoded['b']->value);
+        // A byte string comes back as Bytes, apart from text.
+        self::assertEquals([1, -2, 'x', new Bytes("\x01"), true, null, 1.1], $decoded['a']);
+        self::assertEquals(new Table('y'), $decoded['b']);
     }
 
     /**
@@ -68,7 +68,6 @@ final class CborReaderTest extends TestCase
      */
     public static function malformed(): iterable
     {
-        yield 'nothing' => [''];
         yield 'truncated uint16' => ['1901'];
         yield 'truncated uint64' => ['1b000000'];
         yield 'truncated text' => ['646162'];
@@ -86,6 +85,8 @@ final class CborReaderTest extends TestCase
         yield 'array as a map key' => ['a18001'];
         yield 'tagged map key' => ['a1c6616101'];
         yield 'float map key' => ['a1f9380001'];
+        yield 'bool map key' => ['a1f501'];
+        yield 'byte string map key' => ['a1416b01'];
         yield 'indefinite-length array' => ['9f01ff'];
         yield 'reserved additional information' => ['1c'];
         yield 'data after the value' => ['0102'];
@@ -94,29 +95,36 @@ final class CborReaderTest extends TestCase
     #[DataProvider('malformed')]
     public function testMalformedDataThrows(string $hex): void
     {
-        $this->expectException(CborException::class);
+        $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Malformed CBOR');
 
-        CborReader::decode((string) hex2bin($hex));
+        $this->decode($hex);
+    }
+
+    public function testNothingDecodesToNull(): void
+    {
+        self::assertNull((new CborDeserializer())->deserialize(''));
     }
 
     public function testIntegerLimitsDecode(): void
     {
-        self::assertSame(PHP_INT_MAX, CborReader::decode((string) hex2bin('1b7fffffffffffffff')));
-        self::assertSame(PHP_INT_MIN, CborReader::decode((string) hex2bin('3b7fffffffffffffff')));
+        self::assertSame(PHP_INT_MAX, $this->decode('1b7fffffffffffffff'));
+        self::assertSame(PHP_INT_MIN, $this->decode('3b7fffffffffffffff'));
     }
 
     public function testDeepNestingThrowsInsteadOfExhaustingMemory(): void
     {
-        $this->expectException(CborException::class);
+        $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Nesting deeper than 512 levels');
 
-        CborReader::decode(str_repeat("\x81", 200_000) . "\x01");
+        (new CborDeserializer())->deserialize(str_repeat("\x81", 200_000) . "\x01");
     }
 
     public function testNestingUpToTheLimitDecodes(): void
     {
-        $value = CborReader::decode(str_repeat("\x81", CborReader::MAX_DEPTH) . "\x01");
+        $value = (new CborDeserializer())->deserialize(str_repeat("\x81", CborDecoder::DEFAULT_MAX_DEPTH) . "\x01");
 
-        for ($level = 0; $level < CborReader::MAX_DEPTH; $level++) {
+        for ($level = 0; $level < CborDecoder::DEFAULT_MAX_DEPTH; $level++) {
             self::assertIsArray($value);
             $value = $value[0];
         }
@@ -124,11 +132,8 @@ final class CborReaderTest extends TestCase
         self::assertSame(1, $value);
     }
 
-    public function testTheDeserializerReportsMalformedDataAsASerializationError(): void
+    private function decode(string $hex): mixed
     {
-        $this->expectException(SerializationException::class);
-        $this->expectExceptionMessage('Malformed CBOR');
-
-        (new CborDeserializer())->deserialize((string) hex2bin('646162'));
+        return (new CborDeserializer())->deserialize((string) hex2bin($hex));
     }
 }

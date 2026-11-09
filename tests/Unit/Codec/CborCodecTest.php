@@ -2,11 +2,11 @@
 
 namespace SurrealDB\Tests\Unit\Codec;
 
+use Beau\CborPHP\CborEncoder;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Codec\CborDeserializer;
 use SurrealDB\SDK\Codec\CborSerializer;
-use SurrealDB\SDK\Codec\Cbor\CborWriter;
 use SurrealDB\SDK\Exceptions\SerializationException;
 use SurrealDB\SDK\Types\BoundExcluded;
 use SurrealDB\SDK\Types\BoundIncluded;
@@ -267,7 +267,7 @@ final class CborCodecTest extends TestCase
         $this->expectException(SerializationException::class);
         $this->expectExceptionMessage('Invalid decimal in a SurrealDB CBOR tag');
 
-        $this->deserializer->deserialize("\xca" . CborWriter::encode($text));
+        $this->deserializer->deserialize("\xca" . CborEncoder::encode($text));
     }
 
     /**
@@ -287,7 +287,7 @@ final class CborCodecTest extends TestCase
     #[DataProvider('validDecimalText')]
     public function testDecodesValidDecimalText(string $text, string $decimal): void
     {
-        $decoded = $this->deserializer->deserialize("\xca" . CborWriter::encode($text));
+        $decoded = $this->deserializer->deserialize("\xca" . CborEncoder::encode($text));
 
         $this->assertInstanceOf(Decimal::class, $decoded);
         $this->assertSame($decimal, (string) $decoded);
@@ -312,7 +312,7 @@ final class CborCodecTest extends TestCase
     public function testEncodingDropsOnlyZerosPast28FractionDigits(string $decimal, string $sent): void
     {
         $this->assertSame(
-            bin2hex("\xca" . CborWriter::encode($sent)),
+            bin2hex("\xca" . CborEncoder::encode($sent)),
             bin2hex($this->serializer->serialize(new Decimal($decimal))),
         );
     }

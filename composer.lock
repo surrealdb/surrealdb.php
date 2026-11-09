@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a108e5e63cdb8637f7fe00460eed30fe",
+    "content-hash": "e5a1fc183acf5693bddd77aa3d405341",
     "packages": [
         {
             "name": "brick/math",
@@ -488,16 +488,16 @@
         },
         {
             "name": "welpie21/cbor.php",
-            "version": "2.1.0",
+            "version": "2.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/welpie21/cbor.php.git",
-                "reference": "fd3afd848ce722761499388696db0b271502e570"
+                "reference": "dad5bbef3a314d9a378913557484f88ed018635e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/welpie21/cbor.php/zipball/fd3afd848ce722761499388696db0b271502e570",
-                "reference": "fd3afd848ce722761499388696db0b271502e570",
+                "url": "https://api.github.com/repos/welpie21/cbor.php/zipball/dad5bbef3a314d9a378913557484f88ed018635e",
+                "reference": "dad5bbef3a314d9a378913557484f88ed018635e",
                 "shasum": ""
             },
             "require": {
@@ -536,9 +536,9 @@
             ],
             "support": {
                 "issues": "https://github.com/welpie21/cbor.php/issues",
-                "source": "https://github.com/welpie21/cbor.php/tree/v2.1.0"
+                "source": "https://github.com/welpie21/cbor.php/tree/v2.2.0"
             },
-            "time": "2026-02-24T21:50:46+00:00"
+            "time": "2026-11-09T16:45:26+00:00"
         }
     ],
     "packages-dev": [
