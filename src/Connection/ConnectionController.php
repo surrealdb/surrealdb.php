@@ -44,6 +44,7 @@ use SurrealDB\SDK\Support\Publisher;
 use SurrealDB\SDK\Support\Version;
 use SurrealDB\SDK\Types\File;
 use SurrealDB\SDK\Types\Set;
+use SurrealDB\SDK\Types\Value;
 use Symfony\Component\Uid\Uuid;
 use function is_array;
 use function is_string;
@@ -380,6 +381,10 @@ final class ConnectionController
     {
         $sessionState = $this->requireSession($session);
         $this->assertSendable($value);
+        // HTTP sends the session's variables with every query, and a reconnect
+        // replays them: both must send the value as it was now, as a WebSocket
+        // does, not as the caller changes it later.
+        $value = self::snapshot($value);
         $this->renewIfDue($session);
         $this->requireEngine()->set($name, $value, $session);
         $sessionState->variables[$name] = $value;
@@ -1589,6 +1594,36 @@ final class ConnectionController
     private function requireSession(?string $session): SessionState
     {
         return $this->requireState()->session($session) ?? throw new InvalidSessionException($session);
+    }
+
+    /**
+     * A copy of a value that later changes to the original do not reach.
+     * Arrays are copied by value already, but the objects in them are not.
+     * The SDK's own value types are immutable, and anything else the encoder
+     * refuses anyway.
+     */
+    private static function snapshot(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return array_map(self::snapshot(...), $value);
+        }
+
+        if ($value instanceof \stdClass) {
+            $copy = new \stdClass();
+
+            foreach (get_object_vars($value) as $key => $item) {
+                $copy->{$key} = self::snapshot($item);
+            }
+
+            return $copy;
+        }
+
+        // Encoded as what it serializes to, so that is what is kept.
+        if ($value instanceof \JsonSerializable && !$value instanceof Value) {
+            return self::snapshot($value->jsonSerialize());
+        }
+
+        return $value;
     }
 
     /**

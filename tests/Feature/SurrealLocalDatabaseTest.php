@@ -470,6 +470,34 @@ SURQL);
         }
     }
 
+    #[DataProvider('protocols')]
+    public function testAVariableKeepsTheValueItWasSetTo(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $value = new \stdClass();
+            $value->tags = ['a'];
+            $value->inner = new \stdClass();
+            $value->inner->n = 1;
+            $db->let('value', ['object' => $value]);
+
+            // HTTP sends the variable with each query: it must not pick up
+            // changes made after let(), as a WebSocket, which sent it at
+            // once, does not.
+            $value->tags[] = 'b';
+            $value->inner->n = 2;
+
+            self::assertSame([['a'], 1], $db->run('RETURN [$value.object.tags, $value.object.inner.n]')[0]);
+
+            // The SDK's own types are kept as they are, not as their JSON.
+            $db->let('record', new RecordId('person', 'tobie'));
+            self::assertEquals(new RecordId('person', 'tobie'), $db->run('RETURN $record')[0]);
+        } finally {
+            $db->close();
+        }
+    }
+
     private function serverMajor(Surreal $db): int
     {
         return (int) preg_replace('/^surrealdb-/', '', $db->version());
