@@ -305,8 +305,9 @@ abstract class LiveSubscription implements \IteratorAggregate
         $this->draining?->close();
         $this->draining = null;
 
+        // Killed, or its session ended: nobody listens to the query again.
         if ($this->feed instanceof LiveFeed) {
-            $this->feed->close();
+            $this->feed->release();
         }
     }
 

@@ -67,6 +67,16 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
     private int $unclaimedCount = 0;
 
     /**
+     * Live query ids whose feed was released on this socket (see
+     * {@see LiveFeed::release()}): nobody will claim their later
+     * notifications, the `KILLED` that answers a kill included, so they are
+     * dropped rather than held.
+     *
+     * @var array<string,true>
+     */
+    private array $releasedLive = [];
+
+    /**
      * Live feeds bound to the current socket, held weakly so a subscription
      * dropped without kill() can still be destroyed. A new socket does not
      * carry the old one's live queries, so they end when it is lost.
@@ -204,11 +214,15 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             $weak->get()?->push($message);
         });
         $this->feeds[$key] = $weak;
-        $feed->onClose(function () use ($unsubscribe, $key, $weak): void {
+        $feed->onClose(function (bool $released) use ($unsubscribe, $key, $weak, $id): void {
             $unsubscribe();
 
             if (($this->feeds[$key] ?? null) === $weak) {
                 unset($this->feeds[$key]);
+            }
+
+            if ($released && !isset($this->liveSubscribers[$id])) {
+                $this->releasedLive[$id] = true;
             }
         });
 
@@ -424,6 +438,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         $this->feeds = [];
         $this->unclaimedLive = [];
         $this->unclaimedCount = 0;
+        $this->releasedLive = [];
 
         // Ended rather than closed: what they already received is still
         // yielded.
@@ -520,7 +535,12 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
                 $this->context->events->dispatch(new LiveMessageReceived($message));
                 $listeners = $this->liveSubscribers[$message->queryId] ?? [];
 
-                if ($listeners === []) {
+                if ($listeners === [] && isset($this->releasedLive[$message->queryId])) {
+                    // Nothing follows KILLED, so the id need not be kept.
+                    if ($message->action === LiveAction::Killed) {
+                        unset($this->releasedLive[$message->queryId]);
+                    }
+                } elseif ($listeners === []) {
                     $this->holdUnclaimed($message);
                 }
 
@@ -558,6 +578,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
     {
         $subscriberId = $this->liveSubscriberId++;
         $this->liveSubscribers[$id][$subscriberId] = $listener;
+        unset($this->releasedLive[$id]);
 
         $held = $this->unclaimedLive[$id] ?? [];
         unset($this->unclaimedLive[$id]);

@@ -91,6 +91,18 @@ final class ManagedLiveSubscription extends LiveSubscription
         $this->connection->untrackLive($this);
     }
 
+    /**
+     * Let go of without kill(): the query the SDK started runs on until the
+     * socket closes, but nobody can claim its notifications, so they are
+     * dropped rather than held.
+     */
+    public function __destruct()
+    {
+        if ($this->feed instanceof LiveFeed) {
+            $this->feed->release();
+        }
+    }
+
     /** The `LIVE SELECT` statement this subscription runs. */
     public function query(): BoundQuery
     {

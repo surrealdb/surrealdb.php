@@ -216,6 +216,56 @@ final class LiveQueryTest extends TestCase
         }
     }
 
+    public function testNotificationsForKilledOrDroppedSubscriptionsAreNotHeld(): void
+    {
+        $db = $this->connect();
+
+        try {
+            for ($i = 0; $i < 3; $i++) {
+                $db->live(new Table('person'))->execute()->kill();
+            }
+
+            // Let go of without kill(): its query still runs on the server.
+            $dropped = $db->live(new Table('person'))->execute();
+            unset($dropped);
+
+            for ($i = 0; $i < 5; $i++) {
+                $db->create(new RecordId('person', "p{$i}"))->execute();
+            }
+
+            // Reads whatever notifications arrived meanwhile.
+            $db->run('RETURN 1');
+
+            // Neither the KILLED answers nor the dropped query's notifications
+            // wait for a subscriber that will never come.
+            self::assertSame([], $this->unclaimed($db));
+
+            // An id nobody subscribed to yet is still held for its subscriber.
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $db->create(new RecordId('person', 'late'))->execute();
+            $db->run('RETURN 1');
+
+            self::assertSame([(string) $id], array_keys($this->unclaimed($db)));
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * Notifications the WebSocket engine holds for live queries nobody has
+     * subscribed to.
+     *
+     * @return array<string,array<int,LiveMessage<mixed>>>
+     */
+    private function unclaimed(Surreal $db): array
+    {
+        $connection = (new \ReflectionProperty(Surreal::class, 'connection'))->getValue($db);
+        $engine = (new \ReflectionProperty($connection, 'engine'))->getValue($connection);
+
+        /** @var array<string,array<int,LiveMessage<mixed>>> */
+        return (new \ReflectionProperty($engine, 'unclaimedLive'))->getValue($engine);
+    }
+
     public function testHttpConnectionsCannotUseLiveQueries(): void
     {
         $db = new Surreal();

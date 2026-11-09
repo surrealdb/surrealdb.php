@@ -82,17 +82,21 @@ final class LiveFeed implements \IteratorAggregate
 
     /**
      * Stop receiving and end iteration, dropping anything still queued.
+     * Later notifications for the query are held for a next subscriber.
      */
     public function close(): void
     {
-        if ($this->closed) {
-            return;
-        }
+        $this->shut(released: false);
+    }
 
-        $this->closed = true;
-        $this->queue = [];
-        $this->unregister();
-        $this->wake();
+    /**
+     * Close, for a query nobody will listen to again (killed, its session
+     * ended, or the SDK's own subscription let go of): its later
+     * notifications are dropped rather than held for a next subscriber.
+     */
+    public function release(): void
+    {
+        $this->shut(released: true);
     }
 
     /**
@@ -173,10 +177,25 @@ final class LiveFeed implements \IteratorAggregate
         $this->close();
     }
 
-    private function unregister(): void
+    private function shut(bool $released): void
+    {
+        if ($this->closed) {
+            return;
+        }
+
+        $this->closed = true;
+        $this->queue = [];
+        $this->unregister($released);
+        $this->wake();
+    }
+
+    /**
+     * @param bool $released see {@see self::release()}
+     */
+    private function unregister(bool $released = false): void
     {
         if ($this->unsubscribe !== null) {
-            ($this->unsubscribe)();
+            ($this->unsubscribe)($released);
             $this->unsubscribe = null;
         }
     }
