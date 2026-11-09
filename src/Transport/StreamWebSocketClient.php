@@ -33,14 +33,23 @@ final class StreamWebSocketClient implements WebSocketClientInterface
      */
     private string $inbox = '';
 
+    /** How long close() tries to send its close frame before it just closes. */
+    private const float CLOSE_WRITE_TIMEOUT = 1.0;
+
     /**
      * @param float $pollInterval how long each blocking read waits before it
      *                            checks the socket again; reaching it does not
      *                            close an idle connection
+     * @param float $writeTimeout how long a frame may take to write. A server
+     *                            that stops reading would otherwise hold up
+     *                            this write, and every request after it,
+     *                            forever; past it the connection is closed,
+     *                            and reconnects
      */
     public function __construct(
         private readonly float $connectTimeout = 10.0,
         private readonly float $pollInterval = 60.0,
+        private readonly float $writeTimeout = 30.0,
     ) {}
 
     public function connect(string $url, array $subprotocols = [], array $headers = []): void
@@ -163,7 +172,7 @@ final class StreamWebSocketClient implements WebSocketClientInterface
     {
         if ($this->connected && is_resource($this->socket)) {
             try {
-                $this->writeFrame(0x8, pack('n', $code) . $reason);
+                $this->writeFrame(0x8, pack('n', $code) . $reason, self::CLOSE_WRITE_TIMEOUT);
             } catch (\Throwable) {
                 // Best effort: the peer may already be gone.
             }
@@ -268,7 +277,7 @@ final class StreamWebSocketClient implements WebSocketClientInterface
             $lines[] = "{$name}: {$value}";
         }
 
-        $this->writeRaw(implode("\r\n", $lines) . "\r\n\r\n");
+        $this->writeRaw(implode("\r\n", $lines) . "\r\n\r\n", $this->writeTimeout);
 
         $response = '';
 
@@ -357,7 +366,7 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         return [$fin, $opcode, $payload];
     }
 
-    private function writeFrame(int $opcode, string $payload): void
+    private function writeFrame(int $opcode, string $payload, ?float $timeout = null): void
     {
         $length = strlen($payload);
         $header = chr(0x80 | $opcode);
@@ -373,27 +382,80 @@ final class StreamWebSocketClient implements WebSocketClientInterface
         $mask = random_bytes(4);
         $masked = $length > 0 ? $payload ^ str_repeat($mask, intdiv($length, 4) + 1) : '';
 
-        $this->writeRaw($header . $mask . $masked);
+        $this->writeRaw($header . $mask . $masked, $timeout ?? $this->writeTimeout);
     }
 
-    private function writeRaw(string $data): void
+    /**
+     * Write all of `$data`, within `$timeout` seconds. A blocking write has
+     * no bound (a stream timeout bounds reads only), so the socket is written
+     * without blocking, waiting for it to take more in between. A write that
+     * runs out of time leaves part of a frame on the wire, which nothing can
+     * follow: the connection is closed.
+     */
+    private function writeRaw(string $data, float $timeout): void
     {
         if (!is_resource($this->socket)) {
             throw new SurrealException('WebSocket is not connected');
         }
 
+        $socket = $this->socket;
+        $deadline = microtime(true) + $timeout;
         $length = strlen($data);
         $written = 0;
 
-        while ($written < $length) {
-            $chunk = @fwrite($this->socket, substr($data, $written));
+        stream_set_blocking($socket, false);
 
-            if ($chunk === false || $chunk === 0) {
-                throw new SurrealException('Failed to write to the WebSocket connection');
+        try {
+            while ($written < $length) {
+                // In pieces: a partial write would copy the rest each time.
+                $chunk = @fwrite($socket, substr($data, $written, 65536));
+
+                if ($chunk === false) {
+                    throw new SurrealException('Failed to write to the WebSocket connection');
+                }
+
+                if ($chunk > 0) {
+                    $written += $chunk;
+
+                    continue;
+                }
+
+                $remaining = $deadline - microtime(true);
+
+                if ($remaining <= 0) {
+                    $this->abandon();
+
+                    throw new SurrealException(sprintf(
+                        'Writing to the WebSocket connection took longer than %s seconds: the server stopped reading it.',
+                        $timeout,
+                    ));
+                }
+
+                $read = null;
+                $write = [$socket];
+                $except = null;
+                $whole = (int) $remaining;
+
+                if (@stream_select($read, $write, $except, $whole, (int) (($remaining - $whole) * 1_000_000)) === false) {
+                    throw new SurrealException('Failed to write to the WebSocket connection');
+                }
             }
-
-            $written += $chunk;
+        } finally {
+            if (is_resource($socket)) {
+                stream_set_blocking($socket, true);
+            }
         }
+    }
+
+    /** Close the socket without a close frame, which could not be sent. */
+    private function abandon(): void
+    {
+        if (is_resource($this->socket)) {
+            @fclose($this->socket);
+        }
+
+        $this->socket = null;
+        $this->connected = false;
     }
 
     /**
