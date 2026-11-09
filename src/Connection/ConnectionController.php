@@ -31,6 +31,7 @@ use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
 use SurrealDB\SDK\Exceptions\UnsupportedVersionException;
+use SurrealDB\SDK\Exceptions\ValidationException;
 use SurrealDB\SDK\Live\LiveSubscription;
 use SurrealDB\SDK\Live\ManagedLiveSubscription;
 use SurrealDB\SDK\Protocol\Feature;
@@ -46,6 +47,7 @@ use SurrealDB\SDK\Types\File;
 use SurrealDB\SDK\Types\Set;
 use SurrealDB\SDK\Types\Value;
 use Symfony\Component\Uid\Uuid;
+use function in_array;
 use function is_array;
 use function is_string;
 
@@ -94,6 +96,9 @@ final class ConnectionController
 
     /** How long to wait before retrying a renewal that failed. */
     private const RENEWAL_RETRY_SECONDS = 5;
+
+    /** Variables the server keeps for itself, and refuses to set. */
+    private const array PROTECTED_VARIABLES = ['access', 'auth', 'token', 'session'];
 
     /**
      * When each session's token is due for renewal (Unix time), keyed by
@@ -380,6 +385,13 @@ final class ConnectionController
     public function set(string $name, mixed $value, ?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
+
+        // The server refuses these over a WebSocket. HTTP keeps variables
+        // itself and would send one with every query, each then refused.
+        if (in_array($name, self::PROTECTED_VARIABLES, true)) {
+            throw new ValidationException('Validation', "'{$name}' is a protected variable and cannot be set", -32602);
+        }
+
         $this->assertSendable($value);
         // HTTP sends the session's variables with every query, and a reconnect
         // replays them: both must send the value as it was now, as a WebSocket

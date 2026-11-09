@@ -14,6 +14,7 @@ use SurrealDB\SDK\Exceptions\ThrownException;
 use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Query\Frame\ValueFrame;
+use SurrealDB\SDK\Exceptions\ValidationException;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\Bytes;
 use SurrealDB\SDK\Types\None;
@@ -493,6 +494,28 @@ SURQL);
             // The SDK's own types are kept as they are, not as their JSON.
             $db->let('record', new RecordId('person', 'tobie'));
             self::assertEquals(new RecordId('person', 'tobie'), $db->run('RETURN $record')[0]);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testProtectedVariableNamesAreRefused(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            foreach (['access', 'auth', 'token', 'session'] as $name) {
+                try {
+                    $db->let($name, 'x');
+                    self::fail("let('{$name}') should be refused");
+                } catch (ValidationException $error) {
+                    self::assertStringContainsString("'{$name}' is a protected variable", $error->getMessage());
+                }
+            }
+
+            // Nothing was kept: HTTP would send it with every query after.
+            self::assertSame([1], $db->run('RETURN 1'));
         } finally {
             $db->close();
         }
