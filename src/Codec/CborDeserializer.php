@@ -2,8 +2,8 @@
 
 namespace SurrealDB\SDK\Codec;
 
+use Beau\CborPHP\CborDecoder;
 use Beau\CborPHP\exceptions\CborException;
-use SurrealDB\SDK\Codec\Cbor\CborReader;
 use SurrealDB\SDK\Codec\Cbor\CborValueMapper;
 use SurrealDB\SDK\Exceptions\SerializationException;
 
@@ -19,7 +19,9 @@ final class CborDeserializer implements DeserializerInterface
         }
 
         try {
-            $decoded = CborReader::decode($data);
+            // Byte strings stay apart from text, and anything that is not
+            // exactly one value with text or int keys is refused.
+            $decoded = CborDecoder::decode($data, byteStrings: true, strict: true);
         } catch (CborException $error) {
             throw new SerializationException('Serialization', 'Malformed CBOR: ' . $error->getMessage());
         }
