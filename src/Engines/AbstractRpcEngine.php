@@ -129,7 +129,7 @@ abstract class AbstractRpcEngine implements EngineInterface
         return $this->parseTokens($this->dispatch(new RpcRequest('signin', [$auth], $session)));
     }
 
-    public function authenticate(string $token, ?string $session): void
+    public function authenticate(#[\SensitiveParameter] string $token, ?string $session): void
     {
         $this->dispatch(new RpcRequest('authenticate', [$token], $session));
     }

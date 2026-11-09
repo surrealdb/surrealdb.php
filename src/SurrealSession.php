@@ -178,7 +178,7 @@ class SurrealSession extends SurrealQueryable
         );
     }
 
-    public function authenticate(Token|string $token): void
+    public function authenticate(#[\SensitiveParameter] Token|string $token): void
     {
         $this->connection->authenticate((string) $token, $this->sessionId);
     }

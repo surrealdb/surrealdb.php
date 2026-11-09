@@ -344,7 +344,7 @@ final class ConnectionController
         return $tokens;
     }
 
-    public function authenticate(string $token, ?string $session = null, bool $skipOverride = false): void
+    public function authenticate(#[\SensitiveParameter] string $token, ?string $session = null, bool $skipOverride = false): void
     {
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
