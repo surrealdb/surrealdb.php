@@ -11,6 +11,7 @@ use SurrealDB\SDK\Contracts\Deferred;
 use SurrealDB\SDK\Contracts\ConnectionProbeInterface;
 use SurrealDB\SDK\Contracts\Counter;
 use SurrealDB\SDK\Contracts\EngineInterface;
+use SurrealDB\SDK\Contracts\TimerScheduler;
 use SurrealDB\SDK\Engines\EngineRegistry;
 use SurrealDB\SDK\Enum\SpanKind;
 use SurrealDB\SDK\Enum\SpanStatus;
@@ -111,6 +112,17 @@ final class ConnectionController
      * @var array<string,array{task: object|int|null, guard: object, waiters: list<Deferred<mixed>>}>
      */
     private array $renewing = [];
+
+    /**
+     * Cancels for renewal timers still pending, under a scheduler whose timers
+     * can be cancelled: closing the connection cancels them, so they do not
+     * keep an event loop or coroutine runtime running.
+     *
+     * @var array<int,\Closure(): void>
+     */
+    private array $timers = [];
+
+    private int $timerId = 0;
 
     public function __construct(
         private readonly DriverContext $context,
@@ -762,6 +774,13 @@ final class ConnectionController
         $this->engine = null;
         $this->renewAt = [];
 
+        $timers = $this->timers;
+        $this->timers = [];
+
+        foreach ($timers as $cancel) {
+            $cancel();
+        }
+
         // Renewals still running belong to the closed connection: release
         // the tasks waiting on them, and leave the next connection to renew
         // for itself.
@@ -977,8 +996,7 @@ final class ConnectionController
         // goes through the same deadline as those checks, so a renewal already
         // done (or in flight) is not repeated, and a timer left over from an
         // earlier token finds the deadline moved on.
-        $this->context->scheduler->spawn(function () use ($delay, $session): void {
-            $this->context->scheduler->delay((float) $delay);
+        $this->after((float) $delay, function () use ($session): void {
             $this->renewIfDue($session);
         });
     }
@@ -1119,9 +1137,34 @@ final class ConnectionController
      */
     private function checkRenewalAt(?string $session, int $at): void
     {
-        $this->context->scheduler->spawn(function () use ($at, $session): void {
-            $this->context->scheduler->delay((float) max($at - time(), 0));
+        $this->after((float) max($at - time(), 0), function () use ($session): void {
             $this->renewIfDue($session);
+        });
+    }
+
+    /**
+     * Run `$task` as a background task after `$seconds`. Under a scheduler
+     * whose timers can be cancelled, the connection closing cancels it;
+     * otherwise it is a task that sleeps first (a no-op under the
+     * synchronous scheduler).
+     */
+    private function after(float $seconds, \Closure $task): void
+    {
+        $scheduler = $this->context->scheduler;
+
+        if (!$scheduler instanceof TimerScheduler) {
+            $scheduler->spawn(static function () use ($scheduler, $seconds, $task): void {
+                $scheduler->delay($seconds);
+                $task();
+            });
+
+            return;
+        }
+
+        $id = $this->timerId++;
+        $this->timers[$id] = $scheduler->after($seconds, function () use ($id, $task): void {
+            unset($this->timers[$id]);
+            $task();
         });
     }
 

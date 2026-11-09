@@ -96,10 +96,42 @@ final class SwooleWebSocketReconnectTest extends TestCase
         self::assertTrue($alive);
     }
 
+    public function testClosingLetsTheCoroutineRuntimeFinish(): void
+    {
+        $this->defineNamespace();
+
+        $leftover = $this->inCoroutine(function (): array {
+            // Signed in, so a token renewal is scheduled, and pinging.
+            $db = new Surreal(Runtime::swoole(enableHooks: false));
+            $db->connect($this->url(), new ConnectOptions(authentication: new RootAuth('root', 'root')));
+            $db->run('RETURN 1');
+            $db->close();
+
+            // Let the read loop see the closed socket.
+            \OpenSwoole\Coroutine::usleep(100_000);
+
+            $self = \OpenSwoole\Coroutine::getCid();
+            $coroutines = array_values(array_filter(
+                iterator_to_array(\OpenSwoole\Coroutine::list(), false),
+                static fn (int $cid): bool => $cid !== $self,
+            ));
+            $timers = iterator_to_array(\OpenSwoole\Timer::list(), false);
+
+            // Anything left would keep Coroutine::run() from returning: stop
+            // it, so a failure here does not hang the suite as well.
+            foreach ($coroutines as $cid) {
+                \OpenSwoole\Coroutine::cancel($cid);
+            }
+
+            return ['coroutines' => count($coroutines), 'timers' => count($timers)];
+        });
+
+        self::assertSame(['coroutines' => 0, 'timers' => 0], $leftover);
+    }
+
     /**
-     * Connect as a guest, without the pinger: a signed-in session's renewal
-     * timer, or the pinger's sleep, would keep Coroutine::run() waiting after
-     * close().
+     * Connect as a guest, without the pinger, so that nothing is left for
+     * Coroutine::run() to wait for after close() however the reconnect went.
      *
      * @param list<DroppingTransport> $transports
      * @param \Closure(DroppingTransport): void $armReplacement called with the first replacement socket

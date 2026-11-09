@@ -2,6 +2,7 @@
 
 namespace SurrealDB\Tests\Runtime\FrankenPHP;
 
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Revolt\EventLoop;
 use SurrealDB\SDK\Auth\NamespaceAuth;
@@ -54,6 +55,47 @@ final class AmpWebSocketEngineTest extends TestCase
 
         $this->assertStringStartsWith('surrealdb-', $result[0]);
         $this->assertSame([1], $result[1]);
+    }
+
+    /**
+     * Its own process: the event loop is global, and must hold nothing from
+     * other tests.
+     */
+    #[RunInSeparateProcess]
+    public function testClosingLetsTheEventLoopFinish(): void
+    {
+        $outcome = null;
+
+        // Unreferenced, so it does not keep the loop running itself, but
+        // stops a loop that something else keeps running.
+        $watchdog = EventLoop::unreference(EventLoop::delay(5, static function (): void {
+            EventLoop::getDriver()->stop();
+        }));
+
+        EventLoop::queue(function () use (&$outcome): void {
+            try {
+                // Signed in, so a token renewal is scheduled, and pinging.
+                $db = new Surreal(Runtime::amp());
+                $this->connect($db);
+                $db->run('RETURN 1');
+                $db->close();
+                $outcome = true;
+            } catch (\Throwable $error) {
+                $outcome = $error;
+            }
+        });
+
+        $start = microtime(true);
+        EventLoop::run();
+        $elapsed = microtime(true) - $start;
+        EventLoop::cancel($watchdog);
+
+        if ($outcome instanceof \Throwable) {
+            throw $outcome;
+        }
+
+        $this->assertTrue($outcome);
+        $this->assertLessThan(4, $elapsed, 'Something kept the event loop running after close().');
     }
 
     public function testReconnectRestoresTheSessionWithoutDeadlocking(): void

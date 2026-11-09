@@ -4,7 +4,7 @@ namespace SurrealDB\SDK\Scheduler\Amp;
 
 use Revolt\EventLoop;
 use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Contracts\Scheduler;
+use SurrealDB\SDK\Contracts\TimerScheduler;
 
 /**
  * Scheduler backed by the Revolt event loop and PHP fibers (the foundation of
@@ -14,7 +14,7 @@ use SurrealDB\SDK\Contracts\Scheduler;
  * Requires revolt/event-loop. The application is expected to run the event loop
  * (e.g. `Revolt\EventLoop::run()` or an Amp entrypoint).
  */
-final class RevoltScheduler implements Scheduler
+final class RevoltScheduler implements TimerScheduler
 {
     public function spawn(\Closure $task): void
     {
@@ -38,5 +38,17 @@ final class RevoltScheduler implements Scheduler
     public function defer(?\Closure $drive = null): Deferred
     {
         return new RevoltDeferred();
+    }
+
+    public function after(float $seconds, \Closure $task): \Closure
+    {
+        // Callbacks run in a fiber of their own, as queued tasks do.
+        $id = EventLoop::delay(max($seconds, 0.0), static function () use ($task): void {
+            $task();
+        });
+
+        return static function () use ($id): void {
+            EventLoop::cancel($id);
+        };
     }
 }

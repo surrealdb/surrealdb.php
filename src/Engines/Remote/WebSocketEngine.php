@@ -6,6 +6,7 @@ use SurrealDB\SDK\Connection\ConnectionState;
 use SurrealDB\SDK\Contracts\ConnectionProbeInterface;
 use SurrealDB\SDK\Contracts\Deferred;
 use SurrealDB\SDK\Contracts\DuplexTransportInterface;
+use SurrealDB\SDK\Contracts\TimerScheduler;
 use SurrealDB\SDK\Engines\AbstractRpcEngine;
 use SurrealDB\SDK\Events\LiveMessageReceived;
 use SurrealDB\SDK\Exceptions\CallTerminatedException;
@@ -87,6 +88,9 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
     private int $unclaimedSequence = 0;
 
+    /** Cancels the next keepalive ping, under a scheduler with cancellable timers. */
+    private ?\Closure $cancelPing = null;
+
     public function features(): FeatureSet
     {
         return new FeatureSet(
@@ -121,7 +125,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         // answers it with RPCs (version, session restore) whose replies only
         // the read loop can deliver under an async scheduler.
         $this->context->scheduler->spawn(fn () => $this->runLoop());
-        $this->context->scheduler->spawn(fn () => $this->runPinger());
+        $this->startPinger();
 
         // An eager scheduler may already have run the read loop, which can
         // have lost this socket (and announced its replacement itself).
@@ -160,6 +164,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
 
         $this->terminated = true;
         $this->active = false;
+        $this->stopPinger();
         $this->transport?->close();
         $this->transport = null;
         $this->failAllCalls(new CallTerminatedException());
@@ -361,7 +366,13 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         }
 
         if (!$this->terminated) {
+            // Nothing reconnects from here: the engine is done, its pinger
+            // included.
+            $this->terminated = true;
             $this->active = false;
+            $this->stopPinger();
+            $this->transport?->close();
+            $this->transport = null;
 
             try {
                 $this->publisher->publish('disconnected');
@@ -447,24 +458,72 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         }
     }
 
-    private function runPinger(): void
+    /**
+     * Ping every `pingInterval` seconds to keep the connection alive. Under a
+     * scheduler with cancellable timers each ping is a timer, and closing the
+     * engine cancels the next one; otherwise a task sleeps between pings
+     * until the engine closes (a no-op under the synchronous scheduler).
+     */
+    private function startPinger(): void
     {
         $interval = (float) $this->context->options->pingInterval;
+        $scheduler = $this->context->scheduler;
 
         if ($interval <= 0) {
             return;
         }
 
-        while (!$this->terminated) {
-            $this->context->scheduler->delay($interval);
+        if ($scheduler instanceof TimerScheduler) {
+            $this->schedulePing($scheduler, $interval);
 
-            if ($this->active) {
-                try {
-                    $this->dispatch(new RpcRequest('ping'));
-                } catch (\Throwable) {
-                    // Keepalive failures surface through the read loop.
-                }
+            return;
+        }
+
+        $scheduler->spawn(function () use ($scheduler, $interval): void {
+            while (!$this->terminated) {
+                $scheduler->delay($interval);
+                $this->ping();
             }
+        });
+    }
+
+    private function schedulePing(TimerScheduler $scheduler, float $interval): void
+    {
+        $this->cancelPing = $scheduler->after($interval, function () use ($scheduler, $interval): void {
+            $this->cancelPing = null;
+
+            if ($this->terminated) {
+                return;
+            }
+
+            $this->ping();
+
+            if (!$this->terminated) {
+                $this->schedulePing($scheduler, $interval);
+            }
+        });
+    }
+
+    private function stopPinger(): void
+    {
+        $cancel = $this->cancelPing;
+        $this->cancelPing = null;
+
+        if ($cancel !== null) {
+            $cancel();
+        }
+    }
+
+    private function ping(): void
+    {
+        if (!$this->active) {
+            return;
+        }
+
+        try {
+            $this->dispatch(new RpcRequest('ping'));
+        } catch (\Throwable) {
+            // Keepalive failures surface through the read loop.
         }
     }
 
@@ -624,6 +683,7 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
         }
 
         $this->terminated = true;
+        $this->stopPinger();
         $this->transport?->close();
         $this->transport = null;
         $this->publisher->publish('disconnected');
