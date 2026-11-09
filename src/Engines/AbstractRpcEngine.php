@@ -242,6 +242,14 @@ abstract class AbstractRpcEngine implements EngineInterface
         // Read once: a non-seekable stream would be empty on a second read.
         $content = (string) $response->getBody();
 
+        // SurrealDB 2.x answers a successful import with every statement's
+        // result, records included, and decoding all of that takes several
+        // times its size in memory. A body is only decoded when the server
+        // refused the import or reports a failed statement in it.
+        if ($status >= 200 && $status < 300 && !str_contains($content, '"ERR"')) {
+            return;
+        }
+
         try {
             $body = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
