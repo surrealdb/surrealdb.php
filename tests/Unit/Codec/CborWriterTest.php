@@ -40,7 +40,11 @@ final class CborWriterTest extends TestCase
         yield 'bytes' => [new CborByteString("\x01\x02\x03\x04"), '4401020304'];
         yield 'array' => [[1, [2, 3], [4, 5]], '8301820203820405'];
         yield 'map' => [['a' => 1, 'b' => [2, 3]], 'a26161016162820203'];
-        yield 'int keys' => [[1 => 2, 3 => 4], 'a201020304'];
+        // Unlike RFC 8949's own vector, keys are always text: SurrealDB objects
+        // only have string keys, and PHP stores '2024' as the integer 2024.
+        yield 'int keys' => [[1 => 2, 3 => 4], 'a2613102613304'];
+        yield 'numeric string key' => [['2024' => 5, 'name' => 'x'], 'a2643230323405646e616d656178'];
+        yield 'numeric map key' => [new CborMap([0 => 'a']), 'a161306161'];
         yield 'empty map' => [new CborMap(), 'a0'];
         yield 'tag 1' => [new TaggedValue(1, 1363896240), 'c11a514b67b0'];
         yield 'tag 24' => [new TaggedValue(24, 'a'), 'd8186161'];

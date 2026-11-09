@@ -86,12 +86,7 @@ final class CborWriter
 
                 return;
             case $value instanceof CborMap:
-                self::head($buffer, self::MAJOR_MAP, count($value->entries));
-
-                foreach ($value->entries as $key => $item) {
-                    self::write($buffer, $key);
-                    self::write($buffer, $item);
-                }
+                self::writeMap($buffer, $value->entries);
 
                 return;
             case is_array($value):
@@ -102,12 +97,7 @@ final class CborWriter
                         self::write($buffer, $item);
                     }
                 } else {
-                    self::head($buffer, self::MAJOR_MAP, count($value));
-
-                    foreach ($value as $key => $item) {
-                        self::write($buffer, $key);
-                        self::write($buffer, $item);
-                    }
+                    self::writeMap($buffer, $value);
                 }
 
                 return;
@@ -117,6 +107,23 @@ final class CborWriter
             'Serialization',
             'Cannot encode a value of type ' . get_debug_type($value) . ' as CBOR.',
         );
+    }
+
+    /**
+     * Write a map with text keys. SurrealDB objects only have string keys,
+     * and PHP turns a numeric string key such as '2024' into an integer,
+     * which SurrealDB 3.x and 4.x refuse as an object key.
+     *
+     * @param array<array-key,mixed> $entries
+     */
+    private static function writeMap(string &$buffer, array $entries): void
+    {
+        self::head($buffer, self::MAJOR_MAP, count($entries));
+
+        foreach ($entries as $key => $item) {
+            self::write($buffer, (string) $key);
+            self::write($buffer, $item);
+        }
     }
 
     /**

@@ -191,6 +191,52 @@ final class SurrealLocalDatabaseTest extends TestCase
     }
 
     #[DataProvider('protocols')]
+    public function testObjectsWithNumericKeysRoundTrip(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $person = new RecordId('person', 'tobie');
+            $db->run('CREATE person:tobie SET visits = { "2024": 5 }');
+
+            // PHP holds the key "2024" as the integer 2024; it must go back
+            // to the server as a string key.
+            $record = $db->select($person)->execute();
+            self::assertIsArray($record);
+            self::assertIsArray($record['visits']);
+            $visits = $record['visits'];
+            $visits['2025'] = 7;
+
+            $updated = $db->update($person)->merge(['visits' => $visits])->execute();
+
+            self::assertIsArray($updated);
+            self::assertSame([2024 => 5, 2025 => 7], $updated['visits']);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAnUnreadableRequestFailsInsteadOfWaiting(): void
+    {
+        $db = $this->connect('ws');
+
+        try {
+            try {
+                // SurrealDB 2.x and 3.x answer a request they cannot decode
+                // without its id.
+                $db->run('RETURN $text', ['text' => "\xFF"]);
+                self::fail('Expected the server to refuse a string that is not UTF-8.');
+            } catch (ServerException) {
+                // The connection is still usable afterwards.
+                self::assertSame([1], $db->run('RETURN 1'));
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
     public function testCallInvokesFunctionsWithAnyNumberOfArguments(string $protocol): void
     {
         $db = $this->connect($protocol);

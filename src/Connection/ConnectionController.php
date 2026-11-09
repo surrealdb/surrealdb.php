@@ -1425,9 +1425,9 @@ final class ConnectionController
     }
 
     /**
-     * Refuse a value the connected server has no type for. SurrealDB 2.x has
-     * no sets or files, and over WebSocket it never answers a request that
-     * carries a CBOR tag it does not know, so sending one would wait forever.
+     * Refuse a value the connected server has no type for, with an error that
+     * names it. SurrealDB 2.x has no sets or files, and answers a request
+     * carrying one only with "Encountered an unknown CBOR tag".
      */
     private function assertSendable(mixed $value): void
     {

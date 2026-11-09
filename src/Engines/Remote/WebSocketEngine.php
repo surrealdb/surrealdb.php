@@ -467,6 +467,26 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return;
         }
 
+        // A request the server could not read is answered without its id
+        // (SurrealDB 2.x and 3.x do this for an unknown CBOR tag or invalid
+        // UTF-8), so nothing says which call it was. Every call still waiting
+        // gets the error, as on a lost connection, rather than one of them
+        // waiting forever. Under the synchronous scheduler that is only ever
+        // the call that sent it.
+        if ($id === null && isset($decoded['error'])) {
+            $response = RpcResponse::fromWire($decoded);
+            $calls = $this->calls;
+            $this->calls = [];
+
+            foreach ($calls as $deferred) {
+                if ($deferred->isPending()) {
+                    $deferred->resolve($response);
+                }
+            }
+
+            return;
+        }
+
         $result = $decoded['result'] ?? null;
 
         if (is_array($result)) {
