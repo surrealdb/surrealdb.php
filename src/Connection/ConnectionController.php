@@ -587,17 +587,35 @@ final class ConnectionController
 
     public function createSession(?string $clone = null): string
     {
-        return $this->attachSession($clone === null ? null : $this->requireSession($clone));
+        return $clone === null ? $this->attachSession(null) : $this->forkSession($clone);
     }
 
     /**
      * Create a session that starts with a copy of another session's namespace,
      * database, variables and authentication. Unlike {@see self::createSession()},
      * the source may be the default session (null).
+     *
+     * @throws AuthenticationException when the source is signed in with an
+     *                                 access token that has expired, and
+     *                                 renewing it did not replace it
      */
     public function forkSession(?string $source): string
     {
-        return $this->attachSession($this->requireSession($source));
+        $sourceState = $this->requireSession($source);
+
+        // The fork signs in with the source's access token. One due for
+        // renewal is renewed first (for the source, which keeps the new pair).
+        $this->renewIfDue($source);
+        $token = $sourceState->auth->accessToken;
+        $expiry = $token === null ? null : Jwt::expiry($token);
+
+        if ($expiry !== null && $expiry <= time()) {
+            throw new AuthenticationException(
+                'The session\'s access token has expired, so a fork cannot sign in with it. Sign the session in again first.',
+            );
+        }
+
+        return $this->attachSession($sourceState);
     }
 
     /**
