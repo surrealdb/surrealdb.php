@@ -4,6 +4,7 @@ namespace SurrealDB\SDK\Codec\Cbor;
 
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\utils\CborByteString;
+use Beau\CborPHP\utils\CborMap;
 use JsonSerializable;
 use SurrealDB\SDK\Exceptions\SerializationException;
 use SurrealDB\SDK\Types\BoundExcluded;
@@ -97,11 +98,13 @@ final class CborValueMapper
 			$data instanceof Range => self::encodeRange($data->begin, $data->end),
 			$data instanceof BoundIncluded, $data instanceof BoundExcluded => self::encodeBound($data),
 			$data instanceof Geometry => self::encodeGeometry($data),
-			is_array($data) => self::encodeArray($data),
+			is_string($data) => self::utf8($data),
+			is_array($data) && array_is_list($data) => array_map(self::encode(...), $data),
+			is_array($data) => self::encodeMap($data),
 			$data instanceof \JsonSerializable => self::encode(
 				$data->jsonSerialize(),
 			),
-			$data instanceof \stdClass => new CborMap(self::encodeArray(get_object_vars($data))),
+			$data instanceof \stdClass => self::encodeMap(get_object_vars($data)),
 			default => $data,
 		};
 	}
@@ -200,18 +203,41 @@ final class CborValueMapper
 	}
 
 	/**
+	 * An object. SurrealDB objects have text keys only, and PHP stores a key
+	 * such as '2024' as the int 2024, so int keys are written as text; an
+	 * empty object stays a map ({}), which an empty array would not.
+	 *
 	 * @param array<mixed> $data
-	 * @return array<mixed>
 	 */
-	private static function encodeArray(array $data): array
+	private static function encodeMap(array $data): CborMap
 	{
 		$encoded = [];
 
 		foreach ($data as $key => $value) {
+			if (is_string($key)) {
+				self::utf8($key);
+			}
+
 			$encoded[$key] = self::encode($value);
 		}
 
-		return $encoded;
+		return new CborMap($encoded, stringKeys: true);
+	}
+
+	/**
+	 * SurrealDB refuses text that is not UTF-8, saying only "Parse error":
+	 * binary data goes as a byte string.
+	 */
+	private static function utf8(string $text): string
+	{
+		if (preg_match('//u', $text) !== 1) {
+			throw new SerializationException(
+				'Serialization',
+				'Text sent to SurrealDB must be valid UTF-8; send binary data as a SurrealDB\\SDK\\Types\\Bytes value.',
+			);
+		}
+
+		return $text;
 	}
 
 	private static function decodeTagged(TaggedValue $tagged): mixed

@@ -3,17 +3,17 @@
 namespace SurrealDB\Tests\Unit\Codec;
 
 use Beau\CborPHP\classes\TaggedValue;
-use Beau\CborPHP\utils\CborByteString;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Codec\Cbor\CborMap;
-use SurrealDB\SDK\Codec\Cbor\CborWriter;
+use SurrealDB\SDK\Codec\CborSerializer;
 use SurrealDB\SDK\Exceptions\SerializationException;
+use SurrealDB\SDK\Types\Bytes;
 
 /**
- * Encodings checked against RFC 8949 Appendix A.
+ * What the SDK sends, through welpie21/cbor.php. Checked against RFC 8949
+ * Appendix A, except where SurrealDB needs otherwise.
  */
-final class CborWriterTest extends TestCase
+final class CborEncodingTest extends TestCase
 {
     /**
      * @return iterable<string, array{mixed, string}>
@@ -37,15 +37,16 @@ final class CborWriterTest extends TestCase
         yield 'null' => [null, 'f6'];
         yield 'empty text' => ['', '60'];
         yield 'text' => ['IETF', '6449455446'];
-        yield 'bytes' => [new CborByteString("\x01\x02\x03\x04"), '4401020304'];
+        yield 'bytes' => [new Bytes("\x01\x02\x03\x04"), '4401020304'];
         yield 'array' => [[1, [2, 3], [4, 5]], '8301820203820405'];
+        yield 'empty array' => [[], '80'];
         yield 'map' => [['a' => 1, 'b' => [2, 3]], 'a26161016162820203'];
         // Unlike RFC 8949's own vector, keys are always text: SurrealDB objects
         // only have string keys, and PHP stores '2024' as the integer 2024.
         yield 'int keys' => [[1 => 2, 3 => 4], 'a2613102613304'];
         yield 'numeric string key' => [['2024' => 5, 'name' => 'x'], 'a2643230323405646e616d656178'];
-        yield 'numeric map key' => [new CborMap([0 => 'a']), 'a161306161'];
-        yield 'empty map' => [new CborMap(), 'a0'];
+        yield 'object with a numeric key' => [(object) ['0' => 'a'], 'a161306161'];
+        yield 'empty object' => [new \stdClass(), 'a0'];
         yield 'tag 1' => [new TaggedValue(1, 1363896240), 'c11a514b67b0'];
         yield 'tag 24' => [new TaggedValue(24, 'a'), 'd8186161'];
         yield 'tag 1000' => [new TaggedValue(1000, 1), 'd903e801'];
@@ -55,29 +56,41 @@ final class CborWriterTest extends TestCase
     #[DataProvider('vectors')]
     public function testEncodesRfcVectors(mixed $value, string $hex): void
     {
-        $this->assertSame($hex, bin2hex(CborWriter::encode($value)));
+        $this->assertSame($hex, bin2hex((new CborSerializer())->serialize($value)));
     }
 
     public function testLongStringUsesExtendedLength(): void
     {
-        $encoded = CborWriter::encode(str_repeat('x', 300));
+        $encoded = (new CborSerializer())->serialize(str_repeat('x', 300));
 
         $this->assertSame('79012c', bin2hex(substr($encoded, 0, 3)));
         $this->assertSame(303, strlen($encoded));
     }
 
-    public function testRejectsTextThatIsNotUtf8(): void
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function notUtf8(): iterable
+    {
+        yield 'a value' => [['avatar' => "\x00\xff"]];
+        yield 'a key' => [["\xff" => 1]];
+        yield 'in a list' => [['ok', "\xc3"]];
+    }
+
+    #[DataProvider('notUtf8')]
+    public function testRejectsTextThatIsNotUtf8(mixed $value): void
     {
         $this->expectException(SerializationException::class);
         $this->expectExceptionMessage('Bytes');
 
-        CborWriter::encode(['avatar' => "\x00\xff"]);
+        (new CborSerializer())->serialize($value);
     }
 
     public function testRejectsUnsupportedValues(): void
     {
         $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Cannot encode a value of type ArrayObject');
 
-        CborWriter::encode(new \ArrayObject());
+        (new CborSerializer())->serialize(['nested' => new \ArrayObject()]);
     }
 }
