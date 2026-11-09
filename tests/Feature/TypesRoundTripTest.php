@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Surreal;
+use SurrealDB\SDK\Types\Decimal;
 use SurrealDB\SDK\Types\Duration;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Set;
@@ -123,6 +124,32 @@ final class TypesRoundTripTest extends TestCase
             self::assertCount(20_000, $members);
             self::assertTrue($ids[0]->equals($members[0]));
             self::assertLessThan(3.0, $seconds, "Sending and decoding 20,000 record ids took {$seconds} s");
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @param 'http'|'ws' $protocol
+     */
+    #[DataProvider('protocols')]
+    public function testDecimalsKeepEveryDigitBothWays(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            [$result] = $db->run(
+                'RETURN [$float == 1.2345678901234567dec, $zeros == 0dec, 0.0000000000000000000000000001dec, -79228162514264337593543950335dec]',
+                ['float' => new Decimal(1.2345678901234567), 'zeros' => new Decimal('0.' . str_repeat('0', 30))],
+            );
+
+            self::assertIsArray($result);
+            self::assertTrue($result[0], 'The server did not read the float as 1.2345678901234567');
+            self::assertTrue($result[1], 'The server did not read the zeros as 0');
+            self::assertInstanceOf(Decimal::class, $result[2]);
+            self::assertSame('0.0000000000000000000000000001', (string) $result[2]);
+            self::assertInstanceOf(Decimal::class, $result[3]);
+            self::assertSame('-79228162514264337593543950335', (string) $result[3]);
         } finally {
             $db->close();
         }

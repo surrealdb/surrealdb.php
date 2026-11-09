@@ -6,6 +6,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Codec\CborDeserializer;
 use SurrealDB\SDK\Codec\CborSerializer;
+use SurrealDB\SDK\Codec\Cbor\CborWriter;
+use SurrealDB\SDK\Exceptions\SerializationException;
 use SurrealDB\SDK\Types\BoundExcluded;
 use SurrealDB\SDK\Types\BoundIncluded;
 use SurrealDB\SDK\Types\Bytes;
@@ -226,6 +228,93 @@ final class CborCodecTest extends TestCase
     {
         $this->assertSame('ce821b0000000233e85a0000', bin2hex($this->serializer->serialize(Duration::years(300))));
         $this->assertTrue(Duration::years(300)->equals($this->roundTrip(Duration::years(300))));
+    }
+
+    public function testDecodingADecimalWithAHugeExponentThrows(): void
+    {
+        // Tag 10 "1e999999999": brick/math exhausted memory building it, a
+        // fatal error no caller could catch.
+        $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Invalid decimal in a SurrealDB CBOR tag: "1e999999999"');
+
+        $this->deserializer->deserialize(hex2bin('ca6b3165393939393939393939'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidDecimalText(): iterable
+    {
+        yield 'Arabic-Indic digits' => ["\u{0661}\u{0662}\u{0663}"];
+        yield 'fullwidth digits' => ["\u{FF11}"];
+        yield 'a three-digit exponent' => ['1e100'];
+        yield 'an exponent without digits' => ['1e'];
+        yield 'empty' => [''];
+        yield 'letters' => ['abc'];
+        yield 'NaN' => ['NaN'];
+        yield 'a point without a fraction' => ['1.'];
+        yield 'a fraction without an integer' => ['.5'];
+        yield 'hexadecimal' => ['0x10'];
+        yield 'spaces' => [' 1'];
+        yield 'a trailing newline' => ["1\n"];
+        yield 'two signs' => ['--1'];
+        yield 'more digits than any decimal holds' => ['1.' . str_repeat('0', 64)];
+    }
+
+    #[DataProvider('invalidDecimalText')]
+    public function testDecodingInvalidDecimalTextThrowsASerializationException(string $text): void
+    {
+        $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Invalid decimal in a SurrealDB CBOR tag');
+
+        $this->deserializer->deserialize("\xca" . CborWriter::encode($text));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function validDecimalText(): iterable
+    {
+        yield 'smallest' => ['0.0000000000000000000000000001', '0.0000000000000000000000000001'];
+        yield 'most negative' => ['-79228162514264337593543950335', '-79228162514264337593543950335'];
+        yield 'scale 28 from SurrealDB 2.x' => ['1.0000000000000000000000000000', '1.0000000000000000000000000000'];
+        yield 'a plus sign' => ['+1.5', '1.5'];
+        yield 'a small exponent' => ['1.5E-7', '0.00000015'];
+        yield 'a large exponent' => ['1e3', '1000'];
+        yield 'as many digits as allowed' => ['1.' . str_repeat('0', 62) . '1', '1.' . str_repeat('0', 62) . '1'];
+    }
+
+    #[DataProvider('validDecimalText')]
+    public function testDecodesValidDecimalText(string $text, string $decimal): void
+    {
+        $decoded = $this->deserializer->deserialize("\xca" . CborWriter::encode($text));
+
+        $this->assertInstanceOf(Decimal::class, $decoded);
+        $this->assertSame($decimal, (string) $decoded);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function decimalsSent(): iterable
+    {
+        yield 'thirty zeros' => ['0.' . str_repeat('0', 30), '0.' . str_repeat('0', 28)];
+        yield 'a whole number with thirty zeros' => ['100.' . str_repeat('0', 30), '100.' . str_repeat('0', 28)];
+        yield 'two zeros past 28 digits' => ['0.' . str_repeat('1', 28) . '00', '0.' . str_repeat('1', 28)];
+        yield 'a zero past a 29th digit' => ['0.' . str_repeat('1', 29) . '0', '0.' . str_repeat('1', 29)];
+        yield 'forty digits, kept' => ['0.' . str_repeat('1', 40), '0.' . str_repeat('1', 40)];
+        yield 'zeros inside the excess, kept' => ['0.' . str_repeat('1', 28) . '01', '0.' . str_repeat('1', 28) . '01'];
+        yield 'trailing zeros within 28 digits, kept' => ['1.50', '1.50'];
+        yield 'a whole number' => ['1000', '1000'];
+    }
+
+    #[DataProvider('decimalsSent')]
+    public function testEncodingDropsOnlyZerosPast28FractionDigits(string $decimal, string $sent): void
+    {
+        $this->assertSame(
+            bin2hex("\xca" . CborWriter::encode($sent)),
+            bin2hex($this->serializer->serialize(new Decimal($decimal))),
+        );
     }
 
     public function testEmptyObjectEncodesAsAMap(): void
