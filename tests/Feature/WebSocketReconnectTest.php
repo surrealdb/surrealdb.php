@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\NamespaceAuth;
 use SurrealDB\SDK\Auth\RecordAccessAuth;
 use SurrealDB\SDK\Auth\RootAuth;
+use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Connection\ConnectionController;
 use SurrealDB\SDK\Connection\ConnectionStatus;
 use SurrealDB\SDK\Connection\ConnectOptions;
@@ -1105,6 +1106,63 @@ SURQL);
     /**
      * A namespace user whose tokens are due for renewal one second after signin.
      */
+    public function testAFixedTokenThatHasExpiredSignsTheSessionOut(): void
+    {
+        $setup = $this->connect();
+        $setup->run("DEFINE USER brief ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h");
+        $token = $setup->signin(new NamespaceAuth($this->namespace, 'brief', 'secret'))->access;
+        $setup->close();
+        self::assertNotNull($token);
+
+        $db = $this->connect(auth: static fn (): Token => new Token($token), define: false);
+        $errors = 0;
+        $db->subscribe('error', static function () use (&$errors): void {
+            $errors++;
+        });
+
+        try {
+            sleep(3);
+
+            // The provider's token expired, and nothing can replace it. It
+            // was authenticated again, refused, and retried every 5 seconds,
+            // with an error each time, and the session never signed out.
+            $db->use($this->namespace, 'db');
+            self::assertNull($db->accessToken());
+            self::assertSame(1, $errors);
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAReconnectTheAuthProviderCannotSignInBringsTheSessionBackSignedOut(): void
+    {
+        $setup = $this->connect();
+        // Inside the minute in which a reconnect would reuse it.
+        $setup->run("DEFINE USER brief ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 30s, FOR SESSION 1h");
+
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'brief', 'secret'), define: false);
+        $errors = [];
+        $db->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+            $errors[] = $error;
+        });
+
+        try {
+            self::assertNotNull($db->accessToken());
+            $setup->run("DEFINE USER OVERWRITE brief ON NAMESPACE PASSWORD 'changed' ROLES EDITOR DURATION FOR TOKEN 30s, FOR SESSION 1h");
+            $this->client->sever();
+
+            // The refused sign-in used to close the whole connection.
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertNull($db->accessToken());
+            self::assertCount(1, $errors);
+            self::assertStringContainsString('after reconnecting', $errors[0]->getMessage());
+        } finally {
+            $db->close();
+            $setup->close();
+        }
+    }
+
     private function defineShortLivedUser(): void
     {
         $setup = $this->connect();

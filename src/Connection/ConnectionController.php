@@ -24,6 +24,7 @@ use SurrealDB\SDK\Events\Disconnected;
 use SurrealDB\SDK\Events\NamespaceDatabaseSelected;
 use SurrealDB\SDK\Events\Reconnecting;
 use SurrealDB\SDK\Exceptions\AuthenticationException;
+use SurrealDB\SDK\Exceptions\CallTerminatedException;
 use SurrealDB\SDK\Exceptions\ConfigurationException;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Exceptions\HttpConnectionException;
@@ -637,6 +638,9 @@ final class ConnectionController
     {
         $epoch = $this->connectionEpoch;
 
+        // A connection that was up before: restoring it must not undo it.
+        $reconnect = $this->status === ConnectionStatus::Reconnecting;
+
         try {
             $version = $this->askVersion();
 
@@ -648,7 +652,7 @@ final class ConnectionController
                     $this->requireEngine()->attach($session->id);
                 }
 
-                $this->restoreSession($session);
+                $this->restoreSession($session, reconnect: $reconnect);
             }
 
             // Asked before signing in, the version request carried no token,
@@ -1327,8 +1331,22 @@ final class ConnectionController
             return false;
         }
 
-        if (!$sessionState->auth->overridden && $this->applyAuthProvider($session, $auth, $generation)) {
-            return false;
+        if (!$sessionState->auth->overridden) {
+            try {
+                if ($this->applyAuthProvider($session, $auth, $generation)) {
+                    return false;
+                }
+            } catch (ServerException $error) {
+                // Refused: a fixed token that has expired, or a password that
+                // changed. Restoring a session reports that to the caller.
+                // Renewing it carries on with the token while it lasts, and
+                // signs the session out after, rather than retry forever.
+                if (!$keepValidToken) {
+                    throw $error;
+                }
+
+                $this->onError(new AuthenticationException('The auth provider\'s sign-in was refused', $error));
+            }
         }
 
         if (!$this->isCurrentAuth($session, $auth, $generation)) {
@@ -1541,12 +1559,29 @@ final class ConnectionController
      * @param bool $fork whether the session's tokens were copied from another
      *                   session, which still holds them
      */
-    private function restoreSession(SessionState $session, bool $fork = false): void
+    private function restoreSession(SessionState $session, bool $fork = false, bool $reconnect = false): void
     {
+        $epoch = $this->connectionEpoch;
+
         // Authenticate first: a server that refuses guests (the SurrealDB 2.x
         // default) rejects USE and LET from an anonymous session.
         if (!$fork || !$this->authenticateWithCopiedToken($session)) {
-            $this->restoreAuthentication($session->id);
+            try {
+                $this->restoreAuthentication($session->id);
+            } catch (\Throwable $error) {
+                // On a reconnect, a session nothing can sign in again comes
+                // back signed out, rather than take the connection down with
+                // it. Connecting, or attaching a session, reports it instead.
+                if (!$reconnect || !$this->isCurrentConnection($epoch)
+                    || $error instanceof ConnectionUnavailableException || $error instanceof CallTerminatedException
+                ) {
+                    throw $error;
+                }
+
+                $this->endLiveQueries($session);
+                $this->handleAuthInvalidate($session->id);
+                $this->onError(new AuthenticationException('Could not sign the session in again after reconnecting', $error));
+            }
         }
 
         if ($session->namespace !== null || $session->database !== null) {
