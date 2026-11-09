@@ -295,8 +295,20 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return false;
         }
 
+        $transport = $this->transport;
+
         try {
-            $this->transport->open();
+            $transport->open();
+
+            // Closed while the socket opened, which an async scheduler lets
+            // close() do: it found nothing open to close, so close it here,
+            // or it would stay open (and keep the event loop alive).
+            if ($this->terminated) {
+                $transport->close();
+
+                return false;
+            }
+
             $this->active = true;
             $this->generation++;
 
