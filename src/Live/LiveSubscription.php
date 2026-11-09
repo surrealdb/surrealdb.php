@@ -126,6 +126,13 @@ abstract class LiveSubscription implements \IteratorAggregate
             throw new SurrealException('The live subscription has been killed.');
         }
 
+        // An earlier iteration broke off while draining a lost socket's
+        // feed: the rest of it still comes first.
+        if ($this->draining !== null) {
+            array_unshift($this->backlog, $this->draining);
+            $this->draining = null;
+        }
+
         while (true) {
             $feed = $this->backlog !== [] ? array_shift($this->backlog) : $this->feed;
             $this->draining = $feed instanceof LiveFeed && $feed !== $this->feed ? $feed : null;

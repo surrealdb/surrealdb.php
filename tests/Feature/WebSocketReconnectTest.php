@@ -15,6 +15,7 @@ use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Live\LiveAction;
+use SurrealDB\SDK\Live\LiveSubscription;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Support\Jwt;
 use SurrealDB\SDK\Surreal;
@@ -1389,6 +1390,50 @@ SURQL);
             }
 
             self::assertFalse($subscription->isAlive());
+        }
+    }
+
+    public function testBreakingOffWhileReadingAnEarlierSocketsNotificationsLosesNone(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+
+            foreach (['one', 'two', 'three'] as $id) {
+                $db->create(new RecordId('person', $id))->execute();
+            }
+
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            foreach (['four', 'five'] as $id) {
+                $db->create(new RecordId('person', $id))->execute();
+            }
+
+            $db->run('RETURN 1');
+
+            $read = static function (LiveSubscription $live, string $until): array {
+                $records = [];
+
+                foreach ($live as $message) {
+                    $records[] = (string) $message->record->id;
+
+                    if ($records[count($records) - 1] === $until) {
+                        break;
+                    }
+                }
+
+                return $records;
+            };
+
+            // Broke off while reading the lost socket's notifications: the
+            // next iteration dropped the rest of them.
+            self::assertSame(['one'], $read($live, 'one'));
+            self::assertSame(['two', 'three', 'four', 'five'], $read($live, 'five'));
+        } finally {
+            $db->close();
         }
     }
 
