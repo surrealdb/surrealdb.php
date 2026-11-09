@@ -24,7 +24,7 @@ use SurrealDB\SDK\Types\Table;
  * real server over WebSocket and HTTP.
  *
  * Each test starts with item:1 (n 1, tenant a), item:2 (n 2, tenant b),
- * item:3 (n 3, tenant a) and person:1 to person:4.
+ * item:3 (n 3, tenant a) and person:1 to person:4 (name p).
  */
 final class QueryBuilderSafetyTest extends TestCase
 {
@@ -312,6 +312,36 @@ final class QueryBuilderSafetyTest extends TestCase
     }
 
     /**
+     * An empty array used to go out as a list, which every version refuses
+     * as a record's data.
+     *
+     * @param 'ws'|'http' $protocol
+     */
+    #[DataProvider('protocols')]
+    public function testAnEmptyArrayIsAnEmptyRecord(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+        $person = static fn (int $id): RecordId => new RecordId('person', $id);
+
+        try {
+            self::assertEquals(['id' => $person(9)], $db->create($person(9))->content([])->execute());
+            self::assertEquals(['id' => $person(1), 'name' => 'p'], $db->update($person(1))->merge([])->execute());
+            self::assertEquals(['id' => $person(2)], $db->update($person(2))->replace([])->execute());
+            self::assertEquals(['id' => $person(3)], $db->update($person(3))->content([])->execute());
+            self::assertEquals(['id' => $person(8)], $db->upsert($person(8))->content([])->execute());
+            self::assertEquals(['id' => $person(4), 'name' => 'p'], $db->upsert($person(4))->merge([])->execute());
+
+            $edge = $db->relate($person(1), new Table('likes'), $person(2), [])->execute();
+
+            self::assertIsArray($edge);
+            self::assertEquals($person(1), $edge['in'] ?? null);
+            self::assertEquals($person(2), $edge['out'] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
      * The ids of the records in a result, as text.
      *
      * @return list<string>
@@ -357,7 +387,7 @@ final class QueryBuilderSafetyTest extends TestCase
                 CREATE item:1 SET n = 1, tenant = "a";
                 CREATE item:2 SET n = 2, tenant = "b";
                 CREATE item:3 SET n = 3, tenant = "a";
-                CREATE person:1, person:2, person:3, person:4;
+                CREATE person:1, person:2, person:3, person:4 SET name = "p";
                 SURQL);
         } catch (\Throwable $error) {
             $this->unavailable($error);
