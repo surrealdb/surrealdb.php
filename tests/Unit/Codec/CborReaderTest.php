@@ -3,9 +3,12 @@
 namespace SurrealDB\Tests\Unit\Codec;
 
 use Beau\CborPHP\classes\TaggedValue;
+use Beau\CborPHP\exceptions\CborException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Codec\Cbor\CborReader;
+use SurrealDB\SDK\Codec\CborDeserializer;
+use SurrealDB\SDK\Exceptions\SerializationException;
 
 final class CborReaderTest extends TestCase
 {
@@ -54,5 +57,77 @@ final class CborReaderTest extends TestCase
         self::assertInstanceOf(TaggedValue::class, $decoded['b']);
         self::assertSame(6, $decoded['b']->tag);
         self::assertSame('y', $decoded['b']->value);
+    }
+
+    /**
+     * Data a server should never send: each must throw, not warn, return a
+     * wrong value, or exhaust memory.
+     *
+     * @return iterable<string,array{string}>
+     */
+    public static function malformed(): iterable
+    {
+        yield 'nothing' => [''];
+        yield 'truncated uint16' => ['1901'];
+        yield 'truncated uint64' => ['1b000000'];
+        yield 'truncated text' => ['646162'];
+        yield 'truncated half float' => ['f938'];
+        yield 'truncated double' => ['fb3ff1'];
+        yield 'array missing items' => ['830102'];
+        yield 'map missing a value' => ['a16161'];
+        yield 'uint above PHP_INT_MAX' => ['1bffffffffffffffff'];
+        yield 'negative int below PHP_INT_MIN' => ['3b8000000000000000'];
+        yield 'array of u64-max items' => ['9bffffffffffffffff'];
+        yield 'byte string longer than the data' => ['5b7fffffffffffffff00'];
+        yield 'array longer than the data' => ['9a0001000001'];
+        yield 'map longer than the data' => ['ba00010000616101'];
+        yield 'tag number above PHP_INT_MAX' => ['dbffffffffffffffff01'];
+        yield 'array as a map key' => ['a18001'];
+        yield 'tagged map key' => ['a1c6616101'];
+        yield 'float map key' => ['a1f9380001'];
+        yield 'indefinite-length array' => ['9f01ff'];
+        yield 'reserved additional information' => ['1c'];
+        yield 'data after the value' => ['0102'];
+    }
+
+    #[DataProvider('malformed')]
+    public function testMalformedDataThrows(string $hex): void
+    {
+        $this->expectException(CborException::class);
+
+        CborReader::decode((string) hex2bin($hex));
+    }
+
+    public function testIntegerLimitsDecode(): void
+    {
+        self::assertSame(PHP_INT_MAX, CborReader::decode((string) hex2bin('1b7fffffffffffffff')));
+        self::assertSame(PHP_INT_MIN, CborReader::decode((string) hex2bin('3b7fffffffffffffff')));
+    }
+
+    public function testDeepNestingThrowsInsteadOfExhaustingMemory(): void
+    {
+        $this->expectException(CborException::class);
+
+        CborReader::decode(str_repeat("\x81", 200_000) . "\x01");
+    }
+
+    public function testNestingUpToTheLimitDecodes(): void
+    {
+        $value = CborReader::decode(str_repeat("\x81", CborReader::MAX_DEPTH) . "\x01");
+
+        for ($level = 0; $level < CborReader::MAX_DEPTH; $level++) {
+            self::assertIsArray($value);
+            $value = $value[0];
+        }
+
+        self::assertSame(1, $value);
+    }
+
+    public function testTheDeserializerReportsMalformedDataAsASerializationError(): void
+    {
+        $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Malformed CBOR');
+
+        (new CborDeserializer())->deserialize((string) hex2bin('646162'));
     }
 }
