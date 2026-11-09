@@ -2,6 +2,7 @@
 
 namespace SurrealDB\Tests\Unit\Types;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Types\BoundExcluded;
 use SurrealDB\SDK\Types\BoundIncluded;
@@ -19,6 +20,38 @@ final class RecordIdTest extends TestCase
 
         $this->assertSame('person:tobie', $record->escape());
         $this->assertSame(['$recordId' => ['tb' => 'person', 'id' => 'tobie']], $record->jsonSerialize());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function identifiers(): iterable
+    {
+        yield 'plain' => ['person', 'person'];
+        yield 'underscore' => ['_person_2', '_person_2'];
+        yield 'leading digit' => ['2fa', '`2fa`'];
+        yield 'empty' => ['', '``'];
+        yield 'keyword' => ['select', '`select`'];
+        yield 'keyword in capitals' => ['SELECT', '`SELECT`'];
+        yield 'NONE value' => ['none', '`none`'];
+        yield 'boolean value' => ['true', '`true`'];
+        yield 'NaN literal' => ['NaN', '`NaN`'];
+        yield 'Infinity literal' => ['Infinity', '`Infinity`'];
+        yield 'keyword prefix' => ['selection', 'selection'];
+        yield 'backtick and backslash' => ['a`b\\', '`a\\`b\\\\`'];
+    }
+
+    #[DataProvider('identifiers')]
+    public function testIdentifiersAreQuotedWhenNotPlainNames(string $ident, string $escaped): void
+    {
+        $this->assertSame($escaped, Table::escapeIdent($ident));
+    }
+
+    public function testAReservedWordAsATableOrIdIsQuoted(): void
+    {
+        $this->assertSame('`none`', new Table('none')->escape());
+        $this->assertSame('person:`NaN`', new RecordId('person', 'NaN')->escape());
+        $this->assertSame('`true`:`false`', new RecordId('true', 'false')->escape());
     }
 
     public function testIntegerId(): void

@@ -251,11 +251,11 @@ final class WebSocketReconnectTest extends TestCase
 
             // Delivered to the feed (while waiting for the next call's
             // reply), but not iterated before the socket drops.
-            $db->create(new RecordId('person', 'before'))->execute();
+            $db->create(new RecordId('person', 'early'))->execute();
             $db->run('RETURN 1');
             $this->client->sever();
             self::assertSame(ConnectionStatus::Connected, $db->status());
-            $db->create(new RecordId('person', 'after'))->execute();
+            $db->create(new RecordId('person', 'late'))->execute();
 
             $records = [];
 
@@ -267,7 +267,7 @@ final class WebSocketReconnectTest extends TestCase
                 }
             }
 
-            self::assertSame(['person:before', 'person:after'], $records);
+            self::assertSame(['person:early', 'person:late'], $records);
         } finally {
             $db->close();
         }
@@ -306,12 +306,12 @@ final class WebSocketReconnectTest extends TestCase
 
         try {
             $live = $db->live(new Table('person'))->execute();
-            $db->create(new RecordId('person', 'before'))->execute();
+            $db->create(new RecordId('person', 'early'))->execute();
             $db->run('RETURN 1');
             $this->client->sever();
             self::assertSame(ConnectionStatus::Connected, $db->status());
 
-            $db->create(new RecordId('person', 'after'))->execute();
+            $db->create(new RecordId('person', 'late'))->execute();
             $db->run('RETURN 1');
             $this->client->refuseConnections();
             $this->client->sever();
@@ -323,7 +323,7 @@ final class WebSocketReconnectTest extends TestCase
                 $records[] = (string) $message->record;
             }
 
-            self::assertSame(['person:before', 'person:after'], $records);
+            self::assertSame(['person:early', 'person:late'], $records);
         } finally {
             $db->close();
         }
@@ -504,10 +504,10 @@ final class WebSocketReconnectTest extends TestCase
             self::assertSame(['reconnecting', 'reconnecting', 'connected'], $events);
             self::assertTrue($live->isAlive());
 
-            $db->create(new RecordId('person', 'after'))->execute();
+            $db->create(new RecordId('person', 'late'))->execute();
 
             foreach ($live as $message) {
-                self::assertSame('person:after', (string) $message->record);
+                self::assertSame('person:late', (string) $message->record);
 
                 break;
             }

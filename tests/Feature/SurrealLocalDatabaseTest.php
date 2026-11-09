@@ -266,6 +266,35 @@ final class SurrealLocalDatabaseTest extends TestCase
     }
 
     #[DataProvider('protocols')]
+    public function testTablesAndIdsNamedAfterKeywordsAreQuoted(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            foreach (['none', 'true', 'select'] as $table) {
+                $db->run('DEFINE TABLE `' . $table . '` PERMISSIONS FULL');
+                $db->create($table)->content(['name' => $table])->execute();
+
+                $rows = $db->select($table)->execute();
+
+                self::assertIsArray($rows);
+                self::assertCount(1, $rows, "select('{$table}') read the table");
+                self::assertSame($table, $rows[0]['name'] ?? null);
+            }
+
+            $db->run('DEFINE TABLE person PERMISSIONS FULL');
+            $nan = new RecordId('person', 'NaN');
+            $db->create($nan)->content(['name' => 'NaN'])->execute();
+
+            $record = $db->select($nan)->execute();
+            self::assertIsArray($record);
+            self::assertSame('NaN', $record['name'] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
     public function testCallInvokesFunctionsWithAnyNumberOfArguments(string $protocol): void
     {
         $db = $this->connect($protocol);
