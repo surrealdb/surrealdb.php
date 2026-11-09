@@ -88,7 +88,10 @@ abstract class LiveSubscription implements \IteratorAggregate
             return;
         }
 
-        if (!$this->killedByServer() && !$this->ended) {
+        // A query whose socket was lost went with it, and a new socket would
+        // refuse its id: nothing to KILL. A managed one is not replayed once
+        // killed, and a replay already under way stops the query it issues.
+        if (!$this->killedByServer() && !$this->ended && $this->onCurrentSocket()) {
             $id = $this->id();
             self::killOnServer($this->connection, $id, $this->session);
 
@@ -267,6 +270,17 @@ abstract class LiveSubscription implements \IteratorAggregate
         // Not recorded in $serverKilled: that ends iteration, which must
         // still drain the feed (behind any older socket's) up to the KILLED.
         return $this->serverKilled || ($this->feed instanceof LiveFeed && $this->feed->isKilled());
+    }
+
+    /**
+     * Whether the query runs on the current socket: its feed still receives.
+     * Between a lost socket and its replay there is no feed. A feed that is
+     * not a {@see LiveFeed} (from another engine) cannot say, and is taken
+     * to be current.
+     */
+    private function onCurrentSocket(): bool
+    {
+        return $this->feed instanceof LiveFeed ? $this->feed->isReceiving() : $this->feed !== null;
     }
 
     /**

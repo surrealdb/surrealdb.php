@@ -156,6 +156,52 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame([$before, $after], $queryIds);
     }
 
+    public function testKillingAManagedSubscriptionWaitingForItsReplayStopsIt(): void
+    {
+        $result = $this->inLoop(function (): array {
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $options = Runtime::amp();
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+            $namespace = 'amp_kill_' . bin2hex(random_bytes(4));
+
+            try {
+                $db->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db;");
+                $db->use($namespace, 'db');
+                $db->run('DEFINE TABLE person SCHEMALESS PERMISSIONS FULL');
+                $live = $db->live(new Table('person'))->execute();
+                $before = $live->id();
+
+                // Killed after its socket is lost, before the reconnect
+                // (`retryDelay` 0.05 s) replays it: there is no KILL to send.
+                $transports[0]->close();
+                $this->waitFor(static function () use ($db): bool {
+                    return $db->status() === ConnectionStatus::Reconnecting;
+                });
+                $live->kill();
+
+                $this->waitFor(static function () use ($db): bool {
+                    return $db->status() === ConnectionStatus::Connected;
+                });
+
+                // Not replayed either.
+                return [$before, $live->id(), $live->isAlive(), $db->run('RETURN 1')];
+            } finally {
+                $db->close();
+            }
+        });
+
+        [$before, $after, $alive, $returned] = $result;
+        $this->assertSame($before, $after);
+        $this->assertFalse($alive);
+        $this->assertSame([1], $returned);
+    }
+
     public function testATransactionIsFinishedAsSoonAsItsSocketIsLost(): void
     {
         $result = $this->inLoop(function (): ?array {

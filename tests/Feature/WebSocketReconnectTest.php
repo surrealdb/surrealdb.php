@@ -697,6 +697,27 @@ final class WebSocketReconnectTest extends TestCase
         }
     }
 
+    public function testKillingAnUnmanagedSubscriptionAfterAReconnectDoesNotThrow(): void
+    {
+        $db = $this->connect();
+
+        try {
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $live = $db->liveOf($id);
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            // The query went with the old socket, and the new one would
+            // refuse its id: there is nothing left to stop.
+            $live->kill();
+
+            self::assertFalse($live->isAlive());
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testLiveIterationEndsWhenTheConnectionCannotBeRestored(): void
     {
         $db = $this->connect(['attempts' => 1, 'retryDelay' => 0.001]);
