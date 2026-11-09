@@ -8,6 +8,7 @@ use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\Duration;
+use SurrealDB\SDK\Types\RecordId;
 
 /**
  * Value types sent to and read back from a real server, over HTTP and
@@ -52,6 +53,46 @@ final class TypesRoundTripTest extends TestCase
             self::assertTrue($result[0], 'The server did not read the duration as 300y');
             self::assertSame('300y', $result[1]);
             self::assertTrue(Duration::years(300)->equals($result[2]));
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * The server holds `t:1` and `t:"1"` as two records, and sorts the keys
+     * of an object id: each id read back must equal only the one written.
+     *
+     * @param 'http'|'ws' $protocol
+     */
+    #[DataProvider('protocols')]
+    public function testEachRecordIdReadBackEqualsOnlyTheOneWritten(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $written = [
+                new RecordId('t', 1),
+                new RecordId('t', '1'),
+                new RecordId('t', (object) ['b' => 2, 'a' => 1]),
+                new RecordId('t', [1.5, 'x']),
+            ];
+
+            $db->run('DEFINE TABLE t SCHEMALESS PERMISSIONS FULL');
+
+            foreach ($written as $id) {
+                $db->run('CREATE $id', ['id' => $id]);
+            }
+
+            [$read] = $db->run('SELECT VALUE id FROM t');
+
+            self::assertIsArray($read);
+            self::assertCount(4, $read);
+
+            foreach ($written as $index => $id) {
+                $matches = array_filter($read, static fn (mixed $readId): bool => $id->equals($readId));
+
+                self::assertCount(1, $matches, "Id {$index} should equal exactly one id read back");
+            }
         } finally {
             $db->close();
         }

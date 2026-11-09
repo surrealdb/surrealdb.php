@@ -37,11 +37,7 @@ final class Set extends Value
         }
 
         foreach ($this->values as $index => $value) {
-            $otherValue = $other->values[$index];
-
-            $matches = $value instanceof Value ? $value->equals($otherValue) : $value == $otherValue;
-
-            if (!$matches) {
+            if (!self::same($value, $other->values[$index])) {
                 return false;
             }
         }

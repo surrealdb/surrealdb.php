@@ -87,6 +87,75 @@ final class RecordIdTest extends TestCase
         $this->assertFalse(new RecordId('person', 'tobie')->equals(new RecordId('person', 'jaime')));
     }
 
+    /**
+     * Ids the server holds as different records.
+     *
+     * @return iterable<string, array{string|int|array<mixed>|object, string|int|array<mixed>|object}>
+     */
+    public static function differentIds(): iterable
+    {
+        $uuid = '09748193-048a-4bfb-b825-8528cf74fdc1';
+
+        yield 'an int and a numeric string' => [1, '1'];
+        yield 'two numeric strings' => ['1e3', '1000'];
+        yield 'true and 1' => [[true], [1]];
+        yield 'null and false' => [[null], [false]];
+        yield 'a string and an int in a map' => [['a' => '1'], ['a' => 1]];
+        yield 'an int and a float that is not quite it' => [[9_007_199_254_740_993], [9_007_199_254_740_992.0]];
+        yield 'a uuid and its text' => [[Uuid::fromString($uuid)], [$uuid]];
+        yield 'lists in another order' => [[1, 2], [2, 1]];
+        yield 'a list and a map' => [['a'], ['x' => 'a']];
+        yield 'an empty list and an empty object' => [[], new \stdClass()];
+    }
+
+    /**
+     * @param string|int|array<mixed>|object $a
+     * @param string|int|array<mixed>|object $b
+     */
+    #[DataProvider('differentIds')]
+    public function testIdsOfDifferentTypesAreDifferentRecords(string|int|array|object $a, string|int|array|object $b): void
+    {
+        $this->assertFalse(new RecordId('t', $a)->equals(new RecordId('t', $b)));
+        $this->assertFalse(new RecordId('t', $b)->equals(new RecordId('t', $a)));
+    }
+
+    /**
+     * Ids the server holds as the same record.
+     *
+     * @return iterable<string, array{string|int|array<mixed>|object, string|int|array<mixed>|object}>
+     */
+    public static function sameIds(): iterable
+    {
+        $uuid = '09748193-048a-4bfb-b825-8528cf74fdc1';
+
+        yield 'an int and a float' => [[1], [1.0]];
+        yield 'zero and negative zero' => [[0], [-0.0]];
+        yield 'object keys in another order' => [['a' => 1, 'b' => 2], ['b' => 2, 'a' => 1]];
+        yield 'a stdClass and an array' => [(object) ['a' => 1, 'b' => [1, 2]], ['b' => [1, 2], 'a' => 1]];
+        yield 'nested' => [['x' => [['b' => 1, 'a' => 'z']]], ['x' => [['a' => 'z', 'b' => 1.0]]]];
+        yield 'a uuid' => [Uuid::fromString($uuid), Uuid::fromString($uuid)];
+        yield 'a uuid in a list' => [[Uuid::fromString($uuid)], [Uuid::fromString($uuid)]];
+    }
+
+    /**
+     * @param string|int|array<mixed>|object $a
+     * @param string|int|array<mixed>|object $b
+     */
+    #[DataProvider('sameIds')]
+    public function testIdsOfTheSameValueAreTheSameRecord(string|int|array|object $a, string|int|array|object $b): void
+    {
+        $this->assertTrue(new RecordId('t', $a)->equals(new RecordId('t', $b)));
+        $this->assertTrue(new RecordId('t', $b)->equals(new RecordId('t', $a)));
+    }
+
+    public function testRecordIdRangeBoundsCompareStrictly(): void
+    {
+        $one = new RecordIdRange('t', new BoundIncluded(1), null);
+
+        $this->assertFalse($one->equals(new RecordIdRange('t', new BoundIncluded('1'), null)));
+        $this->assertTrue($one->equals(new RecordIdRange('t', new BoundIncluded(1.0), null)));
+    }
+
     public function testTable(): void
     {
         $this->assertSame('person', new Table('person')->escape());
