@@ -5,7 +5,6 @@ namespace SurrealDB\SDK\Types;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use function is_float;
-use function sprintf;
 
 /**
  * A SurrealQL `decimal` value: an arbitrary-precision decimal number backed by
@@ -24,7 +23,9 @@ final class Decimal extends Value
         $this->value = match (true) {
             $value instanceof self => $value->value,
             $value instanceof BigDecimal => $value,
-            is_float($value) => BigDecimal::of(self::floatToString($value)),
+            // The fewest digits that read back as the same float, which
+            // BigDecimal reads in scientific notation as a plain number.
+            is_float($value) => BigDecimal::of(self::shortestFloat($value)),
             default => BigDecimal::of($value),
         };
     }
@@ -121,30 +122,5 @@ final class Decimal extends Value
     private static function operand(self|BigDecimal|string|int|float $value): BigDecimal
     {
         return $value instanceof self ? $value->value : (new self($value))->value;
-    }
-
-    /**
-     * Convert a float to its shortest round-trippable decimal string, avoiding
-     * the binary-noise that fixed-precision formatting would introduce.
-     *
-     * A cast to string keeps only 14 significant digits, so it lost digits
-     * that the float holds: 1.2345678901234567 became 1.2345678901235. This
-     * takes the fewest digits that read back as the same float, whatever
-     * `precision` and `serialize_precision` are set to. The text is in
-     * scientific notation, which {@see BigDecimal} reads as a plain number:
-     * 1.0E-7 gives 0.0000001.
-     */
-    private static function floatToString(float $value): string
-    {
-        // 17 significant digits always read back as the same float.
-        for ($fractionDigits = 0; $fractionDigits < 16; $fractionDigits++) {
-            $text = sprintf("%.{$fractionDigits}e", $value);
-
-            if ((float) $text === $value) {
-                return $text;
-            }
-        }
-
-        return sprintf('%.16e', $value);
     }
 }

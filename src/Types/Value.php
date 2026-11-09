@@ -13,6 +13,7 @@ use function is_int;
 use function is_object;
 use function is_resource;
 use function is_string;
+use function sprintf;
 use function strlen;
 
 /**
@@ -57,8 +58,12 @@ abstract class Value implements SurrealType, \JsonSerializable, \Stringable
             return $value ? 'true' : 'false';
         }
 
-        if (is_int($value) || is_float($value)) {
+        if (is_int($value)) {
             return (string) $value;
+        }
+
+        if (is_float($value)) {
+            return self::floatToSurql($value);
         }
 
         if (is_string($value)) {
@@ -66,17 +71,14 @@ abstract class Value implements SurrealType, \JsonSerializable, \Stringable
         }
 
         if (is_array($value)) {
-            if (array_is_list($value)) {
-                return '[ ' . implode(', ', array_map(self::toSurql(...), $value)) . ' ]';
-            }
+            return array_is_list($value)
+                ? '[ ' . implode(', ', array_map(self::toSurql(...), $value)) . ' ]'
+                : self::objectToSurql($value);
+        }
 
-            $parts = [];
-
-            foreach ($value as $key => $item) {
-                $parts[] = self::encodeString((string) $key) . ': ' . self::toSurql($item);
-            }
-
-            return '{ ' . implode(', ', $parts) . ' }';
+        // An object, even one without properties, never a list.
+        if ($value instanceof \stdClass) {
+            return self::objectToSurql(get_object_vars($value));
         }
 
         if ($value instanceof \JsonSerializable) {
@@ -84,6 +86,84 @@ abstract class Value implements SurrealType, \JsonSerializable, \Stringable
         }
 
         return (string) $value;
+    }
+
+    /**
+     * The fewest significant digits that read back as the same float, in
+     * scientific notation such as `1.2345e+2` or `1e-7`. A cast to string
+     * keeps only 14 significant digits and so loses digits a float holds;
+     * this does not depend on the `precision` or `serialize_precision`
+     * settings either.
+     */
+    protected static function shortestFloat(float $value): string
+    {
+        // 17 significant digits always read back as the same float.
+        for ($fractionDigits = 0; $fractionDigits < 16; $fractionDigits++) {
+            $text = sprintf("%.{$fractionDigits}e", $value);
+
+            if ((float) $text === $value) {
+                return $text;
+            }
+        }
+
+        return sprintf('%.16e', $value);
+    }
+
+    /**
+     * A float as a SurrealQL literal that reads back as the same float, and
+     * never as an integer: plain notation (`1.0`, `0.000001`, `-0.0`) from
+     * 0.000001 up to 1e21, as JavaScript prints numbers, and scientific
+     * notation (`1e-7`, `1.5e25`) outside that range.
+     *
+     * No name for infinity is read alike by every server: SurrealDB 2.x
+     * reads `Infinity` as a field, and 3.x and 4.x refuse `math::inf` in a
+     * record id given as text. `1e309` overflows to infinity on 2.x, 3.x and
+     * 4.x alike, and all three read `NaN`.
+     */
+    private static function floatToSurql(float $value): string
+    {
+        if (is_nan($value)) {
+            return 'NaN';
+        }
+
+        if (is_infinite($value)) {
+            return $value > 0 ? '1e309' : '-1e309';
+        }
+
+        if ($value === 0.0) {
+            return fdiv(1.0, $value) < 0 ? '-0.0' : '0.0';
+        }
+
+        [$mantissa, $exponent] = explode('e', self::shortestFloat($value));
+        $exponent = (int) $exponent;
+
+        if ($exponent < -6 || $exponent > 20) {
+            return $mantissa . 'e' . $exponent;
+        }
+
+        $sign = $value < 0 ? '-' : '';
+        $digits = str_replace(['-', '.'], '', $mantissa);
+        $whole = $exponent + 1;
+
+        return match (true) {
+            $whole <= 0 => $sign . '0.' . str_repeat('0', -$whole) . $digits,
+            $whole >= strlen($digits) => $sign . $digits . str_repeat('0', $whole - strlen($digits)) . '.0',
+            default => $sign . substr($digits, 0, $whole) . '.' . substr($digits, $whole),
+        };
+    }
+
+    /**
+     * @param array<mixed> $entries
+     */
+    private static function objectToSurql(array $entries): string
+    {
+        $parts = [];
+
+        foreach ($entries as $key => $item) {
+            $parts[] = self::encodeString((string) $key) . ': ' . self::toSurql($item);
+        }
+
+        return '{ ' . implode(', ', $parts) . ' }';
     }
 
     /**

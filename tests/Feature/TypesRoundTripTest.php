@@ -11,6 +11,7 @@ use SurrealDB\SDK\Types\Decimal;
 use SurrealDB\SDK\Types\Duration;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Set;
+use SurrealDB\SDK\Types\StringRecordId;
 
 /**
  * Value types sent to and read back from a real server, over HTTP and
@@ -153,6 +154,90 @@ final class TypesRoundTripTest extends TestCase
         } finally {
             $db->close();
         }
+    }
+
+    /**
+     * @return iterable<string, array{RecordId<string>}>
+     */
+    public static function recordIdsAsText(): iterable
+    {
+        yield 'a whole float' => [new RecordId('t', [1.0, -0.0, -100.0])];
+        yield 'every digit of a float' => [new RecordId('t', [1.2345678901234567, 123456789012345678.0])];
+        yield 'plain and scientific notation' => [new RecordId('t', [0.000001, 1e-7, -2.5e-10, 1e20, 1e21])];
+        yield 'the extremes' => [new RecordId('t', [5e-324, 1.7976931348623157E308])];
+        yield 'infinity' => [new RecordId('t', [INF, -INF])];
+        yield 'an object as stdClass' => [new RecordId('t', (object) ['b' => 1.5, 'a' => [(object) ['x' => 1]]])];
+        yield 'an empty object' => [new RecordId('t', new \stdClass())];
+    }
+
+    /**
+     * A record id's text, read by the server both inline in a query and as
+     * a string record id, names the same record as the id sent as CBOR, and
+     * its floats are still floats.
+     *
+     * @param RecordId<string> $id
+     */
+    #[DataProvider('recordIdsAsText')]
+    public function testRecordIdTextReadsBackAsTheSameId(RecordId $id): void
+    {
+        $db = $this->connect('http');
+
+        try {
+            [$read] = $db->run(
+                "RETURN [{$id->escape()} == \$id, \$text == \$id, record::id({$id->escape()}), record::id(\$text)]",
+                ['id' => $id, 'text' => new StringRecordId($id)],
+            );
+
+            self::assertIsArray($read);
+            self::assertTrue($read[0], 'The id read inline names another record');
+            self::assertTrue($read[1], 'The id read as a string record id names another record');
+            self::assertSame(self::types($id->id), self::types($read[2]), 'The id read inline holds other types');
+            self::assertSame(self::types($id->id), self::types($read[3]), 'The id read as text holds other types');
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testRecordIdTextHoldingNanReadsBackAsNan(): void
+    {
+        $db = $this->connect('http');
+
+        try {
+            $id = new RecordId('t', [NAN]);
+            [$read] = $db->run(
+                "RETURN [record::id({$id->escape()}), record::id(\$text)]",
+                ['text' => new StringRecordId($id)],
+            );
+
+            self::assertIsArray($read);
+            self::assertIsFloat($read[0][0]);
+            self::assertNan($read[0][0]);
+            self::assertIsFloat($read[1][0]);
+            self::assertNan($read[1][0]);
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * The type of every scalar in a value, so 1 and 1.0 differ, with object
+     * keys sorted as the server sorts them.
+     *
+     * @return array<mixed>|string
+     */
+    private static function types(mixed $value): array|string
+    {
+        if ($value instanceof \stdClass) {
+            $value = get_object_vars($value);
+        }
+
+        if (!is_array($value)) {
+            return get_debug_type($value);
+        }
+
+        ksort($value);
+
+        return array_map(self::types(...), $value);
     }
 
     /**

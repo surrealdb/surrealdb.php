@@ -148,6 +148,36 @@ final class RecordIdTest extends TestCase
         $this->assertTrue(new RecordId('t', $b)->equals(new RecordId('t', $a)));
     }
 
+    /**
+     * @return iterable<string, array{array<mixed>|object, string}>
+     */
+    public static function idsAsText(): iterable
+    {
+        yield 'a whole float stays a float' => [[1.0], 't:[ 1.0 ]'];
+        yield 'negative zero' => [[-0.0, 0.0], 't:[ -0.0, 0.0 ]'];
+        yield 'every digit of a float' => [[1.2345678901234567], 't:[ 1.2345678901234567 ]'];
+        yield 'a large whole float' => [[123456789012345678.0, -100.0], 't:[ 123456789012345680.0, -100.0 ]'];
+        yield 'plain up to 1e21' => [[1e20, 1e21], 't:[ 100000000000000000000.0, 1e21 ]'];
+        yield 'plain down to 1e-6' => [[0.000001, 1e-7, -2.5e-10], 't:[ 0.000001, 1e-7, -2.5e-10 ]'];
+        yield 'the extremes' => [[5e-324, 1.7976931348623157E308], 't:[ 5e-324, 1.7976931348623157e308 ]'];
+        yield 'infinity overflows' => [[INF, -INF], 't:[ 1e309, -1e309 ]'];
+        yield 'NaN' => [[NAN], 't:[ NaN ]'];
+        yield 'an object as stdClass' => [(object) ['b' => 1.5, 'a' => ['x']], 't:{ "b": 1.5, "a": [ s"x" ] }'];
+        yield 'an empty object' => [new \stdClass(), 't:{  }'];
+        yield 'an object with numeric keys' => [(object) ['0' => 'x'], 't:{ "0": s"x" }'];
+        yield 'a stdClass inside an array' => [[(object) ['a' => 1]], 't:[ { "a": 1 } ]'];
+    }
+
+    /**
+     * @param array<mixed>|object $id
+     */
+    #[DataProvider('idsAsText')]
+    public function testIdsAreWrittenAsSurrealQlThatReadsBackAsTheSameId(array|object $id, string $text): void
+    {
+        $this->assertSame($text, new RecordId('t', $id)->escape());
+        $this->assertSame($text, (string) new RecordId('t', $id));
+    }
+
     public function testRecordIdRangeBoundsCompareStrictly(): void
     {
         $one = new RecordIdRange('t', new BoundIncluded(1), null);
