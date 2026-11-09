@@ -546,7 +546,27 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             return false;
         }
 
-        $frame = $this->transport->receiveFrame();
+        $transport = $this->transport;
+
+        try {
+            $frame = $transport->receiveFrame();
+        } catch (\Exception $error) {
+            // The socket failed mid-read rather than at the end of the
+            // stream: closed in the middle of a message, a message over the
+            // client's size limit, a pong that could not be written. It is
+            // lost all the same; left to escape, it ended the read loop
+            // (async) or left the connection reporting itself up (sync). An
+            // \Error is a bug, not the socket, and still escapes.
+            $this->publisher->publish('error', $error);
+
+            try {
+                $transport->close();
+            } catch (\Throwable) {
+                // Already gone.
+            }
+
+            $frame = null;
+        }
 
         if ($frame === null) {
             $this->connectionLost();

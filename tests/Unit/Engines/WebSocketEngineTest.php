@@ -50,7 +50,7 @@ final class WebSocketEngineTest extends TestCase
         $receivers = [
             static fn (): ?string => null,
             static fn (): ?string => null,
-            static fn (): ?string => throw new \LogicException('suspended'),
+            static fn (): ?string => throw new \Error('suspended'),
         ];
         $options = new DriverOptions(
             format: CodecEnum::JSON,
@@ -87,7 +87,9 @@ final class WebSocketEngineTest extends TestCase
         while ($scheduler->tasks !== []) {
             try {
                 (array_shift($scheduler->tasks))();
-            } catch (\LogicException $error) {
+            } catch (\Error $error) {
+                // A read that fails with an \Exception is a lost socket; the
+                // loop "suspends" with an \Error, which escapes it.
                 $this->assertSame('suspended', $error->getMessage());
             }
         }
@@ -104,7 +106,10 @@ final class WebSocketEngineTest extends TestCase
             {
                 try {
                     $task();
-                } catch (\LogicException) {
+                } catch (\Error $error) {
+                    if ($error->getMessage() !== 'suspended') {
+                        throw $error;
+                    }
                 }
             }
 
@@ -120,7 +125,7 @@ final class WebSocketEngineTest extends TestCase
         // replacement, which stays open.
         $receivers = [
             static fn (): ?string => null,
-            static fn (): ?string => throw new \LogicException('suspended'),
+            static fn (): ?string => throw new \Error('suspended'),
         ];
         $options = new DriverOptions(
             format: CodecEnum::JSON,
