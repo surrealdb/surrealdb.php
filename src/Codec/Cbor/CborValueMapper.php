@@ -66,9 +66,12 @@ final class CborValueMapper
 				$data->toCompact(),
 			),
 			$data instanceof Future => self::tag(CborTag::FUTURE, $data->body),
+			// The 16-byte form (tag 37) is the one every server accepts:
+			// SurrealDB 4.x rejects the text form (tag 9), as the JS SDK
+			// never sends it.
 			$data instanceof Uuid => self::tag(
-				CborTag::STRING_UUID,
-				(string) $data,
+				CborTag::SPEC_UUID,
+				new CborByteString($data->toBytes()),
 			),
 			$data instanceof Bytes => new CborByteString($data->bytes),
 			$data instanceof File => self::tag(CborTag::FILE, [

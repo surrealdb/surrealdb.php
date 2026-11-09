@@ -180,6 +180,11 @@ final class CborCodecTest extends TestCase
             'c88266706572736f6ed83182d83201d8321864',
         ];
         yield 'file' => [new File('bucket', '/path.txt'), 'd83782666275636b6574692f706174682e747874'];
+        // Tag 37 with the 16 raw bytes: SurrealDB 4.x rejects the text form (tag 9).
+        yield 'uuid' => [
+            Uuid::fromString('09748193-048a-4bfb-b825-8528cf74fdc1'),
+            'd8255009748193048a4bfbb8258528cf74fdc1',
+        ];
         yield 'set' => [new Set([1, 2, 3]), 'd83883010203'];
         yield 'point' => [new GeometryPoint(1.0, 2.0), 'd85882fb3ff0000000000000fb4000000000000000'];
         yield 'line' => [
