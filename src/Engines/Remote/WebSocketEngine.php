@@ -88,6 +88,8 @@ final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbe
             Features::api(),
             Features::gql(),
             Features::graphql(),
+            Features::sets(),
+            Features::files(),
             Features::exportImportRaw(),
             Features::surrealMl(),
         );

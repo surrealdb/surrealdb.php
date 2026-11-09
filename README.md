@@ -56,7 +56,7 @@ composer require guzzlehttp/guzzle php-http/discovery
 
 Without discovery, pass the implementations for the HTTP engine, `health()`, `import()` and `export()` through `DriverOptions` (`httpClient`, `requestFactory`, `streamFactory`). OpenTelemetry export doesn't read those, so it still needs discovery unless you pass your own span and metric exporters to `OtelObservability`.
 
-The SDK supports SurrealDB 2.x and 3.x, and accepts 4.x servers. Sessions, transactions, `api()` and refresh tokens need SurrealDB 3.0, and `gql()` / `graphql()` need 3.2.
+The SDK supports SurrealDB 2.x, 3.x and 4.x. Sessions, transactions, `api()` and refresh tokens need SurrealDB 3.0, and `gql()` / `graphql()` need 3.2.
 
 ## Getting started
 
@@ -157,7 +157,7 @@ foreach ($db->statements('RETURN 1; THROW "boom"')->responses() as $response) {
 
 ### Data types
 
-SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions, with two exceptions. `Bytes` is sent as a byte string, which comes back as a plain PHP `string`. A `StringRecordId` comes back as a `RecordId`, because the server never returns the string form. `Set`, `Range` and `RecordIdRange` need SurrealDB 3.0 or later, and `File` also needs a server with the experimental files capability enabled. `Future` is only for SurrealDB 2.x, since 3.0 removed futures.
+SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions, with two exceptions. `Bytes` is sent as a byte string, which comes back as a plain PHP `string`. A `StringRecordId` comes back as a `RecordId`, because the server never returns the string form. `Set` and `File` need SurrealDB 3.0 or later, and sending one to an older server throws `UnavailableFeatureException`; `File` also needs a server with the experimental files capability enabled. `Future` is only for SurrealDB 2.x, since 3.0 removed futures.
 
 ## Sessions and transactions
 

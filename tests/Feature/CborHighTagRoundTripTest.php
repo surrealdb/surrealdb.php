@@ -6,6 +6,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
+use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Types\BoundExcluded;
 use SurrealDB\SDK\Types\BoundIncluded;
@@ -75,6 +77,11 @@ final class CborHighTagRoundTripTest extends TestCase
         $db = $this->connect($protocol);
 
         try {
+            // SurrealDB 2.x has no sets, so the SDK refuses to send one.
+            if ($value instanceof Set && !$db->isFeatureSupported(Features::sets())) {
+                $this->expectException(UnavailableFeatureException::class);
+            }
+
             [$result] = $db->run("RETURN [\$given == {$literal}, \$given]", ['given' => $value]);
 
             self::assertIsArray($result);
@@ -97,7 +104,8 @@ final class CborHighTagRoundTripTest extends TestCase
         try {
             $db->run('DEFINE NAMESPACE IF NOT EXISTS cbor; USE NS cbor; DEFINE DATABASE IF NOT EXISTS cbor;');
             $db->use('cbor', 'cbor');
-            $db->run('DEFINE TABLE IF NOT EXISTS item; DELETE item; FOR $i IN 1..=5 { CREATE type::record("item", $i) }');
+            // INSERT rather than type::record(), which SurrealDB 2.x names type::thing().
+            $db->run('DEFINE TABLE IF NOT EXISTS item; DELETE item; INSERT INTO item [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }]');
 
             $selected = $db->select(new RecordIdRange('item', new BoundIncluded(2), new BoundExcluded(4)))->execute();
 
@@ -117,6 +125,12 @@ final class CborHighTagRoundTripTest extends TestCase
         $db = $this->connect($protocol);
 
         try {
+            // SurrealDB 2.x has no files, so the SDK refuses to send one.
+            if (!$db->isFeatureSupported(Features::files())) {
+                $this->expectException(UnavailableFeatureException::class);
+                $db->run('RETURN type::of($file)', ['file' => new File('bucket', '/path.txt')]);
+            }
+
             try {
                 [$kind] = $db->run('RETURN type::of($file)', ['file' => new File('bucket', '/path.txt')]);
             } catch (\SurrealDB\SDK\Exceptions\ServerException $error) {
@@ -124,6 +138,33 @@ final class CborHighTagRoundTripTest extends TestCase
             }
 
             self::assertSame('file', $kind);
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @param 'http'|'ws' $protocol
+     */
+    #[DataProvider('protocols')]
+    public function testSessionVariablesHoldSetsOnlyWhereTheServerHasThem(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            // SurrealDB 3.x resolves a parameter only inside a namespace.
+            $db->run('DEFINE NAMESPACE IF NOT EXISTS cbor; USE NS cbor; DEFINE DATABASE IF NOT EXISTS cbor;');
+            $db->use('cbor', 'cbor');
+
+            if (!$db->isFeatureSupported(Features::sets())) {
+                // Nested values are checked too, before anything is sent.
+                $this->expectException(UnavailableFeatureException::class);
+                $db->let('tags', ['nested' => [new Set([1, 2])]]);
+            }
+
+            $db->let('tags', ['nested' => [new Set([1, 2])]]);
+
+            self::assertEquals([new Set([1, 2])], $db->run('RETURN $tags.nested[0]'));
         } finally {
             $db->close();
         }
@@ -158,14 +199,6 @@ final class CborHighTagRoundTripTest extends TestCase
             }
 
             self::markTestSkipped('Local SurrealDB test database is not available: ' . $error->getMessage());
-        }
-
-        // Sets, files and these range forms are SurrealDB 3 types. A 2.x
-        // server does not answer a WebSocket request carrying a tag it does
-        // not know, so do not send one.
-        if ((int) preg_replace('/^surrealdb-/', '', $db->version()) < 3) {
-            $db->close();
-            self::markTestSkipped('These CBOR types need SurrealDB 3.0 or later.');
         }
 
         return $db;

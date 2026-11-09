@@ -35,6 +35,8 @@ final class HttpEngine extends AbstractRpcEngine
             Features::api(),
             Features::gql(),
             Features::graphql(),
+            Features::sets(),
+            Features::files(),
             Features::exportImportRaw(),
             Features::surrealMl(),
         );

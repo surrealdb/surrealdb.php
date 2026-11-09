@@ -41,7 +41,10 @@ use SurrealDB\SDK\Reconnect\ExponentialBackoffReconnect;
 use SurrealDB\SDK\Support\Jwt;
 use SurrealDB\SDK\Support\Publisher;
 use SurrealDB\SDK\Support\Version;
+use SurrealDB\SDK\Types\File;
+use SurrealDB\SDK\Types\Set;
 use Symfony\Component\Uid\Uuid;
+use function is_array;
 use function is_string;
 
 /**
@@ -357,6 +360,7 @@ final class ConnectionController
     public function set(string $name, mixed $value, ?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
+        $this->assertSendable($value);
         $this->renewIfDue($session);
         $this->requireEngine()->set($name, $value, $session);
         $sessionState->variables[$name] = $value;
@@ -461,6 +465,7 @@ final class ConnectionController
     {
         // A closed session's handle fails here rather than on the server.
         $this->requireSession($session);
+        $this->assertSendable($query->bindings);
         $this->renewIfDue($session);
 
         return $this->requireEngine()->query($query, $session, $txn);
@@ -1417,5 +1422,37 @@ final class ConnectionController
     private function requireSession(?string $session): SessionState
     {
         return $this->requireState()->session($session) ?? throw new InvalidSessionException($session);
+    }
+
+    /**
+     * Refuse a value the connected server has no type for. SurrealDB 2.x has
+     * no sets or files, and over WebSocket it never answers a request that
+     * carries a CBOR tag it does not know, so sending one would wait forever.
+     */
+    private function assertSendable(mixed $value): void
+    {
+        $version = $this->cachedVersion;
+
+        if ($version === null || (Features::sets()->supports($version) && Features::files()->supports($version))) {
+            return;
+        }
+
+        if ($value instanceof Set) {
+            $this->assertFeature(Features::sets());
+        }
+
+        if ($value instanceof File) {
+            $this->assertFeature(Features::files());
+        }
+
+        if ($value instanceof \stdClass) {
+            $value = get_object_vars($value);
+        }
+
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                $this->assertSendable($item);
+            }
+        }
     }
 }
