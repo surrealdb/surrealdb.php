@@ -241,7 +241,7 @@ abstract class AbstractRpcEngine implements EngineInterface
         $response = $this->http()->send($url, 'POST', $data, $this->httpHeaders($state->rootSession, accept: 'application/json'));
         $status = $response->getStatusCode();
         // Read once: a non-seekable stream would be empty on a second read.
-        $content = (string) $response->getBody();
+        $content = SurrealHttp::body($response);
 
         // SurrealDB 2.x answers a successful import with every statement's
         // result, records included, and decoding all of that takes several
@@ -301,7 +301,7 @@ abstract class AbstractRpcEngine implements EngineInterface
             accept: 'text/plain',
         ));
 
-        return (string) $response->getBody();
+        return SurrealHttp::body($response);
     }
 
     // ----------------------------------------------------------------- //

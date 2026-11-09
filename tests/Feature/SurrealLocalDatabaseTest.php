@@ -13,6 +13,7 @@ use SurrealDB\SDK\Auth\Token;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Exceptions\AlreadyExistsException;
+use SurrealDB\SDK\Exceptions\HttpConnectionException;
 use SurrealDB\SDK\Exceptions\InvalidValueException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\ThrownException;
@@ -26,6 +27,7 @@ use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
 use SurrealDB\Tests\Fakes\AuthProxyClient;
+use SurrealDB\Tests\Fakes\CuttingClient;
 use function sprintf;
 
 /**
@@ -605,6 +607,30 @@ SURQL);
             } finally {
                 $db->close();
             }
+        }
+    }
+
+    public function testAnExportThatBreaksOffIsAnError(): void
+    {
+        $root = $this->connect('http');
+        [$namespace] = $root->run('RETURN session::ns()');
+        $root->run('DEFINE TABLE person SCHEMALESS; CREATE person:one SET name = "one"');
+        $root->close();
+
+        $db = new Surreal(new DriverOptions(httpClient: new CuttingClient(new \GuzzleHttp\Client(), '/export')));
+        $db->connect($this->url('http'), new ConnectOptions(
+            namespace: $namespace,
+            database: 'db',
+            authentication: new RootAuth('root', 'root'),
+        ));
+
+        try {
+            $this->expectException(HttpConnectionException::class);
+            $this->expectExceptionMessage('The response ended after');
+
+            $db->export();
+        } finally {
+            $db->close();
         }
     }
 

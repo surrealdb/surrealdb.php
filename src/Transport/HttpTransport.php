@@ -60,7 +60,7 @@ final class HttpTransport implements TransportInterface
             $this->headers($session, $request),
         );
 
-        $decoded = $this->context->codec->deserialize((string) $response->getBody());
+        $decoded = $this->context->codec->deserialize(SurrealHttp::body($response));
 
         if (!is_array($decoded)) {
             throw new UnexpectedServerResponseException($decoded);
