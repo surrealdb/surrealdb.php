@@ -45,7 +45,9 @@ final class QueryChunk
 
         $message = is_string($result['result'] ?? null) ? $result['result'] : 'Query execution failed';
         $details = isset($result['details']) && is_array($result['details']) ? $result['details'] : null;
-        $kind = is_string($result['kind'] ?? null) ? $result['kind'] : 'Query';
+        // SurrealDB 2.x gives no kind. Not `Query`, which from 3.x on means a
+        // timeout or cancellation: unknown, as the JS SDK treats it.
+        $kind = is_string($result['kind'] ?? null) ? $result['kind'] : 'Internal';
 
         return new self($index, null, 'ERR', $time, ServerException::create($kind, $message, 0, $details));
     }
