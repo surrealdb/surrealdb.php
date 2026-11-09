@@ -12,8 +12,10 @@ use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Transport\HttpTransport;
+use SurrealDB\SDK\Transport\SessionHeaders;
 use function in_array;
 use function is_array;
+use function is_string;
 
 /**
  * An engine that issues each RPC as an individual HTTP request. Stateful
@@ -81,6 +83,14 @@ final class HttpEngine extends AbstractRpcEngine
         switch ($request->method) {
             case 'use':
                 if (!$this->isEmptyUse($request->params)) {
+                    // Refused here, before the selection is kept: every
+                    // request after would carry it.
+                    foreach (['namespace', 'database'] as $index => $what) {
+                        if (is_string($request->params[$index] ?? null)) {
+                            SessionHeaders::carriable($what, $request->params[$index]);
+                        }
+                    }
+
                     return new RpcResponse($request->id);
                 }
 

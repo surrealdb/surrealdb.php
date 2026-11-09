@@ -26,6 +26,7 @@ use SurrealDB\SDK\Support\Publisher;
 use SurrealDB\SDK\Telemetry\NullMeter;
 use SurrealDB\SDK\Telemetry\NullTracer;
 use SurrealDB\SDK\Transport\HttpClientResolver;
+use SurrealDB\SDK\Transport\SessionHeaders;
 use SurrealDB\SDK\Transport\SurrealHttp;
 use SurrealDB\SDK\Types\Uuid;
 use function is_array;
@@ -365,19 +366,7 @@ abstract class AbstractRpcEngine implements EngineInterface
             $headers['Content-Type'] = $contentType;
         }
 
-        if ($session->namespace !== null) {
-            $headers['Surreal-NS'] = $session->namespace;
-        }
-
-        if ($session->database !== null) {
-            $headers['Surreal-DB'] = $session->database;
-        }
-
-        if ($session->auth->accessToken !== null) {
-            $headers['Authorization'] = 'Bearer ' . $session->auth->accessToken;
-        }
-
-        return $headers;
+        return [...$headers, ...SessionHeaders::of($session)];
     }
 
     protected function http(): SurrealHttp

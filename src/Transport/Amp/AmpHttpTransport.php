@@ -12,6 +12,7 @@ use SurrealDB\SDK\Exceptions\HttpConnectionException;
 use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\SDK\Transport\SessionHeaders;
 use function is_array;
 
 /**
@@ -89,18 +90,6 @@ final class AmpHttpTransport implements TransportInterface
             'Accept' => $this->context->format->contentType(),
         ];
 
-        if ($session->namespace !== null) {
-            $headers['Surreal-NS'] = $session->namespace;
-        }
-
-        if ($session->database !== null) {
-            $headers['Surreal-DB'] = $session->database;
-        }
-
-        if ($session->auth->accessToken !== null) {
-            $headers['Authorization'] = 'Bearer ' . $session->auth->accessToken;
-        }
-
-        return $headers;
+        return [...$headers, ...SessionHeaders::of($session)];
     }
 }

@@ -9,6 +9,7 @@ use SurrealDB\SDK\Api\ApiResponse;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Exceptions\AlreadyExistsException;
+use SurrealDB\SDK\Exceptions\InvalidValueException;
 use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Exceptions\ThrownException;
 use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
@@ -516,6 +517,39 @@ SURQL);
 
             // Nothing was kept: HTTP would send it with every query after.
             self::assertSame([1], $db->run('RETURN 1'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testANamespaceHttpCannotCarryIsRefusedOverHttp(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            [$namespace] = $db->run('RETURN session::ns()');
+
+            foreach (['café', "line\nbreak"] as $name) {
+                if ($protocol === 'ws') {
+                    // A WebSocket sends names in the request body, so any is fine.
+                    $db->use($name, 'db');
+                    self::assertSame([$name], $db->run('RETURN session::ns()'));
+                    $db->use($namespace, 'db');
+
+                    continue;
+                }
+
+                try {
+                    $db->use($name, 'db');
+                    self::fail('use() should refuse ' . json_encode($name));
+                } catch (InvalidValueException $error) {
+                    self::assertStringContainsString('HTTP header', $error->getMessage());
+                }
+
+                // The selection it had is kept, and still works.
+                self::assertSame([$namespace], $db->run('RETURN session::ns()'));
+            }
         } finally {
             $db->close();
         }
