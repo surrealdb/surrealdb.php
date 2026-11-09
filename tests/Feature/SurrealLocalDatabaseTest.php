@@ -2,6 +2,7 @@
 
 namespace SurrealDB\Tests\Feature;
 
+use Beau\CborPHP\classes\TaggedValue;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Api\ApiResponse;
@@ -14,6 +15,7 @@ use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Query\Frame\ValueFrame;
 use SurrealDB\SDK\Surreal;
+use SurrealDB\SDK\Types\Bytes;
 use SurrealDB\SDK\Types\None;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
@@ -217,16 +219,43 @@ final class SurrealLocalDatabaseTest extends TestCase
         }
     }
 
+    #[DataProvider('protocols')]
+    public function testBytesRoundTripThroughARecord(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $person = new RecordId('person', 'tobie');
+
+            // Not valid UTF-8: written back as text, the server would refuse it.
+            $db->run('CREATE person:tobie SET avatar = encoding::base64::decode("AP8")');
+
+            $record = $db->select($person)->execute();
+            self::assertIsArray($record);
+            self::assertEquals(new Bytes("\x00\xff"), $record['avatar']);
+
+            $record['name'] = 'Tobie';
+            $updated = $db->update($person)->content($record)->execute();
+
+            self::assertIsArray($updated);
+            self::assertEquals(new Bytes("\x00\xff"), $updated['avatar']);
+            self::assertSame([true], $db->run('RETURN person:tobie.avatar == encoding::base64::decode("AP8")'));
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testAnUnreadableRequestFailsInsteadOfWaiting(): void
     {
         $db = $this->connect('ws');
 
         try {
             try {
-                // SurrealDB 2.x and 3.x answer a request they cannot decode
-                // without its id.
-                $db->run('RETURN $text', ['text' => "\xFF"]);
-                self::fail('Expected the server to refuse a string that is not UTF-8.');
+                // SurrealDB 2.x and 3.x answer a request they cannot decode,
+                // here for a CBOR tag no version knows, without its id.
+                $db->run('RETURN $value', ['value' => new TaggedValue(9999, 'x')]);
+                self::fail('Expected the server to refuse an unknown CBOR tag.');
             } catch (ServerException) {
                 // The connection is still usable afterwards.
                 self::assertSame([1], $db->run('RETURN 1'));

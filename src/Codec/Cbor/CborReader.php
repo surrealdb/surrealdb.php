@@ -6,6 +6,7 @@ use Beau\CborPHP\classes\FloatHelper;
 use Beau\CborPHP\classes\IntHelper;
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\exceptions\CborException;
+use Beau\CborPHP\utils\CborByteString;
 use function is_int;
 use function is_string;
 use function ord;
@@ -13,7 +14,8 @@ use function strlen;
 
 /**
  * Decodes CBOR into the shapes {@see CborValueMapper::decode()} expects: maps
- * as arrays, tags as {@see TaggedValue}, text and byte strings as strings.
+ * as arrays, tags as {@see TaggedValue}, text as strings and byte strings as
+ * {@see CborByteString}, so that bytes keep their type.
  *
  * It follows `Beau\CborPHP\CborDecoder`, except for half-precision floats:
  * SurrealDB sends a float as 16 bits when that loses nothing (0.5, -0.25),
@@ -87,7 +89,8 @@ final class CborReader
             0 => $this->length($additional),
             // At most -PHP_INT_MAX - 1: PHP_INT_MIN, no overflow.
             1 => -$this->length($additional) - 1,
-            2, 3 => $this->string($additional),
+            2 => new CborByteString($this->string($additional)),
+            3 => $this->string($additional),
             4 => $this->array($additional),
             5 => $this->map($additional),
             6 => $this->tagged($additional),

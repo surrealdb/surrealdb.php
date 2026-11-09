@@ -14,6 +14,7 @@ use function is_int;
 use function is_nan;
 use function is_string;
 use function pack;
+use function preg_match;
 use function strlen;
 use function count;
 
@@ -70,6 +71,15 @@ final class CborWriter
 
                 return;
             case is_string($value):
+                // SurrealDB refuses text that is not UTF-8, saying only "Parse
+                // error"; binary data goes as a byte string.
+                if (preg_match('//u', $value) !== 1) {
+                    throw new SerializationException(
+                        'Serialization',
+                        'Text sent to SurrealDB must be valid UTF-8; send binary data as a SurrealDB\\SDK\\Types\\Bytes value.',
+                    );
+                }
+
                 self::head($buffer, self::MAJOR_TEXT, strlen($value));
                 $buffer .= $value;
 

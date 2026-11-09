@@ -63,12 +63,22 @@ final class CborCodecTest extends TestCase
         $this->assertTrue((new RecordId('record', 'some-record'))->equals($this->deserializer->deserialize($encoded)));
     }
 
-    public function testBytesUseCborByteStringButDecodeAsPlainStringThroughPackage(): void
+    public function testBytesRoundTripAsBytes(): void
     {
-        $bytes = "hello\0world";
+        $bytes = "hello\0world\xff";
 
-        $this->assertSame('4b68656c6c6f00776f726c64', bin2hex($this->serializer->serialize(new Bytes($bytes))));
-        $this->assertSame($bytes, $this->roundTrip(new Bytes($bytes)));
+        $this->assertSame('4c68656c6c6f00776f726c64ff', bin2hex($this->serializer->serialize(new Bytes($bytes))));
+
+        // A byte string, not text: writing it back must not send it as text.
+        $restored = $this->roundTrip(new Bytes($bytes));
+        $this->assertInstanceOf(Bytes::class, $restored);
+        $this->assertSame($bytes, $restored->bytes);
+        $this->assertSame($bytes, (string) $restored);
+    }
+
+    public function testATextStringStaysAString(): void
+    {
+        $this->assertSame('hello', $this->roundTrip('hello'));
     }
 
     public function testValidHighTagServerPayloadsDecodeThroughCborPackage(): void

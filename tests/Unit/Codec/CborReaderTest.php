@@ -4,6 +4,7 @@ namespace SurrealDB\Tests\Unit\Codec;
 
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\exceptions\CborException;
+use Beau\CborPHP\utils\CborByteString;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Codec\Cbor\CborReader;
@@ -44,7 +45,7 @@ final class CborReaderTest extends TestCase
         self::assertSame('-0', (string) $negativeZero);
     }
 
-    public function testOtherItemsDecodeAsBefore(): void
+    public function testOtherItemsDecode(): void
     {
         // {"a": [1, -2, "x", h'01', true, null, 1.1], "b": 6("y")}
         $data = hex2bin('a2' . '6161' . '87' . '01' . '21' . '6178' . '4101' . 'f5' . 'f6' . 'fb3ff199999999999a'
@@ -53,7 +54,7 @@ final class CborReaderTest extends TestCase
         $decoded = CborReader::decode((string) $data);
 
         self::assertIsArray($decoded);
-        self::assertSame([1, -2, 'x', "\x01", true, null, 1.1], $decoded['a']);
+        self::assertEquals([1, -2, 'x', new CborByteString("\x01"), true, null, 1.1], $decoded['a']);
         self::assertInstanceOf(TaggedValue::class, $decoded['b']);
         self::assertSame(6, $decoded['b']->tag);
         self::assertSame('y', $decoded['b']->value);

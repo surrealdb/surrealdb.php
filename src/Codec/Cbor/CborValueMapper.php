@@ -100,6 +100,10 @@ final class CborValueMapper
 			return self::decodeTagged($data);
 		}
 
+		if ($data instanceof CborByteString) {
+			return new Bytes($data->getByteString());
+		}
+
 		if (is_array($data)) {
 			return array_map(self::decode(...), $data);
 		}
@@ -202,19 +206,19 @@ final class CborValueMapper
 	{
 		return match (CborTag::tryFrom($tagged->tag)) {
 			CborTag::SPEC_DATETIME => DateTime::fromString(
-				(string) $tagged->value,
+				self::text($tagged->value),
 			),
 			CborTag::NONE => None::instance(),
-			CborTag::TABLE => new Table((string) $tagged->value),
+			CborTag::TABLE => new Table(self::text($tagged->value)),
 			CborTag::RECORD_ID => self::decodeRecordId($tagged->value),
-			CborTag::STRING_UUID => Uuid::fromString((string) $tagged->value),
-			CborTag::DECIMAL => new Decimal((string) $tagged->value),
+			CborTag::STRING_UUID => Uuid::fromString(self::text($tagged->value)),
+			CborTag::DECIMAL => new Decimal(self::text($tagged->value)),
 			CborTag::CUSTOM_DATETIME => self::decodeDateTime($tagged->value),
 			CborTag::STRING_DURATION => Duration::fromString(
-				(string) $tagged->value,
+				self::text($tagged->value),
 			),
 			CborTag::CUSTOM_DURATION => self::decodeDuration($tagged->value),
-			CborTag::FUTURE => new Future((string) $tagged->value),
+			CborTag::FUTURE => new Future(self::text($tagged->value)),
 			CborTag::SPEC_UUID => self::decodeUuid($tagged->value),
 			CborTag::RANGE => self::decodeRange($tagged->value),
 			CborTag::BOUND_INCLUDED => new BoundIncluded(
@@ -298,11 +302,27 @@ final class CborValueMapper
 
 	private static function decodeUuid(mixed $value): Uuid
 	{
-		if (is_string($value) && strlen($value) === 16) {
-			return Uuid::fromBytes($value);
+		if ($value instanceof CborByteString && strlen($value->getByteString()) === 16) {
+			return Uuid::fromBytes($value->getByteString());
 		}
 
-		return Uuid::fromString((string) $value);
+		return Uuid::fromString(self::text($value));
+	}
+
+	/**
+	 * The text a tag carries. A byte string is taken as its bytes; anything
+	 * else is malformed.
+	 */
+	private static function text(mixed $value): string
+	{
+		return match (true) {
+			is_string($value) => $value,
+			$value instanceof CborByteString => $value->getByteString(),
+			default => throw new SerializationException(
+				"Serialization",
+				"Expected text in a SurrealDB CBOR tag, got " . get_debug_type($value),
+			),
+		};
 	}
 
 	/**
