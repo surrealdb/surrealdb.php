@@ -100,6 +100,29 @@ final class SessionTransactionTest extends TestCase
         }
     }
 
+    public function testAForkOfASignedOutSessionIsSignedOut(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->invalidate();
+            $fork = $db->forkSession();
+
+            // The connection's auth provider (root) does not sign it back in.
+            self::assertNull($fork->accessToken());
+
+            try {
+                $fork->run('INFO FOR ROOT');
+                self::fail('Expected the fork of a signed-out session to be signed out.');
+            } catch (ServerException) {
+            }
+
+            $fork->closeSession();
+        } finally {
+            $db->close();
+        }
+    }
+
     public function testAForkKeepsASourceTokenCloseToExpiry(): void
     {
         $db = $this->connect();

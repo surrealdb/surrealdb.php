@@ -2,8 +2,10 @@
 
 namespace SurrealDB\Tests\Feature;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\SDK\Auth\NamespaceAuth;
+use SurrealDB\SDK\Auth\RecordAccessAuth;
 use SurrealDB\SDK\Auth\RootAuth;
 use SurrealDB\SDK\Connection\ConnectionController;
 use SurrealDB\SDK\Connection\ConnectionStatus;
@@ -804,6 +806,79 @@ final class WebSocketReconnectTest extends TestCase
                 self::fail('Expected the signed-out session to be refused.');
             } catch (SurrealException) {
             }
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @return iterable<string, array{'invalidate'|'reset'}>
+     */
+    public static function signOuts(): iterable
+    {
+        yield 'invalidate' => ['invalidate'];
+        yield 'reset' => ['reset'];
+    }
+
+    #[DataProvider('signOuts')]
+    public function testAnExplicitSignOutIsNotUndoneByAReconnect(string $signOut): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->{$signOut}();
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            // The connection's auth provider (root) does not sign it back in.
+            self::assertNull($db->accessToken());
+
+            try {
+                $db->run('INFO FOR ROOT');
+                self::fail('Expected the session to stay signed out after the reconnect.');
+            } catch (SurrealException) {
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAnExplicitTokenIsNotRenewedWithTheRefreshTokenOfAnEarlierUser(): void
+    {
+        $db = $this->connect();
+
+        try {
+            if (!$db->isFeatureSupported(Features::refreshTokens())) {
+                self::markTestSkipped('Refresh tokens need SurrealDB 3.0 or later.');
+            }
+
+            // Record tokens that are due for renewal one second after signup.
+            $db->run(<<<'SURQL'
+DEFINE ACCESS IF NOT EXISTS account ON DATABASE TYPE RECORD
+    SIGNUP (CREATE user SET name = $name)
+    SIGNIN (SELECT * FROM user WHERE name = $name)
+    WITH REFRESH DURATION FOR TOKEN 61s;
+DEFINE TABLE IF NOT EXISTS user SCHEMALESS PERMISSIONS FULL;
+SURQL);
+
+            $other = new Surreal();
+            $other->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
+            $bert = $other->signup(new RecordAccessAuth($this->namespace, 'db', 'account', ['name' => 'bert']));
+            $other->close();
+
+            // Signing up as ada keeps ada's refresh token; switching to bert's
+            // access token must not keep it.
+            $db->signup(new RecordAccessAuth($this->namespace, 'db', 'account', ['name' => 'ada']));
+            $db->authenticate($bert->access);
+            sleep(2);
+
+            self::assertSame(['bert'], $db->run('RETURN $auth.name'));
         } finally {
             $db->close();
         }

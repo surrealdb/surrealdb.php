@@ -330,6 +330,13 @@ final class ConnectionController
 
         $this->endLiveQueriesUnlessRenewing($session, $skipOverride);
         $sessionState->auth->accessToken = $token;
+
+        // A token given explicitly may belong to someone else: keeping the
+        // previous refresh token would renew the session as that user.
+        if (!$skipOverride) {
+            $sessionState->auth->refreshToken = null;
+        }
+
         $sessionState->auth->overridden = $sessionState->auth->overridden || !$skipOverride;
         $this->handleAuthChanged($session);
     }
@@ -374,15 +381,26 @@ final class ConnectionController
         unset($sessionState->variables[$name]);
     }
 
-    public function invalidate(?string $session = null): void
+    /**
+     * Sign the session out. An explicit sign-out stands: the connection's
+     * auth provider does not sign the session back in on a reconnect, and a
+     * fork of it starts signed out. `$skipOverride` is for the SDK giving up
+     * on a renewal, after which the provider may still sign in again.
+     */
+    public function invalidate(?string $session = null, bool $skipOverride = false): void
     {
         $sessionState = $this->requireSession($session);
         $this->beginAuthChange($sessionState, false);
         $this->sendAuth($sessionState, false, fn () => $this->requireEngine()->invalidate($session));
         $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
+        $sessionState->auth->overridden = $sessionState->auth->overridden || !$skipOverride;
     }
 
+    /**
+     * Clear the session's namespace, database, variables and authentication.
+     * Like {@see self::invalidate()}, the auth provider does not sign it back in.
+     */
     public function reset(?string $session = null): void
     {
         $sessionState = $this->requireSession($session);
@@ -396,6 +414,7 @@ final class ConnectionController
         $sessionState->transactions = [];
         $this->endLiveQueries($sessionState);
         $this->handleAuthInvalidate($session);
+        $sessionState->auth->overridden = true;
 
         $payload = new NamespaceDatabase();
         $this->events->publish('using', $payload, $session);
@@ -1241,7 +1260,7 @@ final class ConnectionController
         $sessionState = $this->state?->session($session);
 
         if ($sessionState?->auth->accessToken !== null) {
-            $this->invalidate($session);
+            $this->invalidate($session, true);
         }
     }
 
