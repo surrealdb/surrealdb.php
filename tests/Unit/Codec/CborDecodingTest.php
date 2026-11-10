@@ -87,6 +87,7 @@ final class CborDecodingTest extends TestCase
         yield 'float map key' => ['a1f9380001'];
         yield 'bool map key' => ['a1f501'];
         yield 'byte string map key' => ['a1416b01'];
+        yield 'duplicate map key' => ['a2616101616102'];
         yield 'indefinite-length array' => ['9f01ff'];
         yield 'reserved additional information' => ['1c'];
         yield 'data after the value' => ['0102'];
