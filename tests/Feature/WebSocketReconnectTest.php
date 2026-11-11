@@ -1,0 +1,1494 @@
+<?php
+
+namespace SurrealDB\Tests\Feature;
+
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use SurrealDB\Auth\NamespaceAuth;
+use SurrealDB\Auth\RecordAccessAuth;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Auth\Token;
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Connection\ConnectionStatus;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Exceptions\ConnectionUnavailableException;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Live\LiveAction;
+use SurrealDB\Live\LiveSubscription;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Support\Jwt;
+use SurrealDB\Surreal;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
+use SurrealDB\Types\Uuid;
+use SurrealDB\Tests\Fakes\MethodLog;
+use SurrealDB\Tests\Fakes\SeverableWebSocketClient;
+use function count;
+
+/**
+ * Reconnection, session restore, live query replay and token renewal under
+ * the default synchronous scheduler, which runs no background tasks.
+ */
+final class WebSocketReconnectTest extends TestCase
+{
+    private SeverableWebSocketClient $client;
+
+    private string $namespace;
+
+    public function testReconnectsAndRestoresSessionsAfterTheSocketDrops(): void
+    {
+        $db = $this->connect();
+        $events = [];
+
+        foreach (['reconnecting', 'connected', 'disconnected'] as $event) {
+            $db->subscribe($event, static function () use (&$events, $event): void {
+                $events[] = $event;
+            });
+        }
+
+        try {
+            $db->let('greeting', 'hello');
+            // Extra sessions need SurrealDB 3.
+            $session = $db->isFeatureSupported(Features::sessions()) ? $db->newSession() : null;
+            $session?->use($this->namespace, 'other');
+
+            $this->client->sever();
+
+            // The call that finds the socket dead fails; the engine has
+            // reconnected by the time it returns.
+            try {
+                $db->run('RETURN 1');
+                self::fail('Expected the call on the dropped socket to fail.');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame(['reconnecting', 'connected'], $events);
+            self::assertSame(2, $this->client->connects);
+
+            // Namespace, database, variables, authentication and the extra
+            // session all came back.
+            self::assertSame(['hello'], $db->run('RETURN $greeting'));
+            self::assertSame([$this->namespace], $db->run('RETURN session::ns()'));
+
+            if ($session !== null) {
+                self::assertSame(['other'], $session->run('RETURN session::db()'));
+                self::assertContains($session->id(), $db->sessions());
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testStatusReconnectsADeadSocket(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $this->client->sever();
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame([1], $db->run('RETURN 1'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testDisconnectsOnceReconnectAttemptsRunOut(): void
+    {
+        $db = $this->connect(['attempts' => 2, 'retryDelay' => 0.001]);
+        $reconnecting = 0;
+        $db->subscribe('reconnecting', static function () use (&$reconnecting): void {
+            $reconnecting++;
+        });
+
+        $this->client->refuseConnections();
+        $this->client->sever();
+
+        self::assertSame(ConnectionStatus::Disconnected, $db->status());
+        self::assertSame(2, $reconnecting);
+        self::assertSame(3, $this->client->connects);
+
+        $this->expectException(ConnectionUnavailableException::class);
+        $db->run('RETURN 1');
+    }
+
+    public function testAThrowingTransportFactoryCountsAsAFailedAttempt(): void
+    {
+        $calls = 0;
+        $db = $this->connect(clientFactory: function () use (&$calls): SeverableWebSocketClient {
+            // The first reconnect attempt cannot even build a client.
+            if (++$calls === 2) {
+                throw new \RuntimeException('No client available.');
+            }
+
+            return $this->client;
+        });
+        $errors = [];
+        $db->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+            $errors[] = $error->getMessage();
+        });
+
+        try {
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+                self::fail('Expected the call on the dropped socket to fail.');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(3, $calls);
+            self::assertContains('No client available.', $errors);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testClosingFromAReconnectingListenerStopsTheReconnect(): void
+    {
+        $db = $this->connect();
+        $db->subscribe('reconnecting', static function () use ($db): void {
+            $db->close();
+        });
+
+        $this->client->sever();
+
+        try {
+            $db->run('RETURN 1');
+            self::fail('Expected the call on the dropped socket to fail.');
+        } catch (SurrealException) {
+        }
+
+        self::assertSame(ConnectionStatus::Disconnected, $db->status());
+        self::assertSame(1, $this->client->connects);
+    }
+
+    public function testAThrowingReconnectingListenerDoesNotStopTheReconnect(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $errors = [];
+            $db->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+                $errors[] = $error->getMessage();
+            });
+            $db->subscribe('reconnecting', static function (): void {
+                throw new \RuntimeException('listener failed');
+            });
+
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame([[1]], [$db->run('RETURN 1')]);
+            self::assertContains('listener failed', $errors);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testManagedLiveQueriesAreReplayedAfterAReconnect(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $before = $live->id();
+            $received = [];
+
+            $db->create(new RecordId('person', 'one'))->content(['name' => 'One'])->execute();
+
+            foreach ($live as $message) {
+                $received[] = $message;
+
+                if (count($received) === 1) {
+                    // Drop the socket mid-iteration. The next write reconnects
+                    // and replays the LIVE query under a new id.
+                    $this->client->sever();
+
+                    try {
+                        $db->create(new RecordId('person', 'lost'))->execute();
+                    } catch (SurrealException) {
+                    }
+
+                    $db->create(new RecordId('person', 'two'))->content(['name' => 'Two'])->execute();
+                }
+
+                if (count($received) === 2) {
+                    break;
+                }
+            }
+
+            self::assertCount(2, $received);
+            self::assertSame(LiveAction::Create, $received[1]->action);
+            self::assertSame('Two', $received[1]->value['name'] ?? null);
+            self::assertTrue($live->isAlive());
+            self::assertNotSame($before, $live->id());
+            self::assertSame($live->id(), $received[1]->queryId);
+            self::assertSame(
+                [$live->id()],
+                array_keys($db->run('INFO FOR TABLE person')[0]['lives']),
+            );
+
+            $live->kill();
+            self::assertSame([], $db->run('INFO FOR TABLE person')[0]['lives']);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testNotificationsReceivedBeforeAReconnectAreStillYielded(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+
+            // Delivered to the feed (while waiting for the next call's
+            // reply), but not iterated before the socket drops.
+            $db->create(new RecordId('person', 'early'))->execute();
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            $db->create(new RecordId('person', 'late'))->execute();
+
+            $records = [];
+
+            foreach ($live as $message) {
+                $records[] = (string) $message->record;
+
+                if (count($records) === 2) {
+                    break;
+                }
+            }
+
+            self::assertSame(['person:early', 'person:late'], $records);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testResettingWhileIteratingAnEarlierSocketsNotificationsDropsTheRest(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $db->create(new RecordId('person', 'one'))->execute();
+            $db->create(new RecordId('person', 'two'))->execute();
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            $records = [];
+
+            foreach ($live as $message) {
+                $records[] = (string) $message->record;
+                // Ends the session's live queries: what is still queued was
+                // for whoever it was before.
+                $db->reset();
+            }
+
+            self::assertSame(['person:one'], $records);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAFinalDisconnectStillYieldsTheLastSocketsNotificationsAfterTheBacklog(): void
+    {
+        $db = $this->connect(['attempts' => 1, 'retryDelay' => 0.001]);
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $db->create(new RecordId('person', 'early'))->execute();
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            $db->create(new RecordId('person', 'late'))->execute();
+            $db->run('RETURN 1');
+            $this->client->refuseConnections();
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Disconnected, $db->status());
+
+            $records = [];
+
+            try {
+                foreach ($live as $message) {
+                    $records[] = (string) $message->record;
+                }
+
+                self::fail('Reading past a lost connection should say so.');
+            } catch (ConnectionUnavailableException) {
+                // Once what both sockets delivered has been read.
+            }
+
+            self::assertSame(['person:early', 'person:late'], $records);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAFinalDisconnectWhileDrainingAnEarlierSocketStillYieldsTheLastOne(): void
+    {
+        $db = $this->connect(['attempts' => 1, 'retryDelay' => 0.001]);
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $db->create(new RecordId('person', 'one'))->execute();
+            $db->create(new RecordId('person', 'two'))->execute();
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            $records = [];
+
+            try {
+                foreach ($live as $message) {
+                    $records[] = (string) $message->record;
+
+                    // Still draining the first socket's feed: the second one
+                    // receives a notification, then is lost for good.
+                    if (count($records) === 1) {
+                        $db->create(new RecordId('person', 'three'))->execute();
+                        $db->run('RETURN 1');
+                        $this->client->refuseConnections();
+                        $this->client->sever();
+                        self::assertSame(ConnectionStatus::Disconnected, $db->status());
+                    }
+                }
+
+                self::fail('Reading past a lost connection should say so.');
+            } catch (ConnectionUnavailableException) {
+                // Once what both sockets delivered has been read.
+            }
+
+            self::assertSame(['person:one', 'person:two', 'person:three'], $records);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAKilledFeedBehindAnEarlierSocketsIsStillDrained(): void
+    {
+        $db = $this->connect();
+
+        try {
+            // SurrealDB 2.x sends no KILLED notification for a KILL.
+            if ((int) preg_replace('/^surrealdb-/', '', $db->version()) < 3) {
+                self::markTestSkipped('Needs SurrealDB 3.0 or later.');
+            }
+
+            $live = $db->live(new Table('person'))->execute();
+            $db->create(new RecordId('person', 'one'))->execute();
+            $db->create(new RecordId('person', 'two'))->execute();
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            $received = [];
+
+            foreach ($live as $message) {
+                $received[] = $message->action === LiveAction::Killed ? 'killed' : (string) $message->record;
+
+                // Still draining the first socket's feed: the replayed query
+                // receives a record, then is killed on the server.
+                if (count($received) === 1) {
+                    $db->create(new RecordId('person', 'three'))->execute();
+                    $db->run('KILL ' . Uuid::from($live->id())->escape());
+
+                    // The server sends KILLED on its own task, so it can land
+                    // just after a round trip's reply: wait for it briefly.
+                    for ($attempt = 0; $attempt < 100 && $live->isAlive(); $attempt++) {
+                        $db->run('RETURN 1');
+                        usleep(20_000);
+                    }
+
+                    self::assertFalse($live->isAlive());
+                }
+            }
+
+            self::assertSame(['person:one', 'person:two', 'person:three', 'killed'], $received);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testLosingTheSocketWhileKillingAReleasedSubscriptionStopsTheStaleReplay(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $released = $db->live(new Table('person'))->execute();
+            $kept = $db->live(new Table('person'))->execute();
+            $client = $this->client;
+
+            // Let go of the first while it replays, and lose the socket while
+            // its new query is being killed.
+            $client->beforeSend = static function (string $payload) use ($client, &$released): ?string {
+                if ($released !== null && str_contains($payload, 'LIVE SELECT')) {
+                    $released = null;
+                } elseif (str_contains($payload, 'KILL')) {
+                    $client->beforeSend = null;
+                    $client->sever();
+                }
+
+                return null;
+            };
+
+            $client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            self::assertSame(
+                [$kept->id()],
+                array_keys($db->run('INFO FOR TABLE person')[0]['lives']),
+            );
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testLiveQueriesAreReplayedBeforeConnectedIsAnnounced(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $db->subscribe('connected', static function () use ($db): void {
+                $db->create(new RecordId('person', 'on_connected'))->execute();
+            });
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            $db->create(new RecordId('person', 'later'))->execute();
+
+            $records = [];
+
+            foreach ($live as $message) {
+                $records[] = (string) $message->record;
+
+                if (count($records) === 2) {
+                    break;
+                }
+            }
+
+            self::assertSame(['person:on_connected', 'person:later'], $records);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testLosingTheSocketDuringReplayKeepsTheSubscriptionForTheNextOne(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $events = [];
+
+            foreach (['reconnecting', 'connected'] as $event) {
+                $db->subscribe($event, static function () use (&$events, $event): void {
+                    $events[] = $event;
+                });
+            }
+
+            // Drop the first replacement socket just as the LIVE query is
+            // re-issued on it.
+            $client = $this->client;
+            $client->beforeSend = static function (string $payload) use ($client): ?string {
+                if (str_contains($payload, 'LIVE SELECT')) {
+                    $client->beforeSend = null;
+                    $client->sever();
+                }
+
+                return null;
+            };
+
+            $client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame(['reconnecting', 'reconnecting', 'connected'], $events);
+            self::assertTrue($live->isAlive());
+
+            $db->create(new RecordId('person', 'late'))->execute();
+
+            foreach ($live as $message) {
+                self::assertSame('person:late', (string) $message->record);
+
+                break;
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testLosingTheSocketWhileRestoringTheSessionReconnectsAgain(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->let('greeting', 'hello');
+            $events = [];
+
+            foreach (['reconnecting', 'connected', 'disconnected'] as $event) {
+                $db->subscribe($event, static function () use (&$events, $event): void {
+                    $events[] = $event;
+                });
+            }
+
+            // Drop the first replacement socket as it restores the variable.
+            $client = $this->client;
+            $client->beforeSend = static function (string $payload) use ($client): ?string {
+                if (str_contains($payload, 'greeting')) {
+                    $client->beforeSend = null;
+                    $client->sever();
+                }
+
+                return null;
+            };
+
+            $client->sever();
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertSame(['reconnecting', 'reconnecting', 'connected'], $events);
+            self::assertSame(['hello'], $db->run('RETURN $greeting'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testSocketsThatKeepDroppingWhileRestoringUseUpTheAttempts(): void
+    {
+        $db = $this->connect(['attempts' => 3, 'retryDelay' => 0.001]);
+
+        try {
+            $db->let('greeting', 'hello');
+            $reconnecting = 0;
+            $db->subscribe('reconnecting', static function () use (&$reconnecting): void {
+                $reconnecting++;
+            });
+
+            // Every replacement socket drops as it restores the variable.
+            $client = $this->client;
+            $client->beforeSend = static function (string $payload) use ($client): ?string {
+                if (str_contains($payload, 'greeting')) {
+                    $client->sever();
+                }
+
+                return null;
+            };
+
+            $client->sever();
+
+            self::assertSame(ConnectionStatus::Disconnected, $db->status());
+            self::assertSame(3, $reconnecting);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testClosingFromAReplayErrorListenerLeavesTheConnectionClosed(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $events = [];
+
+            foreach (['connected', 'disconnected'] as $event) {
+                $db->subscribe($event, static function () use (&$events, $event): void {
+                    $events[] = $event;
+                });
+            }
+
+            $db->subscribe('error', static function () use ($db): void {
+                $db->close();
+            });
+
+            // Make the server reject the replayed query (same length, so a
+            // CBOR frame stays well formed).
+            $this->client->beforeSend = static function (string $payload): ?string {
+                return str_contains($payload, 'LIVE SELECT')
+                    ? str_replace('LIVE SELECT', 'LIVE SELEKT', $payload)
+                    : null;
+            };
+
+            $this->client->sever();
+
+            self::assertSame(ConnectionStatus::Disconnected, $db->status());
+            self::assertSame(['disconnected'], $events);
+            self::assertFalse($live->isAlive());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testASubscriptionReleasedDuringTheReplayIsNotReplayed(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $kept = $db->live(new Table('person'))->execute();
+            $released = $db->live(new Table('person'))->execute();
+            $replays = 0;
+
+            // Let go of the second subscription while the first is replaying.
+            $this->client->beforeSend = static function (string $payload) use (&$replays, &$released): ?string {
+                if (str_contains($payload, 'LIVE SELECT')) {
+                    $replays++;
+                    $released = null;
+                    gc_collect_cycles();
+                }
+
+                return null;
+            };
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            $this->client->beforeSend = null;
+
+            self::assertSame(1, $replays);
+            self::assertSame(
+                [$kept->id()],
+                array_keys($db->run('INFO FOR TABLE person')[0]['lives']),
+            );
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testASubscriptionReleasedWhileItIsReplayedIsKilled(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+
+            // Let go of it while its own query is being replayed.
+            $this->client->beforeSend = static function (string $payload) use (&$live): ?string {
+                if (str_contains($payload, 'LIVE SELECT')) {
+                    $live = null;
+                }
+
+                return null;
+            };
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            $this->client->beforeSend = null;
+
+            self::assertSame([], $db->run('INFO FOR TABLE person')[0]['lives']);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAnUnmanagedSubscriptionIsNotAliveAfterAReconnect(): void
+    {
+        $db = $this->connect();
+
+        try {
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $live = $db->liveOf($id);
+            self::assertTrue($live->isAlive());
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            // The new socket does not carry the query, and the SDK did not
+            // start it, so it cannot re-issue it.
+            self::assertFalse($live->isAlive());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testKillingAnUnmanagedSubscriptionAfterAReconnectDoesNotThrow(): void
+    {
+        $db = $this->connect();
+
+        try {
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $live = $db->liveOf($id);
+
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            // The query went with the old socket, and the new one would
+            // refuse its id: there is nothing left to stop.
+            $live->kill();
+
+            self::assertFalse($live->isAlive());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testLiveIterationThrowsWhenTheConnectionCannotBeRestored(): void
+    {
+        $db = $this->connect(['attempts' => 1, 'retryDelay' => 0.001]);
+        $live = $db->live(new Table('person'))->execute();
+        $db->create(new RecordId('person', 'one'))->execute();
+        $received = 0;
+
+        try {
+            foreach ($live as $_) {
+                $received++;
+                $this->client->refuseConnections();
+                $this->client->sever();
+            }
+
+            self::fail('Iteration ended as if the query had been killed.');
+        } catch (ConnectionUnavailableException $error) {
+            self::assertStringContainsString('could not be established again', $error->getMessage());
+        }
+
+        // Read again, it says so again; a killed one ends quietly.
+        try {
+            foreach ($live as $_) {
+                self::fail('Nothing more can arrive.');
+            }
+
+            self::fail('Iteration ended as if the query had been killed.');
+        } catch (ConnectionUnavailableException) {
+        }
+
+        self::assertSame(1, $received);
+        self::assertFalse($live->isAlive());
+        self::assertSame(ConnectionStatus::Disconnected, $db->status());
+    }
+
+    public function testTokensAreRenewedBeforeTheyExpireWithoutABackgroundTimer(): void
+    {
+        $setup = $this->connect();
+
+        try {
+            // Renewal is due 60 seconds before expiry: one second after signin.
+            $setup->run(
+                "DEFINE USER renew ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 61s, FOR SESSION 1h",
+            );
+        } finally {
+            $setup->close();
+        }
+
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+
+        try {
+            $db->use($this->namespace, 'db');
+            $first = $db->accessToken();
+            $renewed = 0;
+            $db->subscribe('auth', static function ($tokens) use (&$renewed): void {
+                if ($tokens !== null) {
+                    $renewed++;
+                }
+            });
+
+            sleep(2);
+
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(1, $renewed);
+            self::assertNotNull($db->accessToken());
+            self::assertNotSame($first, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffATokenIsKeptUntilItExpires(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(define: false, invalidateOnExpiry: true);
+
+        try {
+            $db->signin(new NamespaceAuth($this->namespace, 'renew', 'secret'));
+            $db->use($this->namespace, 'db');
+            $token = $db->accessToken();
+
+            // Past the point renewal would be due, but the token is valid for
+            // another minute.
+            sleep(2);
+
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertNotNull($token);
+            self::assertSame($token, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffTheAuthProviderStillSignsIn(): void
+    {
+        $db = $this->connect(invalidateOnExpiry: true);
+
+        try {
+            self::assertNotNull($db->accessToken());
+            self::assertIsArray($db->run('INFO FOR ROOT')[0] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffAReconnectKeepsAValidToken(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(define: false, invalidateOnExpiry: true);
+
+        try {
+            $db->signin(new NamespaceAuth($this->namespace, 'renew', 'secret'));
+            $token = $db->accessToken();
+
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertNotNull($token);
+            self::assertSame($token, $db->accessToken());
+            self::assertIsArray($db->run('INFO FOR NS')[0] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testWithRenewalOffAnExpiredSessionStaysSignedOut(): void
+    {
+        $setup = $this->connect();
+
+        try {
+            $setup->run("DEFINE USER brief ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h");
+        } finally {
+            $setup->close();
+        }
+
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'brief', 'secret'), define: false, invalidateOnExpiry: true);
+
+        try {
+            self::assertNotNull($db->accessToken());
+
+            // The next call finds the token expired, and signs the session out.
+            sleep(3);
+            $db->run('RETURN 1');
+            self::assertNull($db->accessToken());
+
+            // A reconnect does not sign it back in with the auth provider.
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertNull($db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testARenewalWhileSigningOutDoesNotSignBackIn(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+
+        try {
+            $db->use($this->namespace, 'db');
+            // Renewal falls due one second after sign-in.
+            sleep(2);
+
+            // A call that would renew, made while the sign-out waits for its
+            // reply.
+            $client = $this->client;
+            $client->afterSend = static function (string $payload) use ($client, $db): void {
+                if (str_contains($payload, 'invalidate')) {
+                    $client->afterSend = null;
+
+                    try {
+                        $db->run('RETURN 1');
+                    } catch (SurrealException) {
+                    }
+                }
+            };
+
+            $db->invalidate();
+
+            self::assertNull($db->accessToken());
+
+            try {
+                $db->run('INFO FOR NS');
+                self::fail('Expected the signed-out session to be refused.');
+            } catch (SurrealException) {
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * @return iterable<string, array{'invalidate'|'reset'}>
+     */
+    public static function signOuts(): iterable
+    {
+        yield 'invalidate' => ['invalidate'];
+        yield 'reset' => ['reset'];
+    }
+
+    #[DataProvider('signOuts')]
+    public function testAnExplicitSignOutIsNotUndoneByAReconnect(string $signOut): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->{$signOut}();
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+            }
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            // The connection's auth provider (root) does not sign it back in.
+            self::assertNull($db->accessToken());
+
+            try {
+                $db->run('INFO FOR ROOT');
+                self::fail('Expected the session to stay signed out after the reconnect.');
+            } catch (SurrealException) {
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAnExplicitTokenIsNotRenewedWithTheRefreshTokenOfAnEarlierUser(): void
+    {
+        $db = $this->connect();
+
+        try {
+            if (!$db->isFeatureSupported(Features::refreshTokens())) {
+                self::markTestSkipped('Refresh tokens need SurrealDB 3.0 or later.');
+            }
+
+            // Record tokens that are due for renewal one second after signup.
+            $db->run(<<<'SURQL'
+DEFINE ACCESS IF NOT EXISTS account ON DATABASE TYPE RECORD
+    SIGNUP (CREATE user SET name = $name)
+    SIGNIN (SELECT * FROM user WHERE name = $name)
+    WITH REFRESH DURATION FOR TOKEN 61s;
+DEFINE TABLE IF NOT EXISTS user SCHEMALESS PERMISSIONS FULL;
+SURQL);
+
+            $other = new Surreal();
+            $other->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
+            $bert = $other->signup(new RecordAccessAuth($this->namespace, 'db', 'account', ['name' => 'bert']));
+            $other->close();
+
+            // Signing up as ada keeps ada's refresh token; switching to bert's
+            // access token must not keep it.
+            $db->signup(new RecordAccessAuth($this->namespace, 'db', 'account', ['name' => 'ada']));
+            $db->authenticate($bert->access);
+            sleep(2);
+
+            self::assertSame(['bert'], $db->run('RETURN $auth.name'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testARefusedRefreshTokenIsDroppedAndReported(): void
+    {
+        $db = $this->connect();
+
+        try {
+            if (!$db->isFeatureSupported(Features::refreshTokens())) {
+                self::markTestSkipped('Refresh tokens need SurrealDB 3.0 or later.');
+            }
+
+            // Due for renewal at once, valid for half a minute.
+            $db->run(<<<'SURQL'
+DEFINE ACCESS IF NOT EXISTS brief ON DATABASE TYPE RECORD
+    SIGNUP (CREATE user SET name = $name)
+    SIGNIN (SELECT * FROM user WHERE name = $name)
+    WITH REFRESH DURATION FOR TOKEN 30s;
+DEFINE TABLE IF NOT EXISTS user SCHEMALESS PERMISSIONS FULL;
+SURQL);
+
+            $log = new MethodLog();
+            $user = new Surreal(new DriverOptions(middleware: [$log]));
+            $user->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
+            $tokens = $user->signup(new RecordAccessAuth($this->namespace, 'db', 'brief', ['name' => 'ada']));
+            $errors = [];
+            $user->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+                $errors[] = $error->getMessage();
+            });
+
+            // Refresh tokens are single use: another client spends it.
+            $other = new Surreal();
+            $other->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc');
+            $other->connection()->refresh($tokens);
+            $other->close();
+
+            try {
+                self::assertSame(['ada'], $user->run('RETURN $auth.name'));
+                self::assertSame(['ada'], $user->run('RETURN $auth.name'));
+
+                // Refused once, dropped, reported; the access token carries on.
+                self::assertSame(['The refresh token was refused'], $errors);
+                self::assertNull($user->connection()->state()?->rootSession->auth->refreshToken);
+                self::assertSame($tokens->access, $user->accessToken());
+                self::assertSame(1, $log->count('refresh'));
+            } finally {
+                $user->close();
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAFailedRenewalIsRetried(): void
+    {
+        $this->defineShortLivedUser();
+
+        $calls = 0;
+        $namespace = $this->namespace;
+        $provider = static function (?string $session) use (&$calls, $namespace): NamespaceAuth {
+            // The second call is the first renewal: fail it once.
+            if (++$calls === 2) {
+                throw new \RuntimeException('Credentials store briefly unavailable.');
+            }
+
+            return new NamespaceAuth($namespace, 'renew', 'secret');
+        };
+        $db = $this->connect(auth: $provider, define: false);
+
+        try {
+            // Before use(), which renews too if the second has already turned.
+            $first = $db->accessToken();
+            $errors = 0;
+            $db->subscribe('error', static function () use (&$errors): void {
+                $errors++;
+            });
+            $db->use($this->namespace, 'db');
+
+            sleep(2);
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(1, $errors);
+            self::assertSame($first, $db->accessToken());
+
+            sleep(6);
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(3, $calls);
+            self::assertNotSame($first, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testRenewalThatGetsTheSameTokenChecksAgainAtExpiry(): void
+    {
+        $this->defineShortLivedUser();
+
+        $setup = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+        $token = $setup->accessToken();
+        $setup->close();
+        self::assertNotNull($token);
+
+        // A provider that hands out a fixed token, as a Token or string does.
+        $calls = 0;
+        $db = $this->connect(auth: static function () use (&$calls, $token): string {
+            $calls++;
+
+            return $token;
+        }, define: false);
+
+        try {
+            $db->use($this->namespace, 'db');
+
+            sleep(2);
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame(2, $calls);
+
+            // Not dropped: due again when the token expires.
+            $deadlines = (new \ReflectionProperty(ConnectionController::class, 'renewAt'))->getValue($db->connection());
+            self::assertSame(Jwt::expiry($token), $deadlines[''] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testCommittingATransactionRenewsADueToken(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+
+        try {
+            if (!$db->isFeatureSupported(Features::transactions())) {
+                self::markTestSkipped('Interactive transactions need SurrealDB 3.0 or later.');
+            }
+
+            $db->use($this->namespace, 'db');
+            $renewed = 0;
+            $db->subscribe('auth', static function ($tokens) use (&$renewed): void {
+                if ($tokens !== null) {
+                    $renewed++;
+                }
+            });
+
+            $txn = $db->beginTransaction();
+            $txn->run('CREATE person:committed');
+            sleep(2);
+            $txn->commit();
+
+            self::assertSame(1, $renewed);
+            self::assertCount(1, $db->select(new RecordId('person', 'committed'))->execute());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testSelectingANamespaceRenewsADueToken(): void
+    {
+        $this->defineShortLivedUser();
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'renew', 'secret'), define: false);
+
+        try {
+            $first = $db->accessToken();
+            $renewed = 0;
+            $db->subscribe('auth', static function ($tokens) use (&$renewed): void {
+                if ($tokens !== null) {
+                    $renewed++;
+                }
+            });
+
+            sleep(2);
+            $db->use($this->namespace, 'db');
+
+            self::assertSame(1, $renewed);
+            self::assertNotSame($first, $db->accessToken());
+        } finally {
+            $db->close();
+        }
+    }
+
+    /**
+     * A namespace user whose tokens are due for renewal one second after signin.
+     */
+    public function testAFixedTokenThatHasExpiredSignsTheSessionOut(): void
+    {
+        $setup = $this->connect();
+        $setup->run("DEFINE USER brief ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h");
+        $token = $setup->signin(new NamespaceAuth($this->namespace, 'brief', 'secret'))->access;
+        $setup->close();
+        self::assertNotNull($token);
+
+        $db = $this->connect(auth: static fn (): Token => new Token($token), define: false);
+        $errors = 0;
+        $db->subscribe('error', static function () use (&$errors): void {
+            $errors++;
+        });
+
+        try {
+            sleep(3);
+
+            // The provider's token expired, and nothing can replace it. It
+            // was authenticated again, refused, and retried every 5 seconds,
+            // with an error each time, and the session never signed out.
+            $db->use($this->namespace, 'db');
+            self::assertNull($db->accessToken());
+            self::assertSame(1, $errors);
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAReconnectTheAuthProviderCannotSignInBringsTheSessionBackSignedOut(): void
+    {
+        $setup = $this->connect();
+        // Inside the minute in which a reconnect would reuse it.
+        $setup->run("DEFINE USER brief ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 30s, FOR SESSION 1h");
+
+        $db = $this->connect(auth: new NamespaceAuth($this->namespace, 'brief', 'secret'), define: false);
+        $errors = [];
+        $db->subscribe('error', static function (\Throwable $error) use (&$errors): void {
+            $errors[] = $error;
+        });
+
+        try {
+            self::assertNotNull($db->accessToken());
+            $setup->run("DEFINE USER OVERWRITE brief ON NAMESPACE PASSWORD 'changed' ROLES EDITOR DURATION FOR TOKEN 30s, FOR SESSION 1h");
+            $this->client->sever();
+
+            // The refused sign-in used to close the whole connection.
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertNull($db->accessToken());
+            self::assertCount(1, $errors);
+            self::assertStringContainsString('after reconnecting', $errors[0]->getMessage());
+        } finally {
+            $db->close();
+            $setup->close();
+        }
+    }
+
+    public function testALiveQueryIsRestartedInTheDatabaseItStartedIn(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $db->run("USE DB other; DEFINE TABLE IF NOT EXISTS person SCHEMALESS PERMISSIONS FULL; USE DB db;");
+            $live = $db->live(new Table('person'))->execute();
+            $db->use($this->namespace, 'other');
+            $this->client->sever();
+
+            try {
+                $db->run('RETURN 1');
+            } catch (SurrealException) {
+                // The call that finds the socket dead.
+            }
+
+            // One change in each database, from another client.
+            $writer = new Surreal();
+            $writer->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc', new ConnectOptions(
+                authentication: new RootAuth('root', 'root'),
+                namespace: $this->namespace,
+                database: 'other',
+            ));
+            $writer->create(new RecordId('person', 'other'))->execute();
+            $writer->use($this->namespace, 'db');
+            $writer->create(new RecordId('person', 'db'))->execute();
+            $writer->close();
+
+            // Restarted in whatever the session had selected, it reported
+            // the change in the other database.
+            foreach ($live as $message) {
+                self::assertEquals(new RecordId('person', 'db'), $message->record);
+
+                break;
+            }
+
+            // The session itself stays where it was moved to.
+            self::assertSame([[$this->namespace, 'other']], $db->run('RETURN [session::ns(), session::db()]'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testARenewalThatSignsInAsSomeoneElseEndsTheLiveQueries(): void
+    {
+        $setup = $this->connect();
+        $setup->run(<<<'SURQL'
+DEFINE USER first ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h;
+DEFINE USER second ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h;
+SURQL);
+        $setup->close();
+
+        $user = 'first';
+        $namespace = $this->namespace;
+        // A provider whose credentials change to another user's.
+        $provider = static function () use (&$user, $namespace): NamespaceAuth {
+            return new NamespaceAuth($namespace, $user, 'secret');
+        };
+        $db = $this->connect(auth: $provider, define: false);
+
+        try {
+            $db->use($namespace, 'db');
+            $db->run('DEFINE TABLE IF NOT EXISTS person SCHEMALESS PERMISSIONS FULL');
+            $live = $db->live(new Table('person'))->execute();
+            self::assertTrue($live->isAlive());
+            self::assertSame('first', Jwt::parse((string) $db->accessToken())['ID'] ?? null);
+            $user = 'second';
+            sleep(3);
+
+            // Renews, as the second user. The query was started as the first.
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame('second', Jwt::parse((string) $db->accessToken())['ID'] ?? null);
+            self::assertFalse($live->isAlive());
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testALiveOfSubscriptionSaysSoOnceItsConnectionIsLost(): void
+    {
+        $db = $this->connect();
+
+        try {
+            [$id] = $db->run('LIVE SELECT * FROM person');
+            $live = $db->liveOf($id);
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            // Not started again on the new connection: reading it used to end
+            // as if it had been killed.
+            $this->expectException(ConnectionUnavailableException::class);
+            $this->expectExceptionMessage('liveOf()');
+
+            foreach ($live as $_) {
+                self::fail('Nothing can arrive.');
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testALiveQueryTheServerRefusesToRestartSaysSo(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+            $this->client->sever();
+
+            // Gone while the connection was down: strict mode refuses the LIVE.
+            $other = new Surreal();
+            $other->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc', new ConnectOptions(
+                authentication: new RootAuth('root', 'root'),
+                namespace: $this->namespace,
+                database: 'db',
+            ));
+            $other->run('REMOVE TABLE person');
+            $other->close();
+
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+            self::assertFalse($live->isAlive());
+
+            $this->expectException(ConnectionUnavailableException::class);
+            $this->expectExceptionMessage('refused to start the live query again');
+
+            foreach ($live as $_) {
+                self::fail('Nothing can arrive.');
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testClosingTheConnectionEndsIterationQuietly(): void
+    {
+        $db = $this->connect();
+        $live = $db->live(new Table('person'))->execute();
+        [$id] = $db->run('LIVE SELECT * FROM person');
+        $attached = $db->liveOf($id);
+        $db->close();
+
+        foreach ([$live, $attached] as $subscription) {
+            foreach ($subscription as $_) {
+                self::fail('Nothing can arrive.');
+            }
+
+            self::assertFalse($subscription->isAlive());
+        }
+    }
+
+    public function testBreakingOffWhileReadingAnEarlierSocketsNotificationsLosesNone(): void
+    {
+        $db = $this->connect();
+
+        try {
+            $live = $db->live(new Table('person'))->execute();
+
+            foreach (['one', 'two', 'three'] as $id) {
+                $db->create(new RecordId('person', $id))->execute();
+            }
+
+            $db->run('RETURN 1');
+            $this->client->sever();
+            self::assertSame(ConnectionStatus::Connected, $db->status());
+
+            foreach (['four', 'five'] as $id) {
+                $db->create(new RecordId('person', $id))->execute();
+            }
+
+            $db->run('RETURN 1');
+
+            $read = static function (LiveSubscription $live, string $until): array {
+                $records = [];
+
+                foreach ($live as $message) {
+                    $records[] = (string) $message->record->id;
+
+                    if ($records[count($records) - 1] === $until) {
+                        break;
+                    }
+                }
+
+                return $records;
+            };
+
+            // Broke off while reading the lost socket's notifications: the
+            // next iteration dropped the rest of them.
+            self::assertSame(['one'], $read($live, 'one'));
+            self::assertSame(['two', 'three', 'four', 'five'], $read($live, 'five'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    private function defineShortLivedUser(): void
+    {
+        $setup = $this->connect();
+
+        try {
+            $setup->run(
+                "DEFINE USER renew ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 61s, FOR SESSION 1h",
+            );
+        } finally {
+            $setup->close();
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $reconnect
+     * @param (\Closure(): SeverableWebSocketClient)|null $clientFactory
+     */
+    private function connect(
+        array $reconnect = ['retryDelay' => 0.001],
+        RootAuth|NamespaceAuth|\Closure|null $auth = null,
+        bool $define = true,
+        ?\Closure $clientFactory = null,
+        bool $invalidateOnExpiry = false,
+    ): Surreal {
+        $this->client = new SeverableWebSocketClient();
+        $client = $this->client;
+        $this->namespace ??= 'reconnect_' . bin2hex(random_bytes(4));
+
+        $db = new Surreal(new DriverOptions(
+            webSocketClientFactory: $clientFactory ?? static fn (): SeverableWebSocketClient => $client,
+        ));
+
+        try {
+            $db->connect(getenv('SURREALDB_WS_URL') ?: 'ws://127.0.0.1:8000/rpc', new ConnectOptions(
+                authentication: $auth ?? new RootAuth('root', 'root'),
+                reconnect: $reconnect,
+                invalidateOnExpiry: $invalidateOnExpiry,
+            ));
+
+            if ($define) {
+                $db->run("DEFINE NAMESPACE IF NOT EXISTS {$this->namespace}; USE NS {$this->namespace}; DEFINE DATABASE IF NOT EXISTS db; DEFINE DATABASE IF NOT EXISTS other;");
+                $db->use($this->namespace, 'db');
+                $db->run('DEFINE TABLE IF NOT EXISTS person SCHEMALESS PERMISSIONS FULL');
+            }
+        } catch (\Throwable $error) {
+            if (getenv('SURREALDB_REQUIRE_LOCAL') === '1') {
+                self::fail('Local SurrealDB test database is required but unavailable: ' . $error->getMessage());
+            }
+
+            self::markTestSkipped('Local SurrealDB test database is not available: ' . $error->getMessage());
+        }
+
+        return $db;
+    }
+}

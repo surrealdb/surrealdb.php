@@ -2,6 +2,9 @@
 
 namespace SurrealDB\Rpc;
 
+use SurrealDB\Support\Redacted;
+use function in_array;
+
 /**
  * An immutable RPC request. Mirrors the JS `RpcRequest` type: a method plus
  * optional params, scoped to an optional session and transaction.
@@ -21,6 +24,25 @@ final readonly class RpcRequest
         public ?string $txn = null,
         public ?string $id = null,
     ) {}
+
+    /**
+     * The parameters of a sign-in carry credentials or tokens: those show
+     * redacted.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $secret = in_array($this->method, ['signin', 'signup', 'authenticate', 'refresh', 'revoke'], true);
+
+        return [
+            'method' => $this->method,
+            'params' => $secret ? Redacted::values($this->params) : $this->params,
+            'session' => $this->session,
+            'txn' => $this->txn,
+            'id' => $this->id,
+        ];
+    }
 
     public function withId(string $id): self
     {

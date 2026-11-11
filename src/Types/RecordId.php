@@ -5,6 +5,7 @@ namespace SurrealDB\Types;
 use function is_array;
 use function is_int;
 use function is_object;
+use function strlen;
 
 /**
  * A fully-qualified SurrealDB record identifier (e.g. `person:tobie`).
@@ -61,17 +62,24 @@ final class RecordId extends Value
         get => Table::escapeIdent($this->table) . ':' . self::escapeId($this->id);
     }
 
+    /**
+     * Whether both name the same record. Ids compare strictly, as on the
+     * server: `t:1` and `t:"1"` are different records, but `t:[1]` and
+     * `t:[1.0]` are the same, and so are object ids whose keys are in a
+     * different order.
+     */
     public function equals(mixed $other): bool
     {
-        if (!$other instanceof self || $this->table !== $other->table) {
-            return false;
-        }
+        return $other instanceof self
+            && $this->table === $other->table
+            && self::same($this->id, $other->id);
+    }
 
-        if ($this->id instanceof Value) {
-            return $this->id->equals($other->id);
-        }
+    protected function hashKey(): ?string
+    {
+        $id = self::sameKey($this->id);
 
-        return $this->id == $other->id;
+        return $id === null ? null : strlen($this->table) . ':' . $this->table . $id;
     }
 
     public function __toString(): string

@@ -24,7 +24,8 @@ final class GeometryTest extends TestCase
     {
         $point = new GeometryPoint(1.0, 2.0);
 
-        $this->assertSame('{ "type": s"Point", "coordinates": [ 1, 2 ] }', $point->escape());
+        // The coordinates stay floats.
+        $this->assertSame('{ "type": s"Point", "coordinates": [ 1.0, 2.0 ] }', $point->escape());
     }
 
     public function testLineGeoJson(): void

@@ -2,13 +2,25 @@
 
 namespace SurrealDB\Auth;
 
+use SurrealDB\Support\Redacted;
+
 /** An access token and optional refresh token pair. */
 final readonly class Tokens
 {
     public function __construct(
+        #[\SensitiveParameter]
         public ?string $access = null,
+        #[\SensitiveParameter]
         public ?string $refresh = null,
     ) {}
+
+    /**
+     * @return array<string, ?string>
+     */
+    public function __debugInfo(): array
+    {
+        return ['access' => Redacted::value($this->access), 'refresh' => Redacted::value($this->refresh)];
+    }
 
     /**
      * @return array<string,mixed>

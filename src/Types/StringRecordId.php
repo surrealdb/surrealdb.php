@@ -28,6 +28,11 @@ final class StringRecordId extends Value
         return $other instanceof self && $this->id === $other->id;
     }
 
+    protected function hashKey(): string
+    {
+        return $this->id;
+    }
+
     public function __toString(): string
     {
         return $this->id;
