@@ -12,6 +12,7 @@ use SurrealDB\SDK\Exceptions\HttpConnectionException;
 use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\SDK\Transport\SessionHeaders;
 use function is_array;
 
 /**
@@ -58,7 +59,7 @@ final class AmpHttpTransport implements TransportInterface
         $ampRequest = new Request($this->state->endpoint->httpUri(), 'POST');
         $ampRequest->setBody($this->context->codec->serialize($request->toWire()));
 
-        foreach ($this->headers($session) as $name => $value) {
+        foreach ($this->headers($session, $request) as $name => $value) {
             $ampRequest->setHeader($name, $value);
         }
 
@@ -82,25 +83,13 @@ final class AmpHttpTransport implements TransportInterface
     /**
      * @return array<string,string>
      */
-    private function headers(SessionState $session): array
+    private function headers(SessionState $session, RpcRequest $request): array
     {
         $headers = [
             'Content-Type' => $this->context->format->contentType(),
             'Accept' => $this->context->format->contentType(),
         ];
 
-        if ($session->namespace !== null) {
-            $headers['Surreal-NS'] = $session->namespace;
-        }
-
-        if ($session->database !== null) {
-            $headers['Surreal-DB'] = $session->database;
-        }
-
-        if ($session->auth->accessToken !== null) {
-            $headers['Authorization'] = 'Bearer ' . $session->auth->accessToken;
-        }
-
-        return $headers;
+        return [...$headers, ...SessionHeaders::forRequest($session, $request)];
     }
 }

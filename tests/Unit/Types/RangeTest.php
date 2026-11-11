@@ -54,4 +54,15 @@ final class RangeTest extends TestCase
         $this->assertTrue($a->equals($b));
         $this->assertFalse($a->equals($c));
     }
+
+    public function testBoundsCompareStrictly(): void
+    {
+        $range = static fn (mixed $begin): Range => new Range(new BoundIncluded($begin), new BoundExcluded(10));
+
+        $this->assertFalse($range(1)->equals($range('1')));
+        $this->assertFalse($range('1e3')->equals($range('1000')));
+        $this->assertFalse($range([null])->equals($range([false])));
+        $this->assertTrue($range(1)->equals($range(1.0)));
+        $this->assertTrue($range(['a' => 1, 'b' => 2])->equals($range(['b' => 2, 'a' => 1])));
+    }
 }

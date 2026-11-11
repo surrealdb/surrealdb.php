@@ -25,6 +25,11 @@ final class File extends Value
         return $other instanceof self && $this->bucket === $other->bucket && $this->key === $other->key;
     }
 
+    protected function hashKey(): string
+    {
+        return strlen($this->bucket) . ':' . $this->bucket . $this->key;
+    }
+
     public function __toString(): string
     {
         return self::escapeInner($this->bucket, true) . ':' . self::escapeInner($this->key, false);

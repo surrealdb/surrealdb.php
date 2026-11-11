@@ -57,10 +57,10 @@ final class HttpTransport implements TransportInterface
             $this->state->endpoint->httpUri(),
             'POST',
             $body,
-            $this->headers($session),
+            $this->headers($session, $request),
         );
 
-        $decoded = $this->context->codec->deserialize((string) $response->getBody());
+        $decoded = $this->context->codec->deserialize(SurrealHttp::body($response));
 
         if (!is_array($decoded)) {
             throw new UnexpectedServerResponseException($decoded);
@@ -72,25 +72,13 @@ final class HttpTransport implements TransportInterface
     /**
      * @return array<string,string>
      */
-    private function headers(SessionState $session): array
+    private function headers(SessionState $session, RpcRequest $request): array
     {
         $headers = [
             'Content-Type' => $this->context->format->contentType(),
             'Accept' => $this->context->format->contentType(),
         ];
 
-        if ($session->namespace !== null) {
-            $headers['Surreal-NS'] = $session->namespace;
-        }
-
-        if ($session->database !== null) {
-            $headers['Surreal-DB'] = $session->database;
-        }
-
-        if ($session->auth->accessToken !== null) {
-            $headers['Authorization'] = 'Bearer ' . $session->auth->accessToken;
-        }
-
-        return $headers;
+        return [...$headers, ...SessionHeaders::forRequest($session, $request)];
     }
 }

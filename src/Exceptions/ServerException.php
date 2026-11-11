@@ -30,19 +30,32 @@ class ServerException extends SurrealException
      */
     public static function fromRpc(RpcError $error): self
     {
-        $kind = $error->kind ?? self::kindFromCode($error->code);
+        return self::create(
+            $error->kind ?? self::kindFromCode($error->code),
+            $error->message,
+            $error->code,
+            $error->details,
+        );
+    }
 
+    /**
+     * Build the most specific exception subclass for the given error kind.
+     *
+     * @param array<string,mixed>|null $details
+     */
+    public static function create(string $kind, string $message, int $code = 0, ?array $details = null): self
+    {
         return match ($kind) {
-            'Validation' => new ValidationException($kind, $error->message, $error->code, $error->details),
-            'Configuration' => new ConfigurationException($kind, $error->message, $error->code, $error->details),
-            'Thrown' => new ThrownException($kind, $error->message, $error->code, $error->details),
-            'Query' => new QueryException($kind, $error->message, $error->code, $error->details),
-            'Serialization' => new SerializationException($kind, $error->message, $error->code, $error->details),
-            'NotAllowed' => new NotAllowedException($kind, $error->message, $error->code, $error->details),
-            'NotFound' => new NotFoundException($kind, $error->message, $error->code, $error->details),
-            'AlreadyExists' => new AlreadyExistsException($kind, $error->message, $error->code, $error->details),
-            'Internal' => new InternalException($kind, $error->message, $error->code, $error->details),
-            default => new self($kind, $error->message, $error->code, $error->details),
+            'Validation' => new ValidationException($kind, $message, $code, $details),
+            'Configuration' => new ConfigurationException($kind, $message, $code, $details),
+            'Thrown' => new ThrownException($kind, $message, $code, $details),
+            'Query' => new QueryException($kind, $message, $code, $details),
+            'Serialization' => new SerializationException($kind, $message, $code, $details),
+            'NotAllowed' => new NotAllowedException($kind, $message, $code, $details),
+            'NotFound' => new NotFoundException($kind, $message, $code, $details),
+            'AlreadyExists' => new AlreadyExistsException($kind, $message, $code, $details),
+            'Internal' => new InternalException($kind, $message, $code, $details),
+            default => new self($kind, $message, $code, $details),
         };
     }
 

@@ -17,6 +17,9 @@ final class FakeDuplexTransport implements DuplexTransportInterface
     /** @var list<array<string,mixed>> */
     public array $sent = [];
 
+    /** How many times a frame was asked for. */
+    public int $receives = 0;
+
     /** @var list<string> */
     private array $inbox = [];
 
@@ -69,6 +72,8 @@ final class FakeDuplexTransport implements DuplexTransportInterface
 
     public function receiveFrame(?float $timeout = null): ?string
     {
+        $this->receives++;
+
         return $this->inbox === [] ? null : array_shift($this->inbox);
     }
 
@@ -90,5 +95,11 @@ final class FakeDuplexTransport implements DuplexTransportInterface
     public function pushIncoming(array $frame): void
     {
         $this->inbox[] = $this->codec->serialize($frame);
+    }
+
+    /** Inject raw bytes as an incoming frame, encoded or not. */
+    public function pushRawIncoming(string $frame): void
+    {
+        $this->inbox[] = $frame;
     }
 }

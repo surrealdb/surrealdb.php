@@ -23,7 +23,9 @@ final class Decimal extends Value
         $this->value = match (true) {
             $value instanceof self => $value->value,
             $value instanceof BigDecimal => $value,
-            is_float($value) => BigDecimal::of(self::floatToString($value)),
+            // The fewest digits that read back as the same float, which
+            // BigDecimal reads in scientific notation as a plain number.
+            is_float($value) => BigDecimal::of(self::shortestFloat($value)),
             default => BigDecimal::of($value),
         };
     }
@@ -86,6 +88,16 @@ final class Decimal extends Value
         return $other instanceof self && $this->value->isEqualTo($other->value);
     }
 
+    /**
+     * Equal decimals differ only in trailing zeros, such as `2.5` and `2.50`.
+     */
+    protected function hashKey(): string
+    {
+        $text = (string) $this->value;
+
+        return str_contains($text, '.') ? rtrim(rtrim($text, '0'), '.') : $text;
+    }
+
     public function __toString(): string
     {
         return (string) $this->value;
@@ -110,14 +122,5 @@ final class Decimal extends Value
     private static function operand(self|BigDecimal|string|int|float $value): BigDecimal
     {
         return $value instanceof self ? $value->value : (new self($value))->value;
-    }
-
-    /**
-     * Convert a float to its shortest round-trippable decimal string, avoiding
-     * the binary-noise that fixed-precision formatting would introduce.
-     */
-    private static function floatToString(float $value): string
-    {
-        return (string) $value;
     }
 }

@@ -48,8 +48,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The oldest supported major, the latest 3.x release, and nightly.
-        version: [v2.6.2, v3.3.4, nightly]
+        # A 2.x, 3.x and 4.x release, one per supported major, and nightly.
+        version: [v2.6.2, v3.3.4, v4.0.0, nightly]
         php_version: ['8.4']
 
     steps:

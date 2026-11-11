@@ -2,6 +2,8 @@
 
 namespace SurrealDB\SDK\Transport\Amp;
 
+use Amp\CancelledException;
+use Amp\TimeoutCancellation;
 use Amp\Websocket\Client\WebsocketHandshake;
 use Amp\Websocket\WebsocketMessage;
 use SurrealDB\SDK\Connection\DriverContext;
@@ -13,6 +15,7 @@ use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 
+use function Amp\async;
 use function Amp\Websocket\Client\connect;
 use function is_array;
 
@@ -25,9 +28,17 @@ final class AmpWebSocketTransport implements DuplexTransportInterface
 {
     private mixed $connection = null;
 
+    /**
+     * @param float $writeTimeout how long a frame may take to write. A server
+     *                            that stops reading would otherwise hold up
+     *                            this write, and every request after it,
+     *                            forever; past it the connection is closed,
+     *                            and reconnects
+     */
     public function __construct(
         private readonly DriverContext $context,
         private readonly Endpoint $endpoint,
+        private readonly float $writeTimeout = 30.0,
     ) {}
 
     public function open(): void
@@ -55,10 +66,19 @@ final class AmpWebSocketTransport implements DuplexTransportInterface
             throw new SurrealException('WebSocket is not connected');
         }
 
-        if ($this->context->format === CodecEnum::JSON) {
-            $this->connection->sendText($payload);
-        } else {
-            $this->connection->sendBinary($payload);
+        $connection = $this->connection;
+        $text = $this->context->format === CodecEnum::JSON;
+        $write = async(static fn () => $text ? $connection->sendText($payload) : $connection->sendBinary($payload));
+
+        try {
+            $write->await(new TimeoutCancellation($this->writeTimeout));
+        } catch (CancelledException) {
+            // Still under way, behind a server that stopped reading: closing
+            // the connection ends it, and nothing can follow it anyway.
+            $write->ignore();
+            $this->close();
+
+            throw new SurrealException("Writing to the WebSocket connection took longer than {$this->writeTimeout} seconds: the server stopped reading it.");
         }
     }
 

@@ -34,81 +34,262 @@
 
 The official SurrealDB SDK for PHP.
 
+> **v2 is a rewrite.** The API below is not compatible with 1.x: the entry point is `SurrealDB\SDK\Surreal`, statements are built with fluent query builders, and authentication and options are typed objects. See [Upgrading from 1.x](#upgrading-from-1x).
+
 ## Documentation
 
 View the SDK documentation [here](https://surrealdb.com/docs/integration/libraries/php).
 
-## How to install
+## Installation
 
-You install the SurrealDB SDK via [Composer](https://getcomposer.org/). If you don't have Composer installed, you can download it [here](https://getcomposer.org/download/).
+v2 is in alpha, so ask Composer for it explicitly (a plain `composer require` installs 1.x):
 
 ```sh
-composer require surrealdb/surrealdb.php
+composer require surrealdb/surrealdb.php:^2.0@alpha
 ```
+
+Requires PHP 8.4 or later. The WebSocket engine needs nothing extra for queries. The HTTP engine, `health()`, `import()` and `export()` on any connection, and OpenTelemetry export need a PSR-18 client and PSR-17 factories (under `Runtime::amp()`, only the factories), found through `php-http/discovery`:
+
+```sh
+composer require guzzlehttp/guzzle php-http/discovery
+```
+
+Without discovery, pass the implementations for the HTTP engine, `health()`, `import()` and `export()` through `DriverOptions` (`httpClient`, `requestFactory`, `streamFactory`). OpenTelemetry export doesn't read those, so it still needs discovery unless you pass your own span and metric exporters to `OtelObservability`.
+
+The SDK supports SurrealDB 2.x, 3.x and 4.x. Sessions, transactions, `api()` and refresh tokens need SurrealDB 3.0, and `gql()` / `graphql()` need 3.2.
 
 ## Getting started
 
-To get started, you need to create a new instance of the SurrealDB HTTP or WebSocket Class.
-
 ```php
-// Make a new instance of the SurrealDB class. Use the ws or wss protocol for having WebSocket functionality.
-$db = new \Surreal\Surreal();
+use SurrealDB\SDK\Auth\RootAuth;
+use SurrealDB\SDK\Connection\ConnectOptions;
+use SurrealDB\SDK\Surreal;
+use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\SDK\Types\Table;
 
-$db->connect("http://localhost:8000", [
-    "namespace" => "test",
-    "database" => "test"
+$db = new Surreal();
+
+// ws:// or wss:// for WebSocket, http:// or https:// for HTTP.
+$db->connect('ws://127.0.0.1:8000/rpc', new ConnectOptions(
+    namespace: 'test',
+    database: 'test',
+    authentication: new RootAuth('root', 'root'),
+));
+
+// Create a record with a specific id.
+$tobie = $db->create(new RecordId('person', 'tobie'))
+    ->content(['name' => 'Tobie', 'marketing' => true])
+    ->execute();
+
+// Select one record, or a whole table.
+$person = $db->select(new RecordId('person', 'tobie'))->execute();
+$people = $db->select(new Table('person'))->where('marketing = true')->limit(10)->execute();
+
+// Update a record.
+$db->update(new RecordId('person', 'tobie'))->merge(['age' => 31])->execute();
+
+// Run raw SurrealQL, with bound parameters. One result per statement.
+[$groups] = $db->run('SELECT marketing, count() FROM type::table($tb) GROUP BY marketing', [
+    'tb' => 'person',
 ]);
+
+$db->close();
 ```
 
-### Basic Querying
+A plain string target is always a **table name**, escaped as an identifier. To target a record, use a `RecordId` (or `StringRecordId` for an id you already have as text, such as `'person:tobie'`); a string is never interpolated into the query.
 
-In the PHP SDK, We have a simple API that allows you to interact with SurrealDB. The following example shows how to interact with the database.
+### Authentication
 
-> The example below requires SurrealDB to be [installed](https://surrealdb.com/install) and running on port 8000.
+Pass credentials in `ConnectOptions::$authentication` to have the SDK sign in, renew tokens before they expire, and sign in again after a reconnect. Or sign in explicitly:
 
 ```php
-// Connect set the specified namespace and database.
-$db = new \Surreal\Surreal();
+use SurrealDB\SDK\Auth\DatabaseAuth;
+use SurrealDB\SDK\Auth\NamespaceAuth;
+use SurrealDB\SDK\Auth\RecordAccessAuth;
 
-$db->connect("http://localhost:8000", [
-    "namespace" => "test",
-    "database" => "test"
-]);
+$tokens = $db->signin(new RecordAccessAuth('test', 'test', 'user', ['email' => $email, 'pass' => $pass]));
+$db->signup(new RecordAccessAuth('test', 'test', 'user', ['email' => $email, 'pass' => $pass]));
+$db->signin(new NamespaceAuth('test', 'admin', 'secret'));
+$db->signin(new DatabaseAuth('test', 'test', 'admin', 'secret'));
 
-// We want to authenticate as a root user.
-$token = $db->signin([
-    "user" => "root",
-    "pass" => "root"
-]);
+$db->authenticate($tokens->access);
+$me = $db->auth()->execute();   // the signed-in record
+$db->invalidate();
+```
 
-// Create a new person in the database with a custom id.
-$person = $db->create("person", [
-    "title" => "Founder & CEO",
-    "name" => [
-        "first" => "Tobie",
-        "last" => "Morgan Hitchcock" 
-    ],
-    "marketing" => true
-]); 
+### Query builders
 
-// Get the person with the name "John Doe".
-$record = \Surreal\Cbor\Types\Record\RecordId::create("person", "john");
-$person = $db->select($record);
+Every builder runs with `execute()`; `compile()` returns the SurrealQL and bindings without running it, and `json()` returns plain JSON-compatible values instead of SurrealDB types. Live queries are the exception: their notifications always carry SurrealDB types.
 
-// Update a person record with a specific id
-$record = \Surreal\Cbor\Types\Record\RecordId::create("person", "john");
-$person = $db->merge($record, ["age" => 31]);
+```php
+use SurrealDB\SDK\Enum\Output;
 
-// Select all people records.
-$people = $db->select("person");  
+$db->select(new Table('person'))->fields('name', 'age')->where('age > 18')->start(20)->limit(10)->fetch('friends')->execute();
+$db->create(new Table('person'))->content(['name' => 'Jaime'])->output(Output::AFTER)->execute();
+$db->update(new Table('person'))->merge(['active' => true])->where('last_seen > time::now() - 1w')->execute();
+$db->upsert(new RecordId('person', 'tobie'))->replace(['name' => 'Tobie'])->execute();
+$db->delete(new RecordId('person', 'tobie'))->execute();
+$db->insert(new Table('person'), [['name' => 'A'], ['name' => 'B']])->ignore()->execute();
+$db->relate(new RecordId('person', 'tobie'), new Table('knows'), new RecordId('person', 'jaime'), ['since' => 2020])->execute();
+$db->run('DEFINE FUNCTION fn::greet($name: string) { RETURN "Hello, " + $name }');
+$db->call('fn::greet', args: ['Tobie'])->execute();   // "Hello, Tobie"
+```
 
-// Perform a custom advanced query.
-$groups = $db->query('SELECT marketing, count() FROM $tb GROUP BY marketing', [
-    "tb" => \Surreal\Cbor\Types\Table::create("person")
-]);
+Each `where()` adds a condition, and a record must meet all of them; earlier 2.0 alphas kept only the last one. Each condition goes in parentheses, so a `--` comment or a `;` in it cannot reach the rest of the statement. An empty array given to `content()`, `merge()` or `replace()` is an empty record. `call()` takes names made of `::`-joined parts (`fn::greet`, `string::len`) and the built-ins `count`, `not`, `rand` and `sleep`, with a `major.minor.patch` version; anything else throws `ExpressionException` before it is sent. A `RecordId` whose id is a `Range` targets every record in the range, and returns a list. A range written as text in a `StringRecordId` is refused, because servers read it in different ways, and so is a range at either end of `relate()`. `output(Output::NONE)` on one record returns `None` on every server version.
 
-// Close the connection between the application and the database.
-$db->close();
+Multi-statement SurrealQL can be streamed, or inspected without throwing on failed statements:
+
+```php
+use SurrealDB\SDK\Query\Frame\DoneFrame;
+use SurrealDB\SDK\Query\Frame\ErrorFrame;
+use SurrealDB\SDK\Query\Frame\ValueFrame;
+
+foreach ($db->statements('SELECT * FROM person; SELECT * FROM post')->stream() as $frame) {
+    if ($frame instanceof ValueFrame) {
+        // $frame->query is the statement index, $frame->value one record
+    } elseif ($frame instanceof ErrorFrame) {
+        // $frame->error; the stream continues with the next statement
+    }
+}
+
+foreach ($db->statements('RETURN 1; THROW "boom"')->responses() as $response) {
+    $response->success ? $response->result : $response->error;
+}
+```
+
+### Data types
+
+SurrealDB values map to classes in `SurrealDB\SDK\Types`: `RecordId`, `RecordIdRange`, `StringRecordId`, `Table`, `Uuid`, `DateTime`, `Duration`, `Decimal`, `Range`, `Set`, `File`, `Bytes`, `Future`, `None` and the `Geometry*` types. They are sent and received as CBOR (the default) and keep their type in both directions, with one exception: a `StringRecordId` comes back as a `RecordId`, because the server never returns the string form. Text must be valid UTF-8, so send binary data as `Bytes`; it comes back as `Bytes` too (earlier 2.0 alphas returned a plain `string`, which `(string) $bytes` still gives). `Set` and `File` need SurrealDB 3.0 or later, and sending one to an older server throws `UnavailableFeatureException`; `File` also needs a server with the experimental files capability enabled. `Future` is only for SurrealDB 2.x, since 3.0 removed futures.
+
+`RecordId::equals()` compares ids the way the server does: `person:1` and `person:'1'` are different records, `person:[1]` and `person:[1.0]` are the same one, and the order of an object id's keys does not count. An object used in a record id, a `Set` or a range bound must be one of the `SurrealDB\SDK\Types` values, a `stdClass` or a `JsonSerializable`; any other object, a `Stringable` included, throws `InvalidValueException` rather than being written into the query as its text. A `Set` keeps `1`, `'1'` and `true` apart. A `Duration` can be longer than 292 years; `totalNanoseconds()` throws past that, so read `$seconds` and `$nanoseconds` instead. `new Decimal($float)` keeps every digit the float holds, and decimal text from the server that is not a number throws `SerializationException`. The credentials classes, `Token`, `Tokens` and the session state show `<redacted>` in `var_dump()` and `print_r()`, so a password or token does not end up in a log.
+
+## Sessions and transactions
+
+On a WebSocket connection, `Surreal` is the default session. Open more sessions on the same connection, each with its own namespace, database, variables and authentication; every builder works on them.
+
+```php
+$session = $db->newSession();               // signed in only by ConnectOptions::$authentication
+$session->use('test', 'other');
+$session->let('tenant', 'acme');
+$session->select(new Table('person'))->execute();
+
+$fork = $db->forkSession();                 // copies ns, db, variables and the access token, e.g. after signin()
+$db->sessions();                            // ids of the attached sessions
+$fork->closeSession();
+```
+
+A fork does not copy the refresh token, which the server lets only one session use. A source whose access token has expired is renewed first, so the fork signs in with the new token. Once the copied access token expires, the fork renews through `ConnectOptions::$authentication` if the source was signed in by it; otherwise sign the fork in again.
+
+`let()` keeps a copy of the value, so changing it afterwards does not change the variable, and refuses the names the server keeps for itself: `access`, `auth`, `token` and `session`.
+
+Interactive transactions run every query made through them until they are committed or cancelled:
+
+```php
+$txn = $db->beginTransaction();             // or $session->beginTransaction()
+
+try {
+    $txn->update(new RecordId('account', 'a'))->merge(['balance' => 50])->execute();
+    $txn->update(new RecordId('account', 'b'))->merge(['balance' => 150])->execute();
+    $txn->commit();
+} catch (\Throwable $error) {
+    // A commit the server rejected (a write conflict, say) has already
+    // ended the transaction.
+    if (!$txn->isFinished()) {
+        $txn->cancel();
+    }
+
+    throw $error;
+}
+```
+
+Transactions need the default CBOR format. Resetting or closing the session, or losing the connection, also ends them; `isFinished()` reports it.
+
+## Live queries
+
+Live queries need a WebSocket connection. Over HTTP, `execute()` throws `UnsupportedFeatureException`.
+
+```php
+use SurrealDB\SDK\Live\LiveAction;
+
+$live = $db->live(new Table('person'))->where('age >= 18')->execute();
+
+// Iteration waits for the next notification, so stop from inside the loop.
+foreach ($live as $message) {
+    match ($message->action) {
+        LiveAction::Create, LiveAction::Update => handle($message->value),
+        LiveAction::Delete => forget($message->record),
+        LiveAction::Killed => null, // the last message
+    };
+
+    if (shouldStop()) {
+        $live->kill();              // ends the iteration
+    }
+}
+```
+
+Live queries the SDK started are re-issued after a reconnect, and iteration carries on across it. `liveOf($id)` attaches to a live query started elsewhere (for example by `LIVE SELECT` in `run()`), and `kill($id)` stops one by id.
+
+A reconnect restarts a live query in the namespace and database it started in, and only as the user who started it. A query whose session is signed in as someone else by then, or signed out, ends instead; so does one whose session the auth provider renews as another user. Reading a subscription that ended because the connection was lost throws `ConnectionUnavailableException`, once what arrived before has been read: when reconnecting gave up or is off, for a `liveOf()` subscription (which a reconnect does not restart), and for a query the server refused to start again. A killed subscription, or one whose connection you closed, ends quietly.
+
+> Earlier 2.0 alphas took a live query id in `live($id)`. That is now `liveOf($id)`: `live()` builds a `LIVE SELECT`, and iterating the builder instead of what `execute()` returns throws.
+
+## Connections
+
+`ConnectOptions::$reconnect` (on by default) reconnects with exponential backoff and restores every session's namespace, database and variables. It restores a session's authentication when it can. It reuses an access token that expires more than a minute from now. Failing that, it uses a refresh token, or, for a session you didn't sign in or out explicitly, signs in again with `ConnectOptions::$authentication`. A session where none of these works comes back signed out, and an `auth` event reports `null`. With `ConnectOptions::$invalidateOnExpiry`, a session is signed out when its token expires instead of renewed, and stays signed out; a reconnect before then still reuses the token. One example is a session signed in explicitly with a token about to expire and no refresh token. Under the default synchronous scheduler the SDK notices a dropped connection when it next uses it. A call that finds the socket dead fails, and the next one runs on the new connection; `status()` checks the socket and reconnects on the spot, so it reports `Connected` once that has worked.
+
+If the auth provider is refused while renewing a session (a fixed token that has expired, or a password that changed), the session keeps its token until it expires, is then signed out, and an `error` event reports it; on a reconnect, it comes back signed out. A refresh token the server refuses is dropped and reported the same way. A WebSocket frame that takes more than 30 seconds to write, because the server stopped reading, closes the connection, which then reconnects; so does a read that fails part way.
+
+Over HTTP the SDK keeps each session's variables and sends them with every query. The namespace and database go in headers, which take printable ASCII only, so `use()` refuses other names over HTTP; a WebSocket takes any. Sign-in requests go without the session's old token, so a session whose token has expired signs in again. Behind a proxy that refuses requests without a token, the version request (sent before signing in) may be refused: the SDK then signs in with `ConnectOptions::$authentication` and asks again.
+
+```php
+$db->connect('wss://example.com/rpc', new ConnectOptions(
+    reconnect: ['attempts' => 10, 'retryDelay' => 0.5, 'retryDelayMax' => 30],
+));
+
+$db->subscribe('reconnecting', fn () => $logger->warning('Reconnecting to SurrealDB'));
+$db->status();          // ConnectionStatus::Connecting, Connected, Reconnecting or Disconnected
+$db->version();
+```
+
+Connection events are also dispatched as PSR-14 events (`SurrealDB\SDK\Events\*`) through `DriverOptions::$events`, and the SDK logs through any PSR-3 logger in `DriverOptions::$logger`.
+
+### Async runtimes
+
+The default runtime is blocking. For long-running workers, use a runtime preset. Each needs its own packages:
+
+```sh
+composer require openswoole/core                     # Runtime::swoole(), plus the openswoole extension
+composer require revolt/event-loop amphp/websocket-client amphp/http-client   # Runtime::amp()
+```
+
+```php
+use SurrealDB\SDK\Runtime\Runtime;
+
+$db = new Surreal(Runtime::swoole());   // inside a coroutine, e.g. Co\run() or an OpenSwoole server
+$db = new Surreal(Runtime::amp());      // inside the Revolt event loop, e.g. FrankenPHP worker mode
+```
+
+These run a background read loop, keepalive pings and token renewal timers. While a lost connection is re-established, calls from other tasks fail with `ConnectionUnavailableException`, until every session is restored on the new socket: signed in, back in its namespace and database, with its variables and live queries. From then on `status()` is `Connected` again, and calls go ahead.
+
+## More
+
+```php
+// User-defined API endpoints (DEFINE API, SurrealDB 3.0+).
+$response = $db->api('/v1')->post('orders', ['item' => 'book'])->execute();   // ApiResponse
+$body = $db->api('/v1')->get('orders/1')->value()->execute();                   // body, throws on non-2xx
+
+// ISO GQL graph queries (SurrealDB 3.3+, or a 3.2 server started with
+// `--allow-experimental gql`).
+$db->gql('MATCH (a:person)-[:knows]->(b:person) WHERE a.name = $name RETURN b.name AS friend', ['name' => 'Tobie']);
+
+// GraphQL over tables with defined fields (SurrealDB 3.2+; needs `DEFINE CONFIG GRAPHQL`).
+$db->graphql('query Person($id: ID!) { person(id: $id) { name } }', ['id' => 'tobie'], 'Person')->dataOrThrow();
+
+// Export SurrealQL, then import it into another, empty database.
+$surql = $db->export();
+$db->run('DEFINE DATABASE IF NOT EXISTS copy');   // strict servers don't create it on use()
+$db->use('test', 'copy');
+$db->import($surql);
 ```
 
 ## Observability
@@ -136,7 +317,7 @@ $db = new Surreal(Runtime::swoole(observability: $observability));
 $db = new Surreal(Runtime::amp(observability: $observability));
 ```
 
-Requires `open-telemetry/sdk` and `open-telemetry/exporter-otlp` (plus `amphp/http-client-psr7` for the Amp runtime).
+Requires `open-telemetry/sdk`, `open-telemetry/exporter-otlp` and discoverable PSR-17 factories (see [Installation](#installation)). The Amp runtime also needs `amphp/http-client-psr7` as its PSR-18 client; the other runtimes need a PSR-18 client from that installation.
 
 ### Flushing after the response in a framework
 
@@ -159,24 +340,53 @@ $db = new Surreal(new DriverOptions(
 app()->terminating(static fn () => $telemetry->forceFlush());
 ```
 
+## Upgrading from 1.x
+
+| 1.x | 2.x |
+| --- | --- |
+| `new \Surreal\Surreal()` | `new \SurrealDB\SDK\Surreal()` |
+| `connect($url, ['namespace' => ..., 'database' => ...])` | `connect($url, new ConnectOptions(namespace: ..., database: ...))` |
+| `signin(['user' => ..., 'pass' => ...])` | `signin(new RootAuth(...))` (or `NamespaceAuth`, `DatabaseAuth`, `RecordAccessAuth`) |
+| `create('person', $data)` | `create(new Table('person'))->content($data)->execute()` |
+| `select($record)` | `select($record)->execute()` |
+| `merge($record, $data)` | `update($record)->merge($data)->execute()` |
+| `query($surql, $vars)` | `run($surql, $vars)` |
+| `RecordId::create('person', 'john')` | `new RecordId('person', 'john')` |
+
 ## Contributing
 
 ### Requirements
 - PHP 8.4 or higher
 - Composer
-- SurrealDB 2.6.2 or higher
+- A SurrealDB server for the integration tests (CI runs v2.6.2, v3.3.4, v4.0.0 and nightly)
 
-### Run static analysis
+### Run static analysis and the code style check
 ```bash
 composer analyse
+composer cs
 ```
 
 ### Run tests
+
+The integration tests connect to `SURREALDB_HTTP_URL` and `SURREALDB_WS_URL` (default `127.0.0.1:8000`, user `root`/`root`) and skip without a server unless `SURREALDB_REQUIRE_LOCAL=1`.
+
+Start a server and leave it running:
+
+```bash
+surreal start --user root --pass root --allow-all memory
+```
+
+Then, in another terminal:
+
 ```bash
 composer test
+composer test:frankenphp   # Amp/Revolt runtime
+composer test:openswoole   # needs the openswoole extension
 ```
 
 ### Directory Structure
 
 - `src` - The source code of the library
-- `tests` - The unit tests of the library
+- `tests/Unit` - Unit tests
+- `tests/Feature` - Integration tests against a real server
+- `tests/Runtime` - Async runtime tests (FrankenPHP/Amp, OpenSwoole)

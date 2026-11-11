@@ -3,13 +3,17 @@
 namespace SurrealDB\SDK\Engines\Remote;
 
 use SurrealDB\SDK\Connection\ConnectionState;
+use SurrealDB\SDK\Contracts\ConnectionProbeInterface;
 use SurrealDB\SDK\Contracts\Deferred;
 use SurrealDB\SDK\Contracts\DuplexTransportInterface;
+use SurrealDB\SDK\Contracts\TimerScheduler;
 use SurrealDB\SDK\Engines\AbstractRpcEngine;
 use SurrealDB\SDK\Events\LiveMessageReceived;
 use SurrealDB\SDK\Exceptions\CallTerminatedException;
+use SurrealDB\SDK\Exceptions\SerializationException;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Live\LiveAction;
+use SurrealDB\SDK\Live\LiveFeed;
 use SurrealDB\SDK\Live\LiveMessage;
 use SurrealDB\SDK\Protocol\FeatureSet;
 use SurrealDB\SDK\Protocol\Features;
@@ -17,6 +21,7 @@ use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Transport\StreamWebSocketClient;
 use SurrealDB\SDK\Transport\WebSocketTransport;
+use function count;
 use function is_array;
 use function is_string;
 
@@ -29,11 +34,19 @@ use function is_string;
  * messages. Under the synchronous scheduler the loop is driven on demand by the
  * awaiting deferred; under an async scheduler it runs as a background task.
  */
-final class WebSocketEngine extends AbstractRpcEngine
+final class WebSocketEngine extends AbstractRpcEngine implements ConnectionProbeInterface
 {
     private ?DuplexTransportInterface $transport = null;
     private bool $active = false;
     private bool $terminated = false;
+
+    /**
+     * Whether the background read loop is running. Under the synchronous
+     * scheduler it never is, so the engine itself reports a lost connection.
+     */
+    private bool $loopRunning = false;
+    /** Incremented on every successful open, identifying the active transport. */
+    private int $generation = 0;
 
     /** @var array<string,Deferred<RpcResponse<mixed>>> */
     private array $calls = [];
@@ -43,14 +56,55 @@ final class WebSocketEngine extends AbstractRpcEngine
 
     private int $liveSubscriberId = 0;
 
+    /** Notifications kept for live queries nobody has subscribed to yet. */
+    private const int MAX_UNCLAIMED_LIVE = 1000;
+
+    /**
+     * Keyed by query id, then by arrival sequence (global FIFO order).
+     *
+     * @var array<string,array<int,LiveMessage<mixed>>>
+     */
+    private array $unclaimedLive = [];
+
+    private int $unclaimedCount = 0;
+
+    /**
+     * Live query ids whose feed was released on this socket (see
+     * {@see LiveFeed::release()}): nobody will claim their later
+     * notifications, the `KILLED` that answers a kill included, so they are
+     * dropped rather than held.
+     *
+     * @var array<string,true>
+     */
+    private array $releasedLive = [];
+
+    /**
+     * Live feeds bound to the current socket, held weakly so a subscription
+     * dropped without kill() can still be destroyed. A new socket does not
+     * carry the old one's live queries, so they end when it is lost.
+     *
+     * @var array<int,\WeakReference<LiveFeed>>
+     */
+    private array $feeds = [];
+
+    private int $unclaimedSequence = 0;
+
+    /** Cancels the next keepalive ping, under a scheduler with cancellable timers. */
+    private ?\Closure $cancelPing = null;
+
     public function features(): FeatureSet
     {
         return new FeatureSet(
             Features::liveQueries(),
+            Features::liveQueryBindings(),
             Features::refreshTokens(),
             Features::sessions(),
             Features::transactions(),
             Features::api(),
+            Features::gql(),
+            Features::graphql(),
+            Features::sets(),
+            Features::files(),
             Features::exportImportRaw(),
             Features::surrealMl(),
         );
@@ -63,12 +117,44 @@ final class WebSocketEngine extends AbstractRpcEngine
         $this->transport = $this->createTransport($state);
 
         // Connect once synchronously so the controller can proceed immediately.
-        $this->connectOnce();
+        $connected = $this->connectOnce();
+        $generation = $this->generation;
 
         // Background read + reconnect loop and keepalive pinger. Both are
         // no-ops under the synchronous scheduler (reads are driven on demand).
+        // They must be spawned before `connected` is announced: the controller
+        // answers it with RPCs (version, session restore) whose replies only
+        // the read loop can deliver under an async scheduler.
         $this->context->scheduler->spawn(fn () => $this->runLoop());
-        $this->context->scheduler->spawn(fn () => $this->runPinger());
+        $this->startPinger();
+
+        // An eager scheduler may already have run the read loop, which can
+        // have lost this socket (and announced its replacement itself).
+        if ($connected && $this->isCurrent($generation)) {
+            $this->announceConnected($generation);
+        }
+    }
+
+    /**
+     * Announce a newly opened socket. The reconnect strategy starts over
+     * only once the session is restored on it: a socket that keeps dropping
+     * half way through still uses up the attempts.
+     */
+    private function announceConnected(int $generation): void
+    {
+        $this->publisher->publish('connected');
+
+        if ($this->isCurrent($generation)) {
+            $this->state?->reconnect->reset();
+        }
+    }
+
+    /**
+     * Whether the socket opened as `$generation` is still the live one.
+     */
+    private function isCurrent(int $generation): bool
+    {
+        return $this->active && !$this->terminated && $this->generation === $generation;
     }
 
     public function close(): void
@@ -79,10 +165,12 @@ final class WebSocketEngine extends AbstractRpcEngine
 
         $this->terminated = true;
         $this->active = false;
+        $this->stopPinger();
         $this->transport?->close();
         $this->transport = null;
         $this->failAllCalls(new CallTerminatedException());
         $this->publisher->publish('disconnected');
+        $this->closeFeeds();
     }
 
     public function ready(): void
@@ -90,49 +178,61 @@ final class WebSocketEngine extends AbstractRpcEngine
         // Calls are dispatched immediately once active; nothing to flush.
     }
 
-    public function liveQuery(string $id): iterable
+    public function probe(): void
     {
-        /** @var list<LiveMessage<mixed>> $queue */
-        $queue = [];
-        /** @var Deferred<bool>|null $waiter */
-        $waiter = null;
+        if (!$this->active || $this->loopRunning || $this->transport?->isConnected() === true) {
+            return;
+        }
 
-        $unsubscribe = $this->subscribeLive($id, function (LiveMessage $message) use (&$queue, &$waiter): void {
-            $queue[] = $message;
+        if ($this->transport === null) {
+            $this->connectionLost();
 
-            if ($waiter instanceof Deferred && $waiter->isPending()) {
-                $pending = $waiter;
-                $waiter = null;
-                $pending->resolve(true);
+            return;
+        }
+
+        // Frames that arrived before the server closed the socket, such as
+        // live notifications, are still dispatched; reading past them finds
+        // the close and reports the loss. The socket is closed, so no read
+        // here waits for more.
+        while ($this->readAndDispatchOnce()) {
+        }
+    }
+
+    /**
+     * Start receiving the notifications for a live query. The feed is
+     * registered immediately, and any notifications that arrived for this id
+     * before anyone subscribed are replayed into it.
+     */
+    public function liveQuery(string $id): LiveFeed
+    {
+        $feed = new LiveFeed(
+            $id,
+            $this->context->scheduler,
+            fn (): bool => $this->readAndDispatchOnce(),
+            fn (): bool => $this->active && !$this->terminated,
+        );
+
+        // Hold the feed weakly so a subscription dropped without kill() is
+        // destroyed, which closes the feed and unsubscribes it.
+        $key = spl_object_id($feed);
+        $weak = \WeakReference::create($feed);
+        $unsubscribe = $this->subscribeLive($id, static function (LiveMessage $message) use ($weak): void {
+            $weak->get()?->push($message);
+        });
+        $this->feeds[$key] = $weak;
+        $feed->onClose(function (bool $released) use ($unsubscribe, $key, $weak, $id): void {
+            $unsubscribe();
+
+            if (($this->feeds[$key] ?? null) === $weak) {
+                unset($this->feeds[$key]);
+            }
+
+            if ($released && !isset($this->liveSubscribers[$id])) {
+                $this->releasedLive[$id] = true;
             }
         });
 
-        try {
-            while (!$this->terminated) {
-                while ($queue !== []) {
-                    yield array_shift($queue);
-                }
-
-                if (!$this->active) {
-                    break;
-                }
-
-                /** @var Deferred<bool> $waiter */
-                $waiter = $this->context->scheduler->defer(fn () => $this->readAndDispatchOnce());
-
-                try {
-                    $waiter->await();
-                } catch (\Throwable) {
-                    break;
-                }
-            }
-
-            while ($queue !== []) {
-                yield array_shift($queue);
-            }
-        } finally {
-            $unsubscribe();
-        }
+        return $feed;
     }
 
     /**
@@ -144,12 +244,23 @@ final class WebSocketEngine extends AbstractRpcEngine
             throw new ConnectionUnavailableException();
         }
 
+        // A value the codec cannot encode is the caller's error, not a lost
+        // connection, so serialize before the transport-failure handling.
+        $payload = $this->context->codec->serialize($request->toWire());
+
         $id = (string) $request->id;
         /** @var Deferred<RpcResponse<mixed>> $deferred */
         $deferred = $this->context->scheduler->defer(fn () => $this->readAndDispatchOnce());
         $this->calls[$id] = $deferred;
 
-        $this->transport->sendFrame($this->context->codec->serialize($request->toWire()));
+        try {
+            $this->transport->sendFrame($payload);
+        } catch (\Throwable $error) {
+            unset($this->calls[$id]);
+            $this->connectionLost();
+
+            throw $error;
+        }
 
         /** @var RpcResponse<mixed> $response */
         $response = $deferred->await();
@@ -172,24 +283,69 @@ final class WebSocketEngine extends AbstractRpcEngine
         return new WebSocketTransport($this->context, $state->endpoint, $client);
     }
 
-    private function connectOnce(): void
+    /**
+     * Open the transport. The caller announces `connected` once something is
+     * able to read the replies to the RPCs that announcement triggers.
+     *
+     * @phpstan-impure
+     */
+    private function connectOnce(): bool
     {
+        if ($this->transport === null) {
+            return false;
+        }
+
+        $transport = $this->transport;
+
         try {
-            $this->transport?->open();
+            $transport->open();
+
+            // Closed while the socket opened, which an async scheduler lets
+            // close() do: it found nothing open to close, so close it here,
+            // or it would stay open (and keep the event loop alive).
+            if ($this->terminated) {
+                $transport->close();
+
+                return false;
+            }
+
             $this->active = true;
-            $this->state?->reconnect->reset();
-            $this->publisher->publish('connected');
+            $this->generation++;
+
+            return true;
         } catch (\Throwable $error) {
             $this->active = false;
             $this->publisher->publish('error', $error);
+
+            return false;
         }
     }
 
     private function runLoop(): void
     {
+        $this->loopRunning = true;
+
+        try {
+            $this->readLoop();
+        } finally {
+            $this->loopRunning = false;
+        }
+    }
+
+    private function readLoop(): void
+    {
         while (!$this->terminated) {
-            if (!$this->active) {
-                $this->connectOnce();
+            // This loop is the only reader, so it cannot itself wait on the
+            // RPCs that restore the session: announce from a separate task.
+            if (!$this->active && $this->connectOnce()) {
+                $generation = $this->generation;
+                $this->context->scheduler->spawn(function () use ($generation): void {
+                    // The socket may have dropped (and a retry begun) before
+                    // this task ran; announcing then would answer a dead link.
+                    if ($this->isCurrent($generation)) {
+                        $this->announceConnected($generation);
+                    }
+                });
             }
 
             while ($this->active && !$this->terminated) {
@@ -204,37 +360,183 @@ final class WebSocketEngine extends AbstractRpcEngine
                 break;
             }
 
-            $this->publisher->publish('reconnecting');
+            // The lost socket's calls fail only once the loss is announced
+            // (see connectionLost()).
+            try {
+                $this->announceReconnecting();
+            } finally {
+                $this->failAllCalls(new CallTerminatedException());
+            }
+
             $this->context->scheduler->delay($reconnect->nextDelay());
 
-            $this->transport = $this->createTransport($this->state);
+            // A listener or another task may have closed the engine meanwhile.
+            if ($this->terminated) {
+                break;
+            }
+
+            $this->replaceTransport();
         }
 
         if (!$this->terminated) {
+            // Nothing reconnects from here: the engine is done, its pinger
+            // included.
+            $this->terminated = true;
             $this->active = false;
-            $this->failAllCalls(new CallTerminatedException());
-            $this->publisher->publish('disconnected');
+            $this->stopPinger();
+            $this->transport?->close();
+            $this->transport = null;
+
+            try {
+                $this->publisher->publish('disconnected');
+            } finally {
+                $this->failAllCalls(new CallTerminatedException());
+                $this->closeFeeds();
+            }
         }
     }
 
-    private function runPinger(): void
+    /**
+     * Announce a reconnect attempt, then end the live feeds of the lost
+     * socket. Announcing first lets managed live subscriptions know to wait
+     * for their replay instead of ending with their feed.
+     */
+    private function announceReconnecting(): void
+    {
+        $this->publisher->publish('reconnecting');
+        $this->closeFeeds();
+    }
+
+    /**
+     * Reconnect without a background loop (synchronous scheduler): retry
+     * with the reconnect strategy's backoff until a socket opens, then
+     * announce `connected` so the controller restores the sessions and
+     * replays managed live queries.
+     *
+     * @phpstan-impure
+     */
+    private function reconnectInline(): bool
+    {
+        $reconnect = $this->state?->reconnect;
+
+        while (!$this->terminated && $this->state !== null && $reconnect !== null && $reconnect->enabled() && $reconnect->allowed()) {
+            $this->announceReconnecting();
+            $this->context->scheduler->delay($reconnect->nextDelay());
+
+            // A `reconnecting` listener may have closed the engine.
+            if ($this->terminated) {
+                return false;
+            }
+
+            $this->transport?->close();
+            $this->replaceTransport();
+
+            if ($this->connectOnce()) {
+                $this->announceConnected($this->generation);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Create the next transport. A factory that throws counts as a failed
+     * attempt, like a socket that does not open, rather than ending the
+     * reconnect loop half way.
+     */
+    private function replaceTransport(): void
+    {
+        try {
+            $this->transport = $this->state === null ? null : $this->createTransport($this->state);
+        } catch (\Throwable $error) {
+            $this->transport = null;
+            $this->publisher->publish('error', $error);
+        }
+    }
+
+    private function closeFeeds(): void
+    {
+        $feeds = $this->feeds;
+        $this->feeds = [];
+        $this->unclaimedLive = [];
+        $this->unclaimedCount = 0;
+        $this->releasedLive = [];
+
+        // Ended rather than closed: what they already received is still
+        // yielded.
+        foreach ($feeds as $weak) {
+            $weak->get()?->end();
+        }
+    }
+
+    /**
+     * Ping every `pingInterval` seconds to keep the connection alive. Under a
+     * scheduler with cancellable timers each ping is a timer, and closing the
+     * engine cancels the next one; otherwise a task sleeps between pings
+     * until the engine closes (a no-op under the synchronous scheduler).
+     */
+    private function startPinger(): void
     {
         $interval = (float) $this->context->options->pingInterval;
+        $scheduler = $this->context->scheduler;
 
         if ($interval <= 0) {
             return;
         }
 
-        while (!$this->terminated) {
-            $this->context->scheduler->delay($interval);
+        if ($scheduler instanceof TimerScheduler) {
+            $this->schedulePing($scheduler, $interval);
 
-            if ($this->active) {
-                try {
-                    $this->dispatch(new RpcRequest('ping'));
-                } catch (\Throwable) {
-                    // Keepalive failures surface through the read loop.
-                }
+            return;
+        }
+
+        $scheduler->spawn(function () use ($scheduler, $interval): void {
+            while (!$this->terminated) {
+                $scheduler->delay($interval);
+                $this->ping();
             }
+        });
+    }
+
+    private function schedulePing(TimerScheduler $scheduler, float $interval): void
+    {
+        $this->cancelPing = $scheduler->after($interval, function () use ($scheduler, $interval): void {
+            $this->cancelPing = null;
+
+            if ($this->terminated) {
+                return;
+            }
+
+            $this->ping();
+
+            if (!$this->terminated) {
+                $this->schedulePing($scheduler, $interval);
+            }
+        });
+    }
+
+    private function stopPinger(): void
+    {
+        $cancel = $this->cancelPing;
+        $this->cancelPing = null;
+
+        if ($cancel !== null) {
+            $cancel();
+        }
+    }
+
+    private function ping(): void
+    {
+        if (!$this->active) {
+            return;
+        }
+
+        try {
+            $this->dispatch(new RpcRequest('ping'));
+        } catch (\Throwable) {
+            // Keepalive failures surface through the read loop.
         }
     }
 
@@ -244,16 +546,46 @@ final class WebSocketEngine extends AbstractRpcEngine
             return false;
         }
 
-        $frame = $this->transport->receiveFrame();
+        $transport = $this->transport;
+
+        try {
+            $frame = $transport->receiveFrame();
+        } catch (\Exception $error) {
+            // The socket failed mid-read rather than at the end of the
+            // stream: closed in the middle of a message, a message over the
+            // client's size limit, a pong that could not be written. It is
+            // lost all the same; left to escape, it ended the read loop
+            // (async) or left the connection reporting itself up (sync). An
+            // \Error is a bug, not the socket, and still escapes.
+            $this->publisher->publish('error', $error);
+
+            try {
+                $transport->close();
+            } catch (\Throwable) {
+                // Already gone.
+            }
+
+            $frame = null;
+        }
 
         if ($frame === null) {
-            $this->active = false;
-            $this->failAllCalls(new CallTerminatedException());
+            $this->connectionLost();
 
             return false;
         }
 
-        $decoded = $this->context->codec->deserialize($frame);
+        try {
+            $decoded = $this->context->codec->deserialize($frame);
+        } catch (SerializationException $error) {
+            // A frame that cannot be read cannot be routed either. Like an
+            // error without an id, it fails the calls still waiting rather
+            // than leave the one it answered waiting forever, and the socket
+            // carries on.
+            $this->failAllCalls($error);
+            $this->publisher->publish('error', $error);
+
+            return true;
+        }
 
         if (is_array($decoded)) {
             $this->handleMessage($decoded);
@@ -277,6 +609,26 @@ final class WebSocketEngine extends AbstractRpcEngine
             return;
         }
 
+        // A request the server could not read is answered without its id
+        // (SurrealDB 2.x and 3.x do this for an unknown CBOR tag or invalid
+        // UTF-8), so nothing says which call it was. Every call still waiting
+        // gets the error, as on a lost connection, rather than one of them
+        // waiting forever. Under the synchronous scheduler that is only ever
+        // the call that sent it.
+        if ($id === null && isset($decoded['error'])) {
+            $response = RpcResponse::fromWire($decoded);
+            $calls = $this->calls;
+            $this->calls = [];
+
+            foreach ($calls as $deferred) {
+                if ($deferred->isPending()) {
+                    $deferred->resolve($response);
+                }
+            }
+
+            return;
+        }
+
         $result = $decoded['result'] ?? null;
 
         if (is_array($result)) {
@@ -284,8 +636,18 @@ final class WebSocketEngine extends AbstractRpcEngine
 
             if ($message !== null) {
                 $this->context->events->dispatch(new LiveMessageReceived($message));
+                $listeners = $this->liveSubscribers[$message->queryId] ?? [];
 
-                foreach ($this->liveSubscribers[$message->queryId] ?? [] as $listener) {
+                if ($listeners === [] && isset($this->releasedLive[$message->queryId])) {
+                    // Nothing follows KILLED, so the id need not be kept.
+                    if ($message->action === LiveAction::Killed) {
+                        unset($this->releasedLive[$message->queryId]);
+                    }
+                } elseif ($listeners === []) {
+                    $this->holdUnclaimed($message);
+                }
+
+                foreach ($listeners as $listener) {
                     $listener($message);
                 }
             }
@@ -319,6 +681,15 @@ final class WebSocketEngine extends AbstractRpcEngine
     {
         $subscriberId = $this->liveSubscriberId++;
         $this->liveSubscribers[$id][$subscriberId] = $listener;
+        unset($this->releasedLive[$id]);
+
+        $held = $this->unclaimedLive[$id] ?? [];
+        unset($this->unclaimedLive[$id]);
+        $this->unclaimedCount -= count($held);
+
+        foreach ($held as $message) {
+            $listener($message);
+        }
 
         return function () use ($id, $subscriberId): void {
             unset($this->liveSubscribers[$id][$subscriberId]);
@@ -327,6 +698,80 @@ final class WebSocketEngine extends AbstractRpcEngine
                 unset($this->liveSubscribers[$id]);
             }
         };
+    }
+
+    /**
+     * The socket closed or failed. When a background loop is running it owns
+     * reconnection, and fails the pending calls itself once it has announced
+     * `reconnecting` or `disconnected`: OpenSwoole resumes a waiting caller
+     * inside fail(), and a caller restoring the session or replaying a live
+     * query must already see the socket as lost, not take the loss for an
+     * error of its own. Otherwise (synchronous scheduler) the pending calls
+     * fail here, the engine reconnects, and if it cannot, the connection is
+     * closed and `disconnected` is published so the controller's status no
+     * longer reports it as connected.
+     */
+    private function connectionLost(): void
+    {
+        $this->active = false;
+
+        if ($this->loopRunning || $this->terminated) {
+            return;
+        }
+
+        $this->failAllCalls(new CallTerminatedException());
+
+        // Also done if a `reconnecting` listener closed the engine.
+        if ($this->reconnectInline() || $this->terminated) {
+            return;
+        }
+
+        $this->terminated = true;
+        $this->stopPinger();
+        $this->transport?->close();
+        $this->transport = null;
+        $this->publisher->publish('disconnected');
+        $this->closeFeeds();
+    }
+
+    /**
+     * Keep a notification nobody has subscribed to yet: a LIVE query's first
+     * notifications can arrive before its caller starts listening.
+     *
+     * @param LiveMessage<mixed> $message
+     */
+    private function holdUnclaimed(LiveMessage $message): void
+    {
+        $this->unclaimedLive[$message->queryId][$this->unclaimedSequence++] = $message;
+        $this->unclaimedCount++;
+
+        // Bound the buffer: drop the globally oldest message (live queries
+        // nobody subscribes to, e.g. ones another client attached to this
+        // session).
+        while ($this->unclaimedCount > self::MAX_UNCLAIMED_LIVE) {
+            $oldest = null;
+            $oldestSequence = PHP_INT_MAX;
+
+            foreach ($this->unclaimedLive as $queryId => $held) {
+                $sequence = array_key_first($held);
+
+                if ($sequence !== null && $sequence < $oldestSequence) {
+                    $oldest = $queryId;
+                    $oldestSequence = $sequence;
+                }
+            }
+
+            if ($oldest === null) {
+                break;
+            }
+
+            unset($this->unclaimedLive[$oldest][$oldestSequence]);
+            $this->unclaimedCount--;
+
+            if ($this->unclaimedLive[$oldest] === []) {
+                unset($this->unclaimedLive[$oldest]);
+            }
+        }
     }
 
     private function failAllCalls(\Throwable $error): void

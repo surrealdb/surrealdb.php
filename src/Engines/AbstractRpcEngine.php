@@ -11,6 +11,8 @@ use SurrealDB\SDK\Contracts\EngineInterface;
 use SurrealDB\SDK\Events\RpcRequestSent;
 use SurrealDB\SDK\Events\RpcResponseReceived;
 use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
+use SurrealDB\SDK\Exceptions\HttpConnectionException;
+use SurrealDB\SDK\Exceptions\ServerException;
 use SurrealDB\SDK\Middleware\LoggingMiddleware;
 use SurrealDB\SDK\Middleware\MiddlewarePipeline;
 use SurrealDB\SDK\Middleware\TelemetryMiddleware;
@@ -24,7 +26,9 @@ use SurrealDB\SDK\Support\Publisher;
 use SurrealDB\SDK\Telemetry\NullMeter;
 use SurrealDB\SDK\Telemetry\NullTracer;
 use SurrealDB\SDK\Transport\HttpClientResolver;
+use SurrealDB\SDK\Transport\SessionHeaders;
 use SurrealDB\SDK\Transport\SurrealHttp;
+use SurrealDB\SDK\Types\Uuid;
 use function is_array;
 use function is_string;
 
@@ -125,7 +129,7 @@ abstract class AbstractRpcEngine implements EngineInterface
         return $this->parseTokens($this->dispatch(new RpcRequest('signin', [$auth], $session)));
     }
 
-    public function authenticate(string $token, ?string $session): void
+    public function authenticate(#[\SensitiveParameter] string $token, ?string $session): void
     {
         $this->dispatch(new RpcRequest('authenticate', [$token], $session));
     }
@@ -167,12 +171,14 @@ abstract class AbstractRpcEngine implements EngineInterface
 
     public function commit(string $txn, ?string $session): void
     {
-        $this->dispatch(new RpcRequest('commit', [$txn], $session));
+        // The server only accepts the id as a UUID value, which JSON cannot
+        // express: committing or cancelling needs the CBOR format.
+        $this->dispatch(new RpcRequest('commit', [Uuid::from($txn)], $session));
     }
 
     public function cancel(string $txn, ?string $session): void
     {
-        $this->dispatch(new RpcRequest('cancel', [$txn], $session));
+        $this->dispatch(new RpcRequest('cancel', [Uuid::from($txn)], $session));
     }
 
     public function query(BoundQuery $query, ?string $session, ?string $txn = null): iterable
@@ -180,6 +186,32 @@ abstract class AbstractRpcEngine implements EngineInterface
         $bindings = $query->bindings !== [] ? $query->bindings : null;
         $responses = $this->dispatch(new RpcRequest('query', [$query->query, $bindings], $session, $txn));
 
+        yield from self::chunks($responses);
+    }
+
+    public function gql(string $query, array $variables, ?string $session, ?string $txn = null): iterable
+    {
+        $params = $variables !== [] ? [$query, $variables] : [$query];
+
+        yield from self::chunks($this->dispatch(new RpcRequest('gql', $params, $session, $txn)));
+    }
+
+    public function graphql(string $query, array $variables, ?string $operation, ?string $session): mixed
+    {
+        $params = [$query, $variables !== [] ? $variables : null];
+
+        if ($operation !== null) {
+            $params[] = $operation;
+        }
+
+        return $this->dispatch(new RpcRequest('graphql', $params, $session));
+    }
+
+    /**
+     * @return \Generator<int, QueryChunk<mixed>>
+     */
+    private static function chunks(mixed $responses): \Generator
+    {
         if (!is_array($responses)) {
             return;
         }
@@ -193,27 +225,83 @@ abstract class AbstractRpcEngine implements EngineInterface
         }
     }
 
+    /**
+     * Run a SurrealQL import through the HTTP `/import` endpoint. The server
+     * reports a failing statement in the response body (with HTTP 422 on 3.x,
+     * and 200 on older servers), so the body is always checked.
+     *
+     * @throws ServerException for the first statement that failed
+     * @throws HttpConnectionException when the import was rejected outright
+     */
     public function importSql(string $data): void
     {
         $state = $this->requireState();
         $url = $state->endpoint->httpUriWithPath($state->endpoint->basePath() . '/import');
 
-        $this->http()->request($url, 'POST', $data, $this->httpHeaders($state->rootSession, accept: 'application/json'));
+        $response = $this->http()->send($url, 'POST', $data, $this->httpHeaders($state->rootSession, accept: 'application/json'));
+        $status = $response->getStatusCode();
+        // Read once: a non-seekable stream would be empty on a second read.
+        $content = SurrealHttp::body($response);
+
+        // SurrealDB 2.x answers a successful import with every statement's
+        // result, records included, and decoding all of that takes several
+        // times its size in memory. A body is only decoded when the server
+        // refused the import or reports a failed statement in it.
+        if ($status >= 200 && $status < 300 && !str_contains($content, '"ERR"')) {
+            return;
+        }
+
+        try {
+            $body = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            $body = null;
+        }
+
+        if (is_array($body) && array_is_list($body)) {
+            // A 2xx body lists every statement's result (SurrealDB 2.x and
+            // 3.0). From 3.1 the 422 lists only the failures, with nothing to
+            // say where in the script they were.
+            $everyStatement = $status >= 200 && $status < 300;
+
+            foreach ($body as $index => $result) {
+                $chunk = is_array($result) ? QueryChunk::fromResult($index, $result) : null;
+
+                if ($chunk?->error !== null) {
+                    $error = $chunk->error;
+                    $where = $everyStatement ? " at statement {$index}" : '';
+
+                    throw ServerException::create(
+                        $error->kind,
+                        "Import failed{$where}: {$error->getMessage()}",
+                        $error->getCode(),
+                        $error->details,
+                    );
+                }
+            }
+        }
+
+        if ($status < 200 || $status >= 300) {
+            $information = is_array($body) ? ($body['information'] ?? $body['description'] ?? null) : null;
+
+            throw SurrealHttp::failure($response, is_string($information) ? $information : null, $content);
+        }
     }
 
     public function exportSql(array $options): string
     {
         $state = $this->requireState();
         $url = $state->endpoint->httpUriWithPath($state->endpoint->basePath() . '/export');
-        $body = $this->context->codec->serialize($options !== [] ? $options : null);
+        // The options are always sent as a JSON object: SurrealDB 3.x rejects a
+        // null body, and an empty PHP array would encode as a CBOR array.
+        $body = json_encode($options === [] ? new \stdClass() : $options, JSON_THROW_ON_ERROR);
 
         $response = $this->http()->request($url, 'POST', $body, $this->httpHeaders(
             $state->rootSession,
-            contentType: $this->context->format->contentType(),
+            contentType: 'application/json',
             accept: 'text/plain',
         ));
 
-        return (string) $response->getBody();
+        return SurrealHttp::body($response);
     }
 
     // ----------------------------------------------------------------- //
@@ -278,19 +366,7 @@ abstract class AbstractRpcEngine implements EngineInterface
             $headers['Content-Type'] = $contentType;
         }
 
-        if ($session->namespace !== null) {
-            $headers['Surreal-NS'] = $session->namespace;
-        }
-
-        if ($session->database !== null) {
-            $headers['Surreal-DB'] = $session->database;
-        }
-
-        if ($session->auth->accessToken !== null) {
-            $headers['Authorization'] = 'Bearer ' . $session->auth->accessToken;
-        }
-
-        return $headers;
+        return [...$headers, ...SessionHeaders::of($session)];
     }
 
     protected function http(): SurrealHttp

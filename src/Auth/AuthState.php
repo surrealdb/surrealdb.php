@@ -2,19 +2,46 @@
 
 namespace SurrealDB\SDK\Auth;
 
+use SurrealDB\SDK\Support\Redacted;
+
 /**
  * Mutable per-session authentication state owned by the connection controller.
  *
- * `overridden` marks that an explicit signin/signup/authenticate took place,
- * in which case a configured auth provider must not silently take over.
+ * `overridden` marks that an explicit signin/signup/authenticate, or an
+ * explicit sign-out (invalidate/reset), took place, in which case a configured
+ * auth provider must not silently take over.
+ * `generation` counts explicit changes (sign-in, sign-out, reset), so that a
+ * renewal running meanwhile can tell it was overtaken; `pending` counts those
+ * still waiting on the server, during which renewals hold off.
  */
 final class AuthState
 {
+    public int $generation = 0;
+
+    /** Explicit requests in flight, whose outcome is about to replace these credentials. */
+    public int $pending = 0;
+
     public function __construct(
+        #[\SensitiveParameter]
         public ?string $accessToken = null,
+        #[\SensitiveParameter]
         public ?string $refreshToken = null,
         public bool $overridden = false,
     ) {}
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        return [
+            'accessToken' => Redacted::value($this->accessToken),
+            'refreshToken' => Redacted::value($this->refreshToken),
+            'overridden' => $this->overridden,
+            'generation' => $this->generation,
+            'pending' => $this->pending,
+        ];
+    }
 
     public function tokens(): ?Tokens
     {

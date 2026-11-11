@@ -12,8 +12,10 @@ use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Rpc\RpcResponse;
 use SurrealDB\SDK\Transport\HttpTransport;
+use SurrealDB\SDK\Transport\SessionHeaders;
 use function in_array;
 use function is_array;
+use function is_string;
 
 /**
  * An engine that issues each RPC as an individual HTTP request. Stateful
@@ -33,6 +35,10 @@ final class HttpEngine extends AbstractRpcEngine
         return new FeatureSet(
             Features::refreshTokens(),
             Features::api(),
+            Features::gql(),
+            Features::graphql(),
+            Features::sets(),
+            Features::files(),
             Features::exportImportRaw(),
             Features::surrealMl(),
         );
@@ -77,6 +83,14 @@ final class HttpEngine extends AbstractRpcEngine
         switch ($request->method) {
             case 'use':
                 if (!$this->isEmptyUse($request->params)) {
+                    // Refused here, before the selection is kept: every
+                    // request after would carry it.
+                    foreach (['namespace', 'database'] as $index => $what) {
+                        if (is_string($request->params[$index] ?? null)) {
+                            SessionHeaders::carriable($what, $request->params[$index]);
+                        }
+                    }
+
                     return new RpcResponse($request->id);
                 }
 
@@ -96,12 +110,23 @@ final class HttpEngine extends AbstractRpcEngine
             throw new MissingNamespaceDatabaseException();
         }
 
+        // HTTP has no server-side session, so the variables `let()` kept
+        // locally go along with each query; explicit ones win.
         if ($request->method === 'query') {
             $params = $request->params;
             $bindings = is_array($params[1] ?? null) ? $params[1] : [];
             $mergedBindings = [...$session->variables, ...$bindings];
             $params[1] = $mergedBindings !== [] ? $mergedBindings : null;
             $request = $request->withParams($params);
+        } elseif ($request->method === 'gql') {
+            $params = $request->params;
+            $variables = is_array($params[1] ?? null) ? $params[1] : [];
+            $merged = [...$session->variables, ...$variables];
+
+            if ($merged !== []) {
+                $params[1] = $merged;
+                $request = $request->withParams($params);
+            }
         }
 
         return $this->transport->send($request);
