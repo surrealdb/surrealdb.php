@@ -108,6 +108,15 @@ final class ConnectionController
      */
     private int $connectionEpoch = 0;
 
+    /**
+     * The tasks restoring the sessions on a socket: {@see self::onConnected()}
+     * and whatever it calls. While the connection is not `Connected`, only
+     * they may use it; see {@see self::assertRestored()}.
+     *
+     * @var list<object|int|null>
+     */
+    private array $restoring = [];
+
     /** How long to wait before retrying a renewal that failed. */
     private const RENEWAL_RETRY_SECONDS = 5;
 
@@ -293,6 +302,7 @@ final class ConnectionController
 
     public function use(?NamespaceDatabase $what, ?string $session = null): NamespaceDatabase
     {
+        $this->assertRestored();
         $sessionState = $this->requireSession($session);
         $this->renewIfDue($session);
         $result = $this->requireEngine()->use($what, $session);
@@ -318,6 +328,8 @@ final class ConnectionController
      */
     public function signin(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        $this->assertRestored($skipOverride);
+
         // A record access sign-in with a refresh token exchanges it for a new
         // pair. A server without refresh tokens reads it as one more variable
         // of the SIGNIN query, and refuses it with an unrelated error.
@@ -345,6 +357,7 @@ final class ConnectionController
      */
     public function signup(array $auth, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        $this->assertRestored($skipOverride);
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
         $tokens = $this->sendAuth($sessionState, $skipOverride, fn (): Tokens => $this->requireEngine()->signup($auth, $session));
@@ -362,6 +375,7 @@ final class ConnectionController
 
     public function authenticate(#[\SensitiveParameter] string $token, ?string $session = null, bool $skipOverride = false): void
     {
+        $this->assertRestored($skipOverride);
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
         $this->sendAuth($sessionState, $skipOverride, fn () => $this->requireEngine()->authenticate($token, $session));
@@ -385,6 +399,7 @@ final class ConnectionController
 
     public function refresh(Tokens $tokens, ?string $session = null, bool $skipOverride = false): Tokens
     {
+        $this->assertRestored($skipOverride);
         $this->assertFeature(Features::refreshTokens());
         $sessionState = $this->requireSession($session);
         $generation = $this->beginAuthChange($sessionState, $skipOverride);
@@ -403,6 +418,7 @@ final class ConnectionController
 
     public function revoke(Tokens $tokens, ?string $session = null): void
     {
+        $this->assertRestored();
         $this->assertFeature(Features::refreshTokens());
         $sessionState = $this->requireSession($session);
         $this->requireEngine()->revoke($tokens, $session);
@@ -417,6 +433,7 @@ final class ConnectionController
 
     public function set(string $name, mixed $value, ?string $session = null): void
     {
+        $this->assertRestored();
         $sessionState = $this->requireSession($session);
 
         // The server refuses these over a WebSocket. HTTP keeps variables
@@ -437,6 +454,7 @@ final class ConnectionController
 
     public function unset(string $name, ?string $session = null): void
     {
+        $this->assertRestored();
         $sessionState = $this->requireSession($session);
         $this->renewIfDue($session);
         $this->requireEngine()->unset($name, $session);
@@ -450,6 +468,16 @@ final class ConnectionController
      * on a renewal, after which the provider may still sign in again.
      */
     public function invalidate(?string $session = null, bool $skipOverride = false): void
+    {
+        $this->assertRestored();
+        $this->signOut($session, $skipOverride);
+    }
+
+    /**
+     * {@see self::invalidate()}, also for the SDK itself: giving up on a
+     * renewal is not held back while the connection is being restored.
+     */
+    private function signOut(?string $session, bool $skipOverride): void
     {
         $sessionState = $this->requireSession($session);
         $this->beginAuthChange($sessionState, false);
@@ -465,6 +493,7 @@ final class ConnectionController
      */
     public function reset(?string $session = null): void
     {
+        $this->assertRestored();
         $sessionState = $this->requireSession($session);
         $this->beginAuthChange($sessionState, false);
         $this->sendAuth($sessionState, false, fn () => $this->requireEngine()->reset($session));
@@ -485,6 +514,7 @@ final class ConnectionController
 
     public function begin(?string $session = null): string
     {
+        $this->assertRestored();
         $this->assertFeature(Features::transactions());
         $this->renewIfDue($session);
 
@@ -512,6 +542,7 @@ final class ConnectionController
 
     public function commit(string $txn, ?string $session = null): void
     {
+        $this->assertRestored();
         $this->assertFeature(Features::transactions());
         $this->renewIfDue($session);
         $this->endTransaction($txn, $session, fn () => $this->requireEngine()->commit($txn, $session));
@@ -519,6 +550,7 @@ final class ConnectionController
 
     public function cancel(string $txn, ?string $session = null): void
     {
+        $this->assertRestored();
         $this->assertFeature(Features::transactions());
         $this->renewIfDue($session);
         $this->endTransaction($txn, $session, fn () => $this->requireEngine()->cancel($txn, $session));
@@ -544,6 +576,8 @@ final class ConnectionController
      */
     public function query(BoundQuery $query, ?string $session = null, ?string $txn = null): iterable
     {
+        $this->assertRestored();
+
         // A closed session's handle fails here rather than on the server.
         $this->requireSession($session);
         $this->assertSendable($query->bindings);
@@ -559,6 +593,7 @@ final class ConnectionController
      */
     public function gql(string $query, array $variables = [], ?string $session = null, ?string $txn = null): iterable
     {
+        $this->assertRestored();
         $this->assertFeature(Features::gql());
         $this->requireSession($session);
         $this->renewIfDue($session);
@@ -571,6 +606,7 @@ final class ConnectionController
      */
     public function graphql(string $query, array $variables = [], ?string $operation = null, ?string $session = null): mixed
     {
+        $this->assertRestored();
         $this->assertFeature(Features::graphql());
         $this->requireSession($session);
         $this->renewIfDue($session);
@@ -602,6 +638,7 @@ final class ConnectionController
      */
     public function sessions(): array
     {
+        $this->assertRestored();
         $this->assertFeature(Features::sessions());
 
         $this->renewIfDue(null);
@@ -611,6 +648,8 @@ final class ConnectionController
 
     public function createSession(?string $clone = null): string
     {
+        $this->assertRestored();
+
         return $clone === null ? $this->attachSession(null) : $this->forkSession($clone);
     }
 
@@ -625,6 +664,7 @@ final class ConnectionController
      */
     public function forkSession(?string $source): string
     {
+        $this->assertRestored();
         $sourceState = $this->requireSession($source);
 
         // The fork signs in with the source's access token. One due for
@@ -660,6 +700,7 @@ final class ConnectionController
 
     public function destroySession(?string $session): void
     {
+        $this->assertRestored();
         $state = $this->requireState();
 
         if ($session === null || !isset($state->sessions[$session])) {
@@ -682,6 +723,11 @@ final class ConnectionController
 
         // A connection that was up before: restoring it must not undo it.
         $reconnect = $this->status === ConnectionStatus::Reconnecting;
+
+        // Until the sessions are restored, only this task may use the
+        // connection: see assertRestored().
+        $task = self::currentTask();
+        $this->restoring[] = $task;
 
         try {
             $version = $this->askVersion();
@@ -709,11 +755,21 @@ final class ConnectionController
             // Before announcing the connection, so a listener that writes in
             // response already has the live queries listening. If this socket
             // was lost meanwhile, the next one announces itself instead.
-            if (!$this->replayLiveQueries()) {
+            $replayed = $this->replayLiveQueries($epoch);
+
+            if ($replayed === null) {
                 return;
             }
 
+            // Every session is as it was, so from here other tasks' calls go
+            // ahead. Before the live queries' consumers resume: one may make
+            // a call straight away (OpenSwoole).
             $this->status = ConnectionStatus::Connected;
+
+            if (!$this->resumeLiveQueries($replayed, $epoch)) {
+                return;
+            }
+
             $this->events->publish('connected', $version ?? '');
             $this->context->events->dispatch(new Connected($version ?? ''));
         } catch (\Throwable $error) {
@@ -726,6 +782,13 @@ final class ConnectionController
 
             $this->onError($error);
             $this->engine?->close();
+        } finally {
+            $index = array_search($task, $this->restoring, true);
+
+            if ($index !== false) {
+                unset($this->restoring[$index]);
+                $this->restoring = array_values($this->restoring);
+            }
         }
     }
 
@@ -765,11 +828,20 @@ final class ConnectionController
      * Re-issue managed live queries on a new socket, once their sessions are
      * restored. A subscription whose query fails ends; the others carry on.
      *
-     * @return bool false if the socket was lost while replaying
+     * @param int $epoch the socket being restored, as {@see self::onConnected()}
+     *                   found it: read again here, a socket lost since (with
+     *                   no request waiting on it) would pass for the current one
+     *
+     * @return list<\WeakReference<ManagedLiveSubscription>>|null the subscriptions
+     *                   replayed, for {@see self::resumeLiveQueries()}; null
+     *                   if the socket was lost
      */
-    private function replayLiveQueries(): bool
+    private function replayLiveQueries(int $epoch): ?array
     {
-        $epoch = $this->connectionEpoch;
+        if (!$this->isCurrentConnection($epoch)) {
+            return null;
+        }
+
         $subscriptions = [];
         $replayed = [];
 
@@ -834,7 +906,7 @@ final class ConnectionController
                 // The new socket was lost too: the subscriptions stay
                 // tracked and waiting, for the next connection to replay.
                 if ($this->connectionEpoch !== $epoch) {
-                    return false;
+                    return null;
                 }
 
                 unset($this->managedLive[$subscription]);
@@ -846,7 +918,7 @@ final class ConnectionController
 
                 // An error listener closed the connection.
                 if (!$this->isCurrentConnection($epoch)) {
-                    return false;
+                    return null;
                 }
 
                 continue;
@@ -870,15 +942,28 @@ final class ConnectionController
 
                 // That lost the socket: the next one replays the rest.
                 if (!$this->isCurrentConnection($epoch)) {
-                    return false;
+                    return null;
                 }
             }
         }
 
-        // Only now, so a consumer that writes as soon as it resumes does not
-        // miss a change a query still being replayed would have caught.
         unset($subscription);
 
+        return $this->isCurrentConnection($epoch) ? $replayed : null;
+    }
+
+    /**
+     * Let the consumers of the replayed live queries carry on. Only once
+     * every query is replayed, so a consumer that writes as soon as it
+     * resumes does not miss a change a query still being replayed would
+     * have caught.
+     *
+     * @param list<\WeakReference<ManagedLiveSubscription>> $replayed
+     *
+     * @return bool false if the socket was lost while resuming
+     */
+    private function resumeLiveQueries(array $replayed, int $epoch): bool
+    {
         foreach ($replayed as $weak) {
             // A resumed consumer can run straight away (OpenSwoole) and lose
             // this socket too: the rest then wait for the next replay.
@@ -1184,6 +1269,16 @@ final class ConnectionController
         $at = $this->renewalDeadline($key);
 
         if ($at === null || time() < $at) {
+            return;
+        }
+
+        // The socket is down, or its sessions are still being restored, which
+        // signs each of them in again: a renewal of its own would run against
+        // a session that is not attached or signed in there yet. Check again
+        // shortly, in case the restore left this token to renew.
+        if ($this->status !== ConnectionStatus::Connected && !$this->isRestoring()) {
+            $this->checkRenewalAt($session, time() + self::RENEWAL_RETRY_SECONDS);
+
             return;
         }
 
@@ -1569,7 +1664,7 @@ final class ConnectionController
         // out for good: the auth provider does not sign it back in. Otherwise
         // the provider may still, once it has new credentials.
         if ($sessionState?->auth->accessToken !== null) {
-            $this->invalidate($session, !$this->skipRenewal);
+            $this->signOut($session, !$this->skipRenewal);
         }
     }
 
@@ -1789,6 +1884,41 @@ final class ConnectionController
     private function requireEngine(): EngineInterface
     {
         return $this->engine ?? throw new ConnectionUnavailableException();
+    }
+
+    /**
+     * Refuse a call from the application while the connection is not
+     * `Connected`. A new socket takes requests as soon as it opens, before
+     * its sessions are signed in again, back in their namespace and database
+     * and given their variables; and replaying a live query puts its session
+     * back in the database the query started in for a moment. Under an async
+     * scheduler another task's call would run against that: with a variable
+     * still NONE, or in the other database.
+     *
+     * The task restoring the sessions goes ahead, an auth provider that
+     * queries included.
+     *
+     * @param bool $internal the SDK's own request (a renewal or a restore
+     *                       signing in), which is not held back
+     *
+     * @throws ConnectionUnavailableException
+     */
+    private function assertRestored(bool $internal = false): void
+    {
+        // Without a connection at all, the checks that follow say so.
+        if ($internal || $this->status === ConnectionStatus::Connected || $this->engine === null || $this->isRestoring()) {
+            return;
+        }
+
+        throw new ConnectionUnavailableException();
+    }
+
+    /**
+     * Whether the current task is restoring the sessions on a socket.
+     */
+    private function isRestoring(): bool
+    {
+        return in_array(self::currentTask(), $this->restoring, true);
     }
 
     private function requireState(): ConnectionState

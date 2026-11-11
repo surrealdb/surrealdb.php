@@ -13,6 +13,7 @@ use SurrealDB\SDK\Connection\ConnectionStatus;
 use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverContext;
 use SurrealDB\SDK\Contracts\MiddlewareInterface;
+use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
 use SurrealDB\SDK\Exceptions\SurrealException;
 use SurrealDB\SDK\Protocol\Features;
 use SurrealDB\SDK\Rpc\RpcRequest;
@@ -22,6 +23,7 @@ use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Transport\Amp\AmpWebSocketTransport;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\Table;
+use SurrealDB\Tests\Fakes\BeforeRequest;
 
 /**
  * Drives the WebSocket engine on the Revolt event loop against a real
@@ -134,6 +136,318 @@ final class AmpWebSocketEngineTest extends TestCase
         $this->assertSame(2, $result[0]);
         $this->assertSame(ConnectionStatus::Connected, $result[1]);
         $this->assertSame(['hello'], $result[2]);
+    }
+
+    public function testACallFromAnotherTaskDoesNotRunOnASessionStillBeingRestored(): void
+    {
+        $result = $this->inLoop(function (): array {
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            /** @var (\Closure(): void)|null $other */
+            $other = null;
+
+            // The restore on the new socket is held just before it sets the
+            // session's variable again, while another task makes a call.
+            $options = Runtime::amp();
+            $options->middleware = [new BeforeRequest(function (RpcRequest $request) use (&$transports, &$other): void {
+                if ($request->method === 'let' && count($transports) === 2 && $other !== null) {
+                    EventLoop::queue($other);
+                    $other = null;
+                    $this->delay(0.05);
+                }
+            })];
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+            $namespace = 'amp_restore_' . bin2hex(random_bytes(4));
+            $connected = 0;
+            $db->subscribe('connected', static function () use (&$connected): void {
+                $connected++;
+            });
+
+            try {
+                $db->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db;");
+                $db->use($namespace, 'db');
+                $db->let('greeting', 'hello');
+                $seen = [];
+                $other = static function () use ($db, &$seen): void {
+                    try {
+                        $seen[] = $db->run('RETURN $greeting')[0];
+                    } catch (\Throwable $error) {
+                        $seen[] = $error::class;
+                    }
+                };
+
+                $transports[0]->close();
+                $this->waitFor(static function () use (&$connected): bool {
+                    return $connected === 1;
+                });
+
+                return [$seen, $db->run('RETURN $greeting')];
+            } finally {
+                $db->close();
+            }
+        });
+
+        // Refused, rather than answered with NONE: what the variable is on
+        // the new socket until the restore sets it.
+        $this->assertSame([[ConnectionUnavailableException::class], ['hello']], $result);
+    }
+
+    public function testACallFromAnotherTaskDoesNotRunWhereALiveQueryIsBeingReplayed(): void
+    {
+        $result = $this->inLoop(function (): array {
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            /** @var (\Closure(): void)|null $other */
+            $other = null;
+
+            // The replay of the live query, for which the session is back in
+            // the database the query started in, is held while another task
+            // writes.
+            $options = Runtime::amp();
+            $options->middleware = [new BeforeRequest(function (RpcRequest $request) use (&$transports, &$other): void {
+                $replay = $request->method === 'query' && str_starts_with((string) ($request->params[0] ?? ''), 'LIVE SELECT');
+
+                if ($replay && count($transports) === 2 && $other !== null) {
+                    EventLoop::queue($other);
+                    $other = null;
+                    $this->delay(0.05);
+                }
+            })];
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+            $namespace = 'amp_replay_' . bin2hex(random_bytes(4));
+            $connected = 0;
+            $db->subscribe('connected', static function () use (&$connected): void {
+                $connected++;
+            });
+
+            try {
+                $db->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db_started; DEFINE DATABASE db_current;");
+                $db->use($namespace, 'db_started');
+                $db->run('DEFINE TABLE feed SCHEMALESS; DEFINE TABLE note SCHEMALESS;');
+                $live = $db->live(new Table('feed'))->execute();
+
+                // The session has since moved to another database.
+                $db->use($namespace, 'db_current');
+                $db->run('DEFINE TABLE note SCHEMALESS');
+                $outcome = null;
+                $other = static function () use ($db, &$outcome): void {
+                    try {
+                        $db->create(new Table('note'))->content(['text' => 'hello'])->execute();
+                        $outcome = 'written';
+                    } catch (\Throwable $error) {
+                        $outcome = $error::class;
+                    }
+                };
+
+                $transports[0]->close();
+                $this->waitFor(static function () use (&$connected): bool {
+                    return $connected === 1;
+                });
+
+                $current = $db->run('SELECT VALUE text FROM note')[0];
+                $db->use($namespace, 'db_started');
+
+                return [$outcome, $current, $db->run('SELECT VALUE text FROM note')[0], $live->isAlive()];
+            } finally {
+                $db->close();
+            }
+        });
+
+        // Refused, rather than written to the database the live query
+        // started in.
+        $this->assertSame([ConnectionUnavailableException::class, [], [], true], $result);
+    }
+
+    public function testASocketLostBetweenTwoRestoreRequestsIsNotTakenForConnected(): void
+    {
+        $result = $this->inLoop(function (): array {
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $options = Runtime::amp();
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db);
+            $namespace = 'amp_between_' . bin2hex(random_bytes(4));
+            $connected = [];
+            $db->subscribe('connected', static function () use (&$connected, &$transports): void {
+                $connected[] = count($transports);
+            });
+
+            try {
+                $db->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace}; DEFINE DATABASE db;");
+                $db->use($namespace, 'db');
+                $lost = false;
+
+                // The first replacement socket is lost once its restore has
+                // selected the database again: no request is waiting on it,
+                // so nothing fails, and the restore runs on to its end.
+                $db->subscribe('using', function () use (&$transports, &$lost): void {
+                    if (count($transports) === 2 && !$lost) {
+                        $transports[1]->close();
+                        $this->delay(0.03);
+                        $lost = true;
+                    }
+                });
+
+                $transports[0]->close();
+                $this->waitFor(static function () use (&$lost): bool {
+                    return $lost;
+                });
+
+                // That restore is over by now, and the next socket (0.2 s
+                // after the loss) is not open yet.
+                $this->delay(0.02);
+                $meanwhile = $db->status();
+
+                $this->waitFor(static function () use (&$transports, $db): bool {
+                    return count($transports) === 3 && $db->status() === ConnectionStatus::Connected;
+                });
+
+                return [$meanwhile, $connected, $db->run('RETURN session::db()')];
+            } finally {
+                $db->close();
+            }
+        });
+
+        // Connected, and announced, only by the socket that took its place.
+        $this->assertSame([ConnectionStatus::Reconnecting, [3], ['db']], $result);
+    }
+
+    public function testAnAuthProviderMayQueryWhileItsSessionIsRestored(): void
+    {
+        $result = $this->inLoop(function (): array {
+            $user = 'asking_' . bin2hex(random_bytes(4));
+            $setup = new Surreal(Runtime::amp());
+            $this->connect($setup);
+
+            try {
+                // A token too close to its expiry for a reconnect to reuse,
+                // so the new socket signs in with the provider again.
+                $setup->run("DEFINE USER {$user} ON ROOT PASSWORD 'secret' ROLES OWNER DURATION FOR TOKEN 30s, FOR SESSION 1h");
+            } finally {
+                $setup->close();
+            }
+
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $options = Runtime::amp();
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $asked = [];
+
+            // A provider that looks something up over the connection it is
+            // signing in, noting which socket that was.
+            $provider = static function () use ($db, &$transports, &$asked, $user): RootAuth {
+                try {
+                    $db->run('RETURN 1');
+                    $asked[] = [count($transports), 'answered'];
+                } catch (\Throwable $error) {
+                    $asked[] = [count($transports), $error::class];
+                }
+
+                return new RootAuth($user, 'secret');
+            };
+
+            $this->connect($db, $provider);
+            $connected = 0;
+            $db->subscribe('connected', static function () use (&$connected): void {
+                $connected++;
+            });
+
+            try {
+                $transports[0]->close();
+                $this->waitFor(static function () use (&$connected): bool {
+                    return $connected === 1;
+                });
+
+                return [$asked, $db->run('RETURN 2')];
+            } finally {
+                $db->close();
+            }
+        });
+
+        [$asked, $after] = $result;
+        $this->assertSame([1, 'answered'], $asked[0], 'while connecting');
+        $this->assertContains([2, 'answered'], $asked, 'while restoring the session on the new socket');
+        $this->assertSame([2], $after);
+    }
+
+    public function testATokenIsNotRenewedOnASocketStillBeingRestored(): void
+    {
+        $during = $this->inLoop(function (): array {
+            $namespace = 'amp_renew_' . bin2hex(random_bytes(4));
+            $setup = new Surreal(Runtime::amp());
+            $this->connect($setup);
+
+            try {
+                // Renewal is due 60 seconds before expiry: about a second in.
+                $setup->run("DEFINE NAMESPACE {$namespace}; USE NS {$namespace};"
+                    . " DEFINE USER renew ON NAMESPACE PASSWORD 'secret' ROLES EDITOR DURATION FOR TOKEN 61s, FOR SESSION 1h");
+            } finally {
+                $setup->close();
+            }
+
+            /** @var list<AmpWebSocketTransport> $transports */
+            $transports = [];
+            $hold = true;
+            $held = false;
+            $during = [];
+
+            // The restore on the new socket has signed the session in, and is
+            // held until after that token falls due for renewal.
+            $options = Runtime::amp();
+            $options->middleware = [new BeforeRequest(function (RpcRequest $request) use (&$transports, &$hold, &$held, &$during): void {
+                if ($held) {
+                    $during[] = $request->method;
+                } elseif ($hold && $request->method === 'let' && count($transports) === 2) {
+                    $hold = false;
+                    $held = true;
+                    $this->delay(1.6);
+                    $held = false;
+                }
+            })];
+            $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports): AmpWebSocketTransport {
+                return $transports[] = new AmpWebSocketTransport($context, $state->endpoint);
+            };
+
+            $db = new Surreal($options);
+            $this->connect($db, static fn (): NamespaceAuth => new NamespaceAuth($namespace, 'renew', 'secret'));
+            $connected = 0;
+            $db->subscribe('connected', static function () use (&$connected): void {
+                $connected++;
+            });
+
+            try {
+                $db->let('greeting', 'hello');
+                $transports[0]->close();
+                $this->waitFor(static function () use (&$connected): bool {
+                    return $connected === 1;
+                });
+
+                return $during;
+            } finally {
+                $db->close();
+            }
+        });
+
+        // No sign-in of the renewal timer's went out meanwhile.
+        $this->assertSame([], $during);
     }
 
     public function testManagedLiveIterationSurvivesAReconnect(): void

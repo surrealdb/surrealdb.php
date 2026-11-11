@@ -10,10 +10,14 @@ use SurrealDB\SDK\Connection\ConnectOptions;
 use SurrealDB\SDK\Connection\DriverContext;
 use SurrealDB\SDK\Connection\DriverOptions;
 use SurrealDB\SDK\Contracts\DuplexTransportInterface;
+use SurrealDB\SDK\Contracts\MiddlewareInterface;
+use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
+use SurrealDB\SDK\Rpc\RpcRequest;
 use SurrealDB\SDK\Runtime\Runtime;
 use SurrealDB\SDK\Surreal;
 use SurrealDB\SDK\Transport\Swoole\SwooleWebSocketTransport;
 use SurrealDB\SDK\Types\Table;
+use SurrealDB\Tests\Fakes\BeforeRequest;
 use SurrealDB\Tests\Fakes\DroppingTransport;
 use function count;
 
@@ -96,6 +100,110 @@ final class SwooleWebSocketReconnectTest extends TestCase
         self::assertTrue($alive);
     }
 
+    public function testACallFromAnotherCoroutineDoesNotRunOnASessionStillBeingRestored(): void
+    {
+        $namespace = $this->defineNamespace();
+
+        $result = $this->inCoroutine(function () use ($namespace): array {
+            $transports = [];
+            /** @var (\Closure(): void)|null $other */
+            $other = null;
+
+            // The restore on the new socket is held just before it sets the
+            // session's variable again, while another coroutine makes a call.
+            $hold = new BeforeRequest(static function (RpcRequest $request) use (&$transports, &$other): void {
+                if ($request->method === 'let' && count($transports) === 2 && $other !== null) {
+                    $call = $other;
+                    $other = null;
+                    \OpenSwoole\Coroutine::create($call);
+                    \OpenSwoole\Coroutine::usleep(50_000);
+                }
+            });
+            $db = $this->connect($transports, static function (): void {}, [$hold]);
+
+            try {
+                $db->use($namespace, 'db');
+                $db->let('greeting', 'hello');
+                $seen = [];
+                $other = static function () use ($db, &$seen): void {
+                    try {
+                        $seen[] = $db->run('RETURN $greeting')[0];
+                    } catch (\Throwable $error) {
+                        $seen[] = $error::class;
+                    }
+                };
+
+                $transports[0]->close();
+                $this->waitUntil(static function () use (&$transports, $db): bool {
+                    return count($transports) >= 2 && $db->status() === ConnectionStatus::Connected;
+                });
+
+                return [$seen, $db->run('RETURN $greeting')];
+            } finally {
+                $db->close();
+            }
+        });
+
+        // Refused, rather than answered with NONE: what the variable is on
+        // the new socket until the restore sets it.
+        self::assertSame([[ConnectionUnavailableException::class], ['hello']], $result);
+    }
+
+    public function testAConsumerResumedByAReconnectCanMakeACallStraightAway(): void
+    {
+        $namespace = $this->defineNamespace();
+
+        $result = $this->inCoroutine(function () use ($namespace): array {
+            $transports = [];
+            $replays = 0;
+
+            // Between the replays of the two live queries a record is created
+            // (over another connection), so a notification is waiting for the
+            // first query's consumer when the reconnect resumes it.
+            $hold = new BeforeRequest(function (RpcRequest $request) use (&$transports, &$replays, $namespace): void {
+                $replay = $request->method === 'query' && str_starts_with((string) ($request->params[0] ?? ''), 'LIVE SELECT');
+
+                if ($replay && count($transports) === 2 && ++$replays === 2) {
+                    $this->createPerson($namespace);
+                    \OpenSwoole\Coroutine::usleep(50_000);
+                }
+            });
+            $db = $this->connect($transports, static function (): void {}, [$hold], new RootAuth('root', 'root'));
+
+            try {
+                $db->use($namespace, 'db');
+                $first = $db->live(new Table('person'))->execute();
+                $second = $db->live(new Table('person'))->execute();
+                $outcome = null;
+
+                // Reads the first query across the reconnect, and makes a
+                // call for the first change it sees.
+                \OpenSwoole\Coroutine::create(static function () use ($db, $first, &$outcome): void {
+                    foreach ($first as $message) {
+                        try {
+                            $outcome = $db->run('RETURN 1');
+                        } catch (\Throwable $error) {
+                            $outcome = $error::class;
+                        }
+
+                        break;
+                    }
+                });
+
+                $transports[0]->close();
+                $this->waitUntil(static function () use (&$outcome): bool {
+                    return $outcome !== null;
+                });
+
+                return [$outcome, $second->isAlive()];
+            } finally {
+                $db->close();
+            }
+        });
+
+        self::assertSame([[1], true], $result);
+    }
+
     public function testClosingLetsTheCoroutineRuntimeFinish(): void
     {
         $this->defineNamespace();
@@ -130,15 +238,17 @@ final class SwooleWebSocketReconnectTest extends TestCase
     }
 
     /**
-     * Connect as a guest, without the pinger, so that nothing is left for
-     * Coroutine::run() to wait for after close() however the reconnect went.
+     * Connect as a guest (unless `$authentication` is given), without the
+     * pinger, so that nothing is left for Coroutine::run() to wait for after
+     * close() however the reconnect went.
      *
      * @param list<DroppingTransport> $transports
      * @param \Closure(DroppingTransport): void $armReplacement called with the first replacement socket
+     * @param list<MiddlewareInterface> $middleware
      */
-    private function connect(array &$transports, \Closure $armReplacement): Surreal
+    private function connect(array &$transports, \Closure $armReplacement, array $middleware = [], ?RootAuth $authentication = null): Surreal
     {
-        $options = Runtime::swoole(new DriverOptions(pingInterval: 0), enableHooks: false);
+        $options = Runtime::swoole(new DriverOptions(middleware: $middleware, pingInterval: 0), enableHooks: false);
         $options->webSocketTransportFactory = static function (DriverContext $context, ConnectionState $state) use (&$transports, $armReplacement): DuplexTransportInterface {
             $transport = new DroppingTransport(new SwooleWebSocketTransport($context, $state->endpoint));
 
@@ -150,7 +260,10 @@ final class SwooleWebSocketReconnectTest extends TestCase
         };
 
         $db = new Surreal($options);
-        $db->connect($this->url(), new ConnectOptions(reconnect: ['retryDelay' => 0.01, 'attempts' => 5]));
+        $db->connect($this->url(), new ConnectOptions(
+            authentication: $authentication,
+            reconnect: ['retryDelay' => 0.01, 'attempts' => 5],
+        ));
 
         return $db;
     }
@@ -208,6 +321,22 @@ final class SwooleWebSocketReconnectTest extends TestCase
         }
 
         return $namespace;
+    }
+
+    /**
+     * Create a record in the namespace's table over a separate, synchronous
+     * root connection.
+     */
+    private function createPerson(string $namespace): void
+    {
+        $db = new Surreal();
+
+        try {
+            $db->connect($this->url(), new ConnectOptions(namespace: $namespace, database: 'db', authentication: new RootAuth('root', 'root')));
+            $db->run('CREATE person SET name = "p"');
+        } finally {
+            $db->close();
+        }
     }
 
     /**

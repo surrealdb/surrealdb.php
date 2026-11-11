@@ -269,7 +269,7 @@ $db = new Surreal(Runtime::swoole());   // inside a coroutine, e.g. Co\run() or 
 $db = new Surreal(Runtime::amp());      // inside the Revolt event loop, e.g. FrankenPHP worker mode
 ```
 
-These run a background read loop, keepalive pings and token renewal timers.
+These run a background read loop, keepalive pings and token renewal timers. While a lost connection is re-established, calls from other tasks fail with `ConnectionUnavailableException`, until every session is restored on the new socket: signed in, back in its namespace and database, with its variables and live queries. From then on `status()` is `Connected` again, and calls go ahead.
 
 ## More
 
