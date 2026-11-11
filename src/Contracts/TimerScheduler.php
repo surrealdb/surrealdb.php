@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
 /**
  * A scheduler that can run a task after a delay and cancel it before then.

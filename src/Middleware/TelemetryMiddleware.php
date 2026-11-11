@@ -1,16 +1,16 @@
 <?php
 
-namespace SurrealDB\SDK\Middleware;
+namespace SurrealDB\Middleware;
 
-use SurrealDB\SDK\Contracts\Counter;
-use SurrealDB\SDK\Contracts\Histogram;
-use SurrealDB\SDK\Contracts\Meter;
-use SurrealDB\SDK\Contracts\MiddlewareInterface;
-use SurrealDB\SDK\Contracts\Tracer;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Enum\SpanStatus;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Contracts\Counter;
+use SurrealDB\Contracts\Histogram;
+use SurrealDB\Contracts\Meter;
+use SurrealDB\Contracts\MiddlewareInterface;
+use SurrealDB\Contracts\Tracer;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Enum\SpanStatus;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 use function is_string;
 
 /**

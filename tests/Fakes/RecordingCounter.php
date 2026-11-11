@@ -2,7 +2,7 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Contracts\Counter;
+use SurrealDB\Contracts\Counter;
 
 /** A {@see Counter} that records every increment for assertions. */
 final class RecordingCounter implements Counter

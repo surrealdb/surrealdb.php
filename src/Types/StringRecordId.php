@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 /**
  * A SurrealQL record id held in its raw, unparsed string form (e.g.

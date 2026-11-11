@@ -4,27 +4,27 @@ namespace SurrealDB\Tests\Unit\Query;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Contracts\StreamingQueryExecutor;
-use SurrealDB\SDK\Enum\Output;
-use SurrealDB\SDK\Exceptions\ExpressionException;
-use SurrealDB\SDK\Protocol\QueryChunk;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Query\CreateQuery;
-use SurrealDB\SDK\Query\DeleteQuery;
-use SurrealDB\SDK\Query\Frame\ValueFrame;
-use SurrealDB\SDK\Query\QueryBuilder;
-use SurrealDB\SDK\Query\RelateQuery;
-use SurrealDB\SDK\Query\SelectQuery;
-use SurrealDB\SDK\Query\UpdateQuery;
-use SurrealDB\SDK\Query\UpsertQuery;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\BoundExcluded;
-use SurrealDB\SDK\Types\BoundIncluded;
-use SurrealDB\SDK\Types\None;
-use SurrealDB\SDK\Types\Range;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Contracts\StreamingQueryExecutor;
+use SurrealDB\Enum\Output;
+use SurrealDB\Exceptions\ExpressionException;
+use SurrealDB\Protocol\QueryChunk;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Query\CreateQuery;
+use SurrealDB\Query\DeleteQuery;
+use SurrealDB\Query\Frame\ValueFrame;
+use SurrealDB\Query\QueryBuilder;
+use SurrealDB\Query\RelateQuery;
+use SurrealDB\Query\SelectQuery;
+use SurrealDB\Query\UpdateQuery;
+use SurrealDB\Query\UpsertQuery;
+use SurrealDB\Surreal;
+use SurrealDB\Types\BoundExcluded;
+use SurrealDB\Types\BoundIncluded;
+use SurrealDB\Types\None;
+use SurrealDB\Types\Range;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
 
 /**
  * When a statement takes `ONLY`: for one record, but not for a range of

@@ -3,16 +3,16 @@
 namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectionStatus;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Live\LiveAction;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectionStatus;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Exceptions\ConnectionUnavailableException;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Live\LiveAction;
+use SurrealDB\Surreal;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 use SurrealDB\Tests\Fakes\SeverableWebSocketClient;
 
 /**

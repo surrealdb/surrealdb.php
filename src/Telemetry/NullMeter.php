@@ -1,10 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry;
+namespace SurrealDB\Telemetry;
 
-use SurrealDB\SDK\Contracts\Counter;
-use SurrealDB\SDK\Contracts\Histogram;
-use SurrealDB\SDK\Contracts\Meter;
+use SurrealDB\Contracts\Counter;
+use SurrealDB\Contracts\Histogram;
+use SurrealDB\Contracts\Meter;
 
 /** The default no-op meter: metrics are off until one is configured. */
 final class NullMeter implements Meter

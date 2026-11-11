@@ -3,10 +3,10 @@
 namespace SurrealDB\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Exceptions\InternalException;
-use SurrealDB\SDK\Exceptions\QueryException;
-use SurrealDB\SDK\Exceptions\ThrownException;
-use SurrealDB\SDK\Protocol\QueryChunk;
+use SurrealDB\Exceptions\InternalException;
+use SurrealDB\Exceptions\QueryException;
+use SurrealDB\Exceptions\ThrownException;
+use SurrealDB\Protocol\QueryChunk;
 
 final class QueryChunkTest extends TestCase
 {

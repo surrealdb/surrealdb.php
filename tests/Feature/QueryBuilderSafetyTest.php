@@ -4,20 +4,20 @@ namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Enum\Output;
-use SurrealDB\SDK\Exceptions\ExpressionException;
-use SurrealDB\SDK\Exceptions\ServerException;
-use SurrealDB\SDK\Live\LiveMessage;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\BoundExcluded;
-use SurrealDB\SDK\Types\BoundIncluded;
-use SurrealDB\SDK\Types\None;
-use SurrealDB\SDK\Types\Range;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Enum\Output;
+use SurrealDB\Exceptions\ExpressionException;
+use SurrealDB\Exceptions\ServerException;
+use SurrealDB\Live\LiveMessage;
+use SurrealDB\Surreal;
+use SurrealDB\Types\BoundExcluded;
+use SurrealDB\Types\BoundIncluded;
+use SurrealDB\Types\None;
+use SurrealDB\Types\Range;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
 
 /**
  * Builder calls that SurrealDB used to read as something else, against a

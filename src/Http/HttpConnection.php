@@ -1,20 +1,22 @@
 <?php
 
-namespace SurrealDB\SDK\Transport;
+namespace SurrealDB\Http;
 
 use Psr\Http\Message\ResponseInterface;
-use SurrealDB\SDK\Exceptions\HttpConnectionException;
+use SurrealDB\Contracts\HttpClientProviderInterface;
+use SurrealDB\Contracts\HttpConnectionInterface;
+use SurrealDB\Exceptions\HttpConnectionException;
 use function sprintf;
 use function strlen;
 
 /**
- * Performs a single PSR-18 HTTP exchange against a SurrealDB endpoint, throwing
- * {@see HttpConnectionException} on non-2xx responses. Shared by the HTTP
- * transport and the raw import/export operations.
+ * The default {@see HttpConnectionInterface}: performs one PSR-18 exchange and
+ * throws {@see HttpConnectionException} on any non-2xx response. Shared by the
+ * SurrealDB HTTP transport (RPC + raw import/export) and the Agent Memory client.
  */
-final class SurrealHttp
+final class HttpConnection implements HttpConnectionInterface
 {
-    public function __construct(private readonly HttpClientResolver $resolver) {}
+    public function __construct(private readonly HttpClientProviderInterface $provider) {}
 
     /**
      * @param array<string,string> $headers
@@ -39,17 +41,17 @@ final class SurrealHttp
      */
     public function send(string $url, string $method, ?string $body, array $headers): ResponseInterface
     {
-        $request = $this->resolver->requestFactory()->createRequest($method, $url);
+        $request = $this->provider->requestFactory()->createRequest($method, $url);
 
         foreach ($headers as $name => $value) {
             $request = $request->withHeader($name, $value);
         }
 
         if ($body !== null) {
-            $request = $request->withBody($this->resolver->streamFactory()->createStream($body));
+            $request = $request->withBody($this->provider->streamFactory()->createStream($body));
         }
 
-        return $this->resolver->client()->sendRequest($request);
+        return $this->provider->client()->sendRequest($request);
     }
 
     /**
@@ -89,6 +91,7 @@ final class SurrealHttp
             $response->getStatusCode(),
             $response->getReasonPhrase(),
             $content,
+            $response->getHeaders(),
         );
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 /**
  * An uncomputed SurrealQL future value (e.g. `<future> { ... }`).

@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
-use SurrealDB\SDK\Support\Redacted;
+use SurrealDB\Support\Redacted;
 
 /** Database-scoped user credentials. */
 final readonly class DatabaseAuth implements Credentials

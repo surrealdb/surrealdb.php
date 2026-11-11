@@ -1,28 +1,28 @@
 <?php
 
-namespace SurrealDB\SDK;
+namespace SurrealDB;
 
 use Psr\Log\NullLogger;
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Codec\CborDeserializer;
-use SurrealDB\SDK\Codec\CborSerializer;
-use SurrealDB\SDK\Codec\JsonDeserializer;
-use SurrealDB\SDK\Codec\JsonSerializer;
-use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Connection\ConnectionStatus;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Connection\Endpoint;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Events\EventDispatcher;
-use SurrealDB\SDK\Exceptions\ConfigurationException;
-use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
-use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
-use SurrealDB\SDK\Protocol\Feature;
-use SurrealDB\SDK\Scheduler\SyncScheduler;
-use SurrealDB\SDK\Telemetry\NullMeter;
-use SurrealDB\SDK\Telemetry\NullTracer;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Codec\CborDeserializer;
+use SurrealDB\Codec\CborSerializer;
+use SurrealDB\Codec\JsonDeserializer;
+use SurrealDB\Codec\JsonSerializer;
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Connection\ConnectionStatus;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Connection\Endpoint;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Events\EventDispatcher;
+use SurrealDB\Exceptions\ConfigurationException;
+use SurrealDB\Exceptions\UnavailableFeatureException;
+use SurrealDB\Exceptions\UnsupportedFeatureException;
+use SurrealDB\Protocol\Feature;
+use SurrealDB\Scheduler\SyncScheduler;
+use SurrealDB\Telemetry\NullMeter;
+use SurrealDB\Telemetry\NullTracer;
 
 /**
  * The primary entry point: connect to SurrealDB and run queries in the default
@@ -134,8 +134,8 @@ final class Surreal extends SurrealSession
 	 * over WebSocket). SurrealDB 3.x requires the script to begin with
 	 * `OPTION IMPORT;`, as {@see self::export()} output does.
 	 *
-	 * @throws \SurrealDB\SDK\Exceptions\ServerException for the first statement that failed
-	 * @throws \SurrealDB\SDK\Exceptions\HttpConnectionException when the server rejected the import
+	 * @throws \SurrealDB\Exceptions\ServerException for the first statement that failed
+	 * @throws \SurrealDB\Exceptions\HttpConnectionException when the server rejected the import
 	 */
 	public function import(string $surql): void
 	{

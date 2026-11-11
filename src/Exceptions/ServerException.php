@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
-use SurrealDB\SDK\Rpc\RpcError;
+use SurrealDB\Rpc\RpcError;
 
 /**
  * The base class for all errors reported by the SurrealDB server.

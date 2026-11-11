@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Live;
+namespace SurrealDB\Live;
 
 /** The kind of change reported by a live query notification. */
 enum LiveAction: string

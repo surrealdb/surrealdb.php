@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when authentication or token renewal does not succeed. */
 final class AuthenticationException extends SurrealException

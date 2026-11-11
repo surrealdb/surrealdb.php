@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Query\Frame;
+namespace SurrealDB\Query\Frame;
 
 /**
  * One frame of a streamed query: a {@see ValueFrame}, an {@see ErrorFrame},

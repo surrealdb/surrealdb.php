@@ -1,10 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Transport;
+namespace SurrealDB\Transport;
 
-use SurrealDB\SDK\Connection\SessionState;
-use SurrealDB\SDK\Exceptions\InvalidValueException;
-use SurrealDB\SDK\Rpc\RpcRequest;
+use SurrealDB\Connection\SessionState;
+use SurrealDB\Exceptions\InvalidValueException;
+use SurrealDB\Rpc\RpcRequest;
 use function in_array;
 use function is_string;
 use function sprintf;

@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
-use SurrealDB\SDK\Support\Redacted;
+use SurrealDB\Support\Redacted;
 
 /** An access token and optional refresh token pair. */
 final readonly class Tokens

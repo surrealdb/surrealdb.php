@@ -1,21 +1,21 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Contracts\StreamingQueryExecutor;
-use SurrealDB\SDK\Contracts\SurrealType;
-use SurrealDB\SDK\Exceptions\ExpressionException;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Query\Frame\DoneFrame;
-use SurrealDB\SDK\Query\Frame\ErrorFrame;
-use SurrealDB\SDK\Query\Frame\ValueFrame;
-use SurrealDB\SDK\Support\Jsonify;
-use SurrealDB\SDK\Types\Range;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Contracts\StreamingQueryExecutor;
+use SurrealDB\Contracts\SurrealType;
+use SurrealDB\Exceptions\ExpressionException;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Query\Frame\DoneFrame;
+use SurrealDB\Query\Frame\ErrorFrame;
+use SurrealDB\Query\Frame\ValueFrame;
+use SurrealDB\Support\Jsonify;
+use SurrealDB\Types\Range;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
 use function is_array;
 use function is_string;
 use function strlen;

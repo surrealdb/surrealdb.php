@@ -20,6 +20,14 @@
         <testsuite name="frankenphp">
             <directory>tests/Runtime/FrankenPHP</directory>
         </testsuite>
+        <!-- Agent Memory client unit tests (no server needed; also part of "default"). -->
+        <testsuite name="agent-memory">
+            <directory>tests/Unit/AgentMemory</directory>
+        </testsuite>
+        <!-- Agent Memory against a real server (AGENT_MEMORY_* env; see scripts/agent-memory-server.sh). -->
+        <testsuite name="agent-memory-integration">
+            <directory>tests/Integration/AgentMemory</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>

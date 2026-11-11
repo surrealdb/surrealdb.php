@@ -3,12 +3,12 @@
 namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Types\Geometry;
-use SurrealDB\SDK\Types\GeometryCollection;
-use SurrealDB\SDK\Types\GeometryLine;
-use SurrealDB\SDK\Types\GeometryMultiPoint;
-use SurrealDB\SDK\Types\GeometryPoint;
-use SurrealDB\SDK\Types\GeometryPolygon;
+use SurrealDB\Types\Geometry;
+use SurrealDB\Types\GeometryCollection;
+use SurrealDB\Types\GeometryLine;
+use SurrealDB\Types\GeometryMultiPoint;
+use SurrealDB\Types\GeometryPoint;
+use SurrealDB\Types\GeometryPolygon;
 
 final class GeometryTest extends TestCase
 {

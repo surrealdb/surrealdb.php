@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Codec;
+namespace SurrealDB\Codec;
 
 use Beau\CborPHP\Cbor;
 use Beau\CborPHP\exceptions\CborException;
-use SurrealDB\SDK\Codec\Cbor\CborValueMapper;
-use SurrealDB\SDK\Codec\Cbor\Tags\SurrealTags;
-use SurrealDB\SDK\Exceptions\SerializationException;
+use SurrealDB\Codec\Cbor\CborValueMapper;
+use SurrealDB\Codec\Cbor\Tags\SurrealTags;
+use SurrealDB\Exceptions\SerializationException;
 use function get_debug_type;
 
 final class CborSerializer implements SerializerInterface

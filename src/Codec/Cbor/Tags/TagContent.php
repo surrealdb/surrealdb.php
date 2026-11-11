@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
-use SurrealDB\SDK\Exceptions\SerializationException;
-use SurrealDB\SDK\Types\Bytes;
+use SurrealDB\Exceptions\SerializationException;
+use SurrealDB\Types\Bytes;
 use function is_array;
 use function is_string;
 use function strlen;

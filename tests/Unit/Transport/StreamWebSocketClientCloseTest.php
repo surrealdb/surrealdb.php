@@ -3,8 +3,8 @@
 namespace SurrealDB\Tests\Unit\Transport;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Transport\StreamWebSocketClient;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Transport\StreamWebSocketClient;
 
 /**
  * A server that closes the WebSocket while the client is idle: the close

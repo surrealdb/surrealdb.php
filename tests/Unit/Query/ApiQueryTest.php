@@ -3,10 +3,10 @@
 namespace SurrealDB\Tests\Unit\Query;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Api\SurrealApi;
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Types\None;
+use SurrealDB\Api\SurrealApi;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Types\None;
 
 final class ApiQueryTest extends TestCase
 {

@@ -3,12 +3,12 @@
 namespace SurrealDB\Tests\Runtime\FrankenPHP;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Runtime\Runtime;
-use SurrealDB\SDK\Scheduler\Amp\RevoltScheduler;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelMeter;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelTracer;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Runtime\Runtime;
+use SurrealDB\Scheduler\Amp\RevoltScheduler;
+use SurrealDB\Telemetry\OpenTelemetry\ObservabilityOptions;
+use SurrealDB\Telemetry\OpenTelemetry\OtelMeter;
+use SurrealDB\Telemetry\OpenTelemetry\OtelTracer;
 
 /**
  * Verifies the Amp / FrankenPHP runtime preset wires the Revolt scheduler and

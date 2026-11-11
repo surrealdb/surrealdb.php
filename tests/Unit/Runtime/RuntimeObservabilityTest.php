@@ -5,11 +5,11 @@ namespace SurrealDB\Tests\Unit\Runtime;
 use OpenTelemetry\Contrib\Otlp\SpanExporter;
 use OpenTelemetry\SDK\Trace\TracerProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Runtime\Runtime;
-use SurrealDB\SDK\Scheduler\SyncScheduler;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelMeter;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelTracer;
+use SurrealDB\Runtime\Runtime;
+use SurrealDB\Scheduler\SyncScheduler;
+use SurrealDB\Telemetry\OpenTelemetry\ObservabilityOptions;
+use SurrealDB\Telemetry\OpenTelemetry\OtelMeter;
+use SurrealDB\Telemetry\OpenTelemetry\OtelTracer;
 
 /**
  * Verifies the synchronous (PHP-FPM / CLI) preset attaches an OpenTelemetry

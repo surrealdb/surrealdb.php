@@ -1,15 +1,15 @@
 <?php
 
-namespace SurrealDB\SDK\Middleware;
+namespace SurrealDB\Middleware;
 
-use SurrealDB\SDK\Contracts\MiddlewareInterface;
-use SurrealDB\SDK\Contracts\Scheduler;
-use SurrealDB\SDK\Exceptions\CallTerminatedException;
-use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
-use SurrealDB\SDK\Exceptions\HttpConnectionException;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
-use SurrealDB\SDK\Scheduler\SyncScheduler;
+use SurrealDB\Contracts\MiddlewareInterface;
+use SurrealDB\Contracts\Scheduler;
+use SurrealDB\Exceptions\CallTerminatedException;
+use SurrealDB\Exceptions\ConnectionUnavailableException;
+use SurrealDB\Exceptions\HttpConnectionException;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
+use SurrealDB\Scheduler\SyncScheduler;
 
 /**
  * Retries calls that fail with transient connection errors, using exponential

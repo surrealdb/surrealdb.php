@@ -4,15 +4,15 @@ namespace SurrealDB\Tests\Runtime\OpenSwoole;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Connection\Endpoint;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Events\EventDispatcher;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Scheduler\Swoole\SwooleScheduler;
-use SurrealDB\SDK\Transport\Swoole\SwooleWebSocketTransport;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Connection\Endpoint;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Events\EventDispatcher;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Scheduler\Swoole\SwooleScheduler;
+use SurrealDB\Transport\Swoole\SwooleWebSocketTransport;
 use SurrealDB\Tests\Fakes\StuckWebSocketServer;
 
 final class SwooleWebSocketTransportTest extends TestCase

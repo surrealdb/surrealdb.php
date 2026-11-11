@@ -1,0 +1,306 @@
+name: Agent Memory
+
+# Tests the Agent Memory client (src/AgentMemory) at two levels:
+#
+# - unit: the client against recorded HTTP exchanges. No server, no secrets.
+# - integration: the client against a real `spectrond` built from
+#   surrealdb/spectron and booted with placeholder model keys, so the run is
+#   hermetic and costs nothing. It also checks the client against the server's
+#   OpenAPI description, so upstream API drift fails here before users hit it.
+#   Scheduled and manual runs add the model-backed tier (recall, chat, document
+#   ingestion) when a GEMINI_API_KEY secret is configured.
+#
+# Secrets:
+#   PRIVATE_REPO_TOKEN  read access to surrealdb/spectron and its private git
+#                       dependency surrealdb/surrealdb-refinery, used to build
+#                       spectrond. Pull requests that cannot see it (forks,
+#                       Dependabot) skip the integration job; other events fail.
+#   GEMINI_API_KEY      optional; enables the model-backed tier on schedule/dispatch.
+# Variables:
+#   SPECTRON_REF        optional branch, tag or SHA that pins pushes and pull
+#                       requests to a known-good spectron. The nightly run always
+#                       tests spectron's main, to catch drift early.
+
+on:
+  workflow_dispatch:
+    inputs:
+      spectron-ref:
+        description: surrealdb/spectron branch, tag or SHA to build the server from
+        required: false
+        default: main
+  push:
+    branches: ["main"]
+    paths:
+      - "src/AgentMemory.php"
+      - "src/AgentMemory/**"
+      - "src/Http/**"
+      - "src/Contracts/**"
+      - "src/Exceptions/**"
+      - "src/Scheduler/**"
+      - "tests/Unit/AgentMemory/**"
+      - "tests/Integration/AgentMemory/**"
+      - "tests/Fakes/**"
+      - "tests/PHPStan/**"
+      - "scripts/agent-memory-server.sh"
+      - "scripts/AgentMemoryTypesGenerator.php"
+      - "scripts/generate-agent-memory-types.php"
+      - "composer.json"
+      - "composer.lock"
+      - "phpunit.xml"
+      - "phpstan.neon"
+      - ".github/workflows/agent-memory.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/AgentMemory.php"
+      - "src/AgentMemory/**"
+      - "src/Http/**"
+      - "src/Contracts/**"
+      - "src/Exceptions/**"
+      - "src/Scheduler/**"
+      - "tests/Unit/AgentMemory/**"
+      - "tests/Integration/AgentMemory/**"
+      - "tests/Fakes/**"
+      - "tests/PHPStan/**"
+      - "scripts/agent-memory-server.sh"
+      - "scripts/AgentMemoryTypesGenerator.php"
+      - "scripts/generate-agent-memory-types.php"
+      - "composer.json"
+      - "composer.lock"
+      - "phpunit.xml"
+      - "phpstan.neon"
+      - ".github/workflows/agent-memory.yml"
+  schedule:
+    # 05:17 UTC daily: tests against spectron's main to catch upstream drift.
+    - cron: "17 5 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SPECTRON_REPOSITORY: surrealdb/spectron
+  # The manual input wins; the nightly drift check always takes main; anything
+  # else uses the pinned SPECTRON_REF variable, falling back to main.
+  SPECTRON_REF: ${{ inputs.spectron-ref || (github.event_name == 'schedule' && 'main') || vars.SPECTRON_REF || 'main' }}
+  # Matches spectron's own CI. The digest is GitHub's published SHA-256 of the
+  # linux-amd64 release asset; bump both together.
+  SURREAL_VERSION: v3.1.2
+  SURREAL_SHA256: 27fbc211ef5eb855d4f0ac142b112815bc35d679d8d5935f7756af2cea015bd4
+  CARGO_TERM_COLOR: always
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          # composer.lock pins openswoole/core, which requires the extension (as in ci.yml).
+          extensions: openswoole-26.2.0
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Static analysis
+        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress src/AgentMemory.php src/AgentMemory tests/PHPStan
+
+      - name: Run unit tests
+        run: composer test:agent-memory
+
+  access:
+    name: Spectron access
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.check.outputs.available }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check for the spectron access token
+        id: check
+        env:
+          TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" = "pull_request" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Agent Memory integration skipped::PRIVATE_REPO_TOKEN is not available to this pull request (a fork or Dependabot), so spectrond cannot be built. The unit tests still ran."
+          else
+            echo "::error title=Missing PRIVATE_REPO_TOKEN::Add a PRIVATE_REPO_TOKEN secret with read access to surrealdb/spectron and surrealdb/surrealdb-refinery."
+            exit 1
+          fi
+
+  integration:
+    name: Integration (spectrond)
+    needs: [unit, access]
+    if: needs.access.outputs.available == 'true'
+    runs-on: ubuntu-latest
+    # A cold spectrond build dominates; cached builds finish in minutes.
+    timeout-minutes: 90
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Check out ${{ env.SPECTRON_REPOSITORY }}@${{ env.SPECTRON_REF }}
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: ${{ env.SPECTRON_REPOSITORY }}
+          ref: ${{ env.SPECTRON_REF }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: spectron
+          persist-credentials: false
+
+      - name: Resolve the spectron revision
+        id: spectron
+        run: |
+          sha=$(git -C spectron rev-parse HEAD)
+          toolchain=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' spectron/rust-toolchain.toml)
+          echo "toolchain=${toolchain}" >> "$GITHUB_OUTPUT"
+          # The image is part of the key: a binary linked on one runner image
+          # is not guaranteed to load on the next one.
+          echo "cache-key=spectrond-${ImageOS:-${RUNNER_OS}}-${RUNNER_ARCH}-${sha}" >> "$GITHUB_OUTPUT"
+          echo "Agent Memory server: \`${SPECTRON_REPOSITORY}@${sha:0:12}\` (ref \`${SPECTRON_REF}\`)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore the spectrond build
+        id: spectrond
+        uses: actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/spectrond
+          key: ${{ steps.spectron.outputs.cache-key }}
+
+      - name: Free disk space
+        if: steps.spectrond.outputs.cache-hit != 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+
+      - name: Install Rust ${{ steps.spectron.outputs.toolchain }}
+        if: steps.spectrond.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          toolchain: ${{ steps.spectron.outputs.toolchain }}
+
+      - name: Setup mold
+        if: steps.spectrond.outputs.cache-hit != 'true'
+        uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+        with:
+          make-default: true
+
+      - name: Cache cargo artifacts
+        if: steps.spectrond.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: spectron -> target
+          shared-key: spectrond
+          cache-on-failure: true
+          # Pull requests read main's cache but never write their own, which
+          # would crowd the repository's cache quota.
+          save-if: ${{ github.event_name != 'pull_request' }}
+
+      - name: Build spectrond
+        if: steps.spectrond.outputs.cache-hit != 'true'
+        working-directory: spectron
+        env:
+          # cargo fetches git dependencies with the git CLI (git-fetch-with-cli);
+          # this rewrite lets it reach the private ones for this step only,
+          # without writing the token to ~/.gitconfig.
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/.insteadOf
+          GIT_CONFIG_VALUE_0: https://github.com/
+          # Debug info is not needed to run the server, and dropping it makes
+          # the build, the cache, and the binary much smaller.
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: |
+          cargo build --locked --bin spectrond
+          mkdir -p ~/.cache/spectrond
+          cp target/debug/spectrond ~/.cache/spectrond/spectrond
+
+      - name: Save the spectrond build
+        if: steps.spectrond.outputs.cache-hit != 'true'
+        uses: actions/cache/save@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/spectrond
+          key: ${{ steps.spectron.outputs.cache-key }}
+
+      - name: Install SurrealDB ${{ env.SURREAL_VERSION }}
+        # The pinned release asset, verified against its digest before it runs;
+        # no installer script is executed.
+        run: |
+          if [ "$RUNNER_ARCH" != "X64" ]; then
+            echo "::error::SURREAL_SHA256 pins the linux-amd64 asset; this runner is ${RUNNER_ARCH}."
+            exit 1
+          fi
+          archive="surreal-${SURREAL_VERSION}.linux-amd64.tgz"
+          curl -fsSL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/surrealdb/surrealdb/releases/download/${SURREAL_VERSION}/${archive}"
+          echo "${SURREAL_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check --strict
+          mkdir -p "${RUNNER_TEMP}/surreal-dist" "$HOME/.surrealdb"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/surreal-dist"
+          install -m 0755 "${RUNNER_TEMP}/surreal-dist/surreal" "$HOME/.surrealdb/surreal"
+          echo "$HOME/.surrealdb" >> "$GITHUB_PATH"
+          "$HOME/.surrealdb/surreal" version
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          # composer.lock pins openswoole/core, which requires the extension (as in ci.yml).
+          extensions: openswoole-26.2.0
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Start Agent Memory
+        env:
+          # Model-backed tier only on the nightly and manual runs: real model
+          # spend and non-deterministic output have no place on every push.
+          GEMINI_API_KEY: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && secrets.GEMINI_API_KEY || '' }}
+        run: |
+          SPECTROND_BIN="$HOME/.cache/spectrond/spectrond" scripts/agent-memory-server.sh start
+          cat .agent-memory/env >> "$GITHUB_ENV"
+
+      - name: Run integration tests
+        env:
+          AGENT_MEMORY_REQUIRE_SERVER: "1"
+          AGENT_MEMORY_OPENAPI_SPEC: ${{ github.workspace }}/spectron/doc/spec/enduser.swagger.json
+        run: composer test:agent-memory-integration
+
+      - name: Stop Agent Memory
+        if: always()
+        run: scripts/agent-memory-server.sh stop
+
+      - name: Upload server logs
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: agent-memory-logs-${{ github.run_id }}
+          path: .agent-memory/logs/
+          retention-days: 14

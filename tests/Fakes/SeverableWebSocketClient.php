@@ -2,9 +2,9 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Contracts\WebSocketClientInterface;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Transport\StreamWebSocketClient;
+use SurrealDB\Contracts\WebSocketClientInterface;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Transport\StreamWebSocketClient;
 
 /**
  * Wraps the real stream client and can drop the connection without a close

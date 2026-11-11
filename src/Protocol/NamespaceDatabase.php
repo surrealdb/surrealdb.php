@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Protocol;
+namespace SurrealDB\Protocol;
 
 /** A namespace and database selection pair. */
 final readonly class NamespaceDatabase

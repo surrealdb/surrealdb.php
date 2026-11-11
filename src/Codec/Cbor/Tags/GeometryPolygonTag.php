@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
 use Beau\CborPHP\interfaces\CborTag;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Types\GeometryPolygon;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Types\GeometryPolygon;
 
 /**
  * A polygon: tag 90 with its rings, each a line (tag 89).

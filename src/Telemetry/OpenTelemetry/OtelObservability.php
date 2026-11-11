@@ -1,11 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\OpenTelemetry;
+namespace SurrealDB\Telemetry\OpenTelemetry;
 
-use Amp\Http\Client\HttpClientBuilder;
-use Amp\Http\Client\Psr7\PsrAdapter;
 use Amp\Http\Client\Psr7\PsrHttpClient;
-use Http\Discovery\Psr17FactoryDiscovery;
 use OpenTelemetry\API\Common\Time\Clock;
 use OpenTelemetry\Contrib\Otlp\MetricExporter;
 use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
@@ -28,9 +25,10 @@ use OpenTelemetry\SDK\Trace\SpanProcessor\BatchSpanProcessor;
 use OpenTelemetry\SDK\Trace\SpanProcessor\SimpleSpanProcessor;
 use OpenTelemetry\SDK\Trace\TracerProvider;
 use Psr\Http\Client\ClientInterface;
-use SurrealDB\SDK\Contracts\Meter;
-use SurrealDB\SDK\Contracts\Tracer;
-use SurrealDB\SDK\Exceptions\ConfigurationException;
+use SurrealDB\Contracts\Meter;
+use SurrealDB\Contracts\Tracer;
+use SurrealDB\Exceptions\ConfigurationException;
+use SurrealDB\Http\AmpPsr18Client;
 
 /**
  * Assembles an OpenTelemetry tracer/meter provider with the span-processor
@@ -43,7 +41,7 @@ use SurrealDB\SDK\Exceptions\ConfigurationException;
  * - {@see batched()} — a {@see BatchSpanProcessor} buffers spans in memory and
  *   only exports when {@see forceFlush()} / {@see shutdown()} runs. Suited to
  *   PHP-FPM / CLI, where the flush is deferred until after the request (see
- *   {@see \SurrealDB\SDK\Runtime\Runtime::sync()}).
+ *   {@see \SurrealDB\Runtime\Runtime::sync()}).
  * - {@see direct()} — a {@see SimpleSpanProcessor} exports each span as it ends.
  *   Combined with a non-blocking transport (OpenSwoole runtime hooks, or the
  *   Amp PSR-18 client from {@see ampHttpClient()}) this stays off the critical
@@ -136,13 +134,7 @@ final class OtelObservability
             );
         }
 
-        return new PsrHttpClient(
-            HttpClientBuilder::buildDefault(),
-            new PsrAdapter(
-                Psr17FactoryDiscovery::findRequestFactory(),
-                Psr17FactoryDiscovery::findResponseFactory(),
-            ),
-        );
+        return AmpPsr18Client::create();
     }
 
     /** Bridge the configured OpenTelemetry tracer onto the SDK {@see Tracer} seam. */

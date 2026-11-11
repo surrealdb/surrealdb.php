@@ -4,11 +4,11 @@ namespace SurrealDB\Tests\Runtime\FrankenPHP;
 
 use PHPUnit\Framework\TestCase;
 use Revolt\EventLoop;
-use SurrealDB\SDK\Connection\ConnectionStatus;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Scheduler\Amp\RevoltScheduler;
-use SurrealDB\SDK\Surreal;
+use SurrealDB\Connection\ConnectionStatus;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Scheduler\Amp\RevoltScheduler;
+use SurrealDB\Surreal;
 use SurrealDB\Tests\Fakes\SlowOpeningTransport;
 
 final class RevoltCloseDuringReconnectTest extends TestCase

@@ -1,26 +1,26 @@
 <?php
 
-namespace SurrealDB\SDK;
+namespace SurrealDB;
 
-use SurrealDB\SDK\Api\SurrealApi;
-use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Contracts\StreamingQueryExecutor;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Query\AuthQuery;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Query\CreateQuery;
-use SurrealDB\SDK\Query\DeleteQuery;
-use SurrealDB\SDK\Query\InsertQuery;
-use SurrealDB\SDK\Query\Query;
-use SurrealDB\SDK\Query\RelateQuery;
-use SurrealDB\SDK\Query\RunQuery;
-use SurrealDB\SDK\Query\SelectQuery;
-use SurrealDB\SDK\Query\UpdateQuery;
-use SurrealDB\SDK\Query\UpsertQuery;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Api\SurrealApi;
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Contracts\StreamingQueryExecutor;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Query\AuthQuery;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Query\CreateQuery;
+use SurrealDB\Query\DeleteQuery;
+use SurrealDB\Query\InsertQuery;
+use SurrealDB\Query\Query;
+use SurrealDB\Query\RelateQuery;
+use SurrealDB\Query\RunQuery;
+use SurrealDB\Query\SelectQuery;
+use SurrealDB\Query\UpdateQuery;
+use SurrealDB\Query\UpsertQuery;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
 
 /**
  * Everything that runs queries: raw SurrealQL and the fluent statement
@@ -68,7 +68,7 @@ abstract class SurrealQueryable implements StreamingQueryExecutor
      * Execute a bound query, yielding each statement's result (or failure)
      * as it is read. Prefer {@see Query::stream()} or {@see Query::responses()}.
      *
-     * @return iterable<\SurrealDB\SDK\Protocol\QueryChunk<mixed>>
+     * @return iterable<\SurrealDB\Protocol\QueryChunk<mixed>>
      */
     public function stream(BoundQuery $query): iterable
     {

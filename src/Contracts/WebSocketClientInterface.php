@@ -1,10 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
 /**
  * A minimal synchronous WebSocket client abstraction wrapped by the default
- * {@see \SurrealDB\SDK\Transport\WebSocketTransport}. Bring your own
+ * {@see \SurrealDB\Transport\WebSocketTransport}. Bring your own
  * implementation (e.g. a PECL or pure-PHP client) via DriverOptions, or rely on
  * the bundled stream-based default.
  */

@@ -3,11 +3,11 @@
 namespace SurrealDB\Tests\Unit\Engines;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Connection\ConnectionStatus;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Surreal;
+use SurrealDB\Connection\ConnectionStatus;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Surreal;
 use SurrealDB\Tests\Fakes\DroppingTransport;
 use SurrealDB\Tests\Fakes\FakeDuplexTransport;
 

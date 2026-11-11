@@ -3,16 +3,16 @@
 namespace SurrealDB\Tests\Unit\Support;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Support\Jsonify;
-use SurrealDB\SDK\Types\DateTime;
-use SurrealDB\SDK\Types\Decimal;
-use SurrealDB\SDK\Types\Duration;
-use SurrealDB\SDK\Types\GeometryPoint;
-use SurrealDB\SDK\Types\None;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Set;
-use SurrealDB\SDK\Types\Table;
-use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\Support\Jsonify;
+use SurrealDB\Types\DateTime;
+use SurrealDB\Types\Decimal;
+use SurrealDB\Types\Duration;
+use SurrealDB\Types\GeometryPoint;
+use SurrealDB\Types\None;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Set;
+use SurrealDB\Types\Table;
+use SurrealDB\Types\Uuid;
 
 final class JsonifyTest extends TestCase
 {

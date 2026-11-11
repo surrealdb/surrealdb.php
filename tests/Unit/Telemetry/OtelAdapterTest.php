@@ -12,10 +12,10 @@ use OpenTelemetry\SDK\Trace\SpanExporter\InMemoryExporter as InMemorySpanExporte
 use OpenTelemetry\SDK\Trace\SpanProcessor\SimpleSpanProcessor;
 use OpenTelemetry\SDK\Trace\TracerProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Enum\SpanStatus;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelMeter;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelTracer;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Enum\SpanStatus;
+use SurrealDB\Telemetry\OpenTelemetry\OtelMeter;
+use SurrealDB\Telemetry\OpenTelemetry\OtelTracer;
 
 final class OtelAdapterTest extends TestCase
 {

@@ -1,10 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry;
+namespace SurrealDB\Telemetry;
 
-use SurrealDB\SDK\Contracts\Span;
-use SurrealDB\SDK\Contracts\Tracer;
-use SurrealDB\SDK\Enum\SpanKind;
+use SurrealDB\Contracts\Span;
+use SurrealDB\Contracts\Tracer;
+use SurrealDB\Enum\SpanKind;
 
 /** The default no-op tracer: tracing is off until one is configured. */
 final class NullTracer implements Tracer

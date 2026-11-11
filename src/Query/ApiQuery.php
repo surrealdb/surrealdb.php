@@ -1,18 +1,18 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Api\ApiResponse;
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Exceptions\UnsuccessfulApiException;
-use SurrealDB\SDK\Types\None;
+use SurrealDB\Api\ApiResponse;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Exceptions\UnsuccessfulApiException;
+use SurrealDB\Types\None;
 use function is_array;
 
 /**
  * Invokes a user-defined API endpoint (`DEFINE API`) through SurrealQL's
  * `api::invoke`, so it works over every transport. Build one through
- * {@see \SurrealDB\SDK\Api\SurrealApi}.
+ * {@see \SurrealDB\Api\SurrealApi}.
  *
  * `execute()` returns the full {@see ApiResponse}; after {@see self::value()}
  * it returns only the body and throws {@see UnsuccessfulApiException} on a

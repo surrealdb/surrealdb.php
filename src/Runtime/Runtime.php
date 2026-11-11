@@ -1,20 +1,20 @@
 <?php
 
-namespace SurrealDB\SDK\Runtime;
+namespace SurrealDB\Runtime;
 
-use SurrealDB\SDK\Connection\ConnectionState;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Contracts\DuplexTransportInterface;
-use SurrealDB\SDK\Contracts\TransportInterface;
-use SurrealDB\SDK\Scheduler\Amp\RevoltScheduler;
-use SurrealDB\SDK\Scheduler\Swoole\SwooleScheduler;
-use SurrealDB\SDK\Scheduler\SyncScheduler;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\ObservabilityOptions;
-use SurrealDB\SDK\Telemetry\OpenTelemetry\OtelObservability;
-use SurrealDB\SDK\Transport\Amp\AmpHttpTransport;
-use SurrealDB\SDK\Transport\Amp\AmpWebSocketTransport;
-use SurrealDB\SDK\Transport\Swoole\SwooleWebSocketTransport;
+use SurrealDB\Connection\ConnectionState;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Contracts\DuplexTransportInterface;
+use SurrealDB\Contracts\TransportInterface;
+use SurrealDB\Scheduler\Amp\RevoltScheduler;
+use SurrealDB\Scheduler\Swoole\SwooleScheduler;
+use SurrealDB\Scheduler\SyncScheduler;
+use SurrealDB\Telemetry\OpenTelemetry\ObservabilityOptions;
+use SurrealDB\Telemetry\OpenTelemetry\OtelObservability;
+use SurrealDB\Transport\Amp\AmpHttpTransport;
+use SurrealDB\Transport\Amp\AmpWebSocketTransport;
+use SurrealDB\Transport\Swoole\SwooleWebSocketTransport;
 use function function_exists;
 
 /**

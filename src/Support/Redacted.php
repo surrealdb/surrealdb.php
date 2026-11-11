@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Support;
+namespace SurrealDB\Support;
 
 /**
  * What var_dump(), print_r() and debuggers show in place of a password, key

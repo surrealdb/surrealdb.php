@@ -1,20 +1,20 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor;
+namespace SurrealDB\Codec\Cbor;
 
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\utils\CborByteString;
 use Beau\CborPHP\utils\CborMap;
 use JsonSerializable;
 use stdClass;
-use SurrealDB\SDK\Codec\Cbor\Tags\RecordIdTag;
-use SurrealDB\SDK\Exceptions\SerializationException;
-use SurrealDB\SDK\Types\BoundExcluded;
-use SurrealDB\SDK\Types\BoundIncluded;
-use SurrealDB\SDK\Types\Bytes;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Value;
+use SurrealDB\Codec\Cbor\Tags\RecordIdTag;
+use SurrealDB\Exceptions\SerializationException;
+use SurrealDB\Types\BoundExcluded;
+use SurrealDB\Types\BoundIncluded;
+use SurrealDB\Types\Bytes;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Value;
 use function is_array;
 use function is_string;
 
@@ -94,7 +94,7 @@ final class CborValueMapper
 		if (preg_match('//u', $text) !== 1) {
 			throw new SerializationException(
 				'Serialization',
-				'Text sent to SurrealDB must be valid UTF-8; send binary data as a SurrealDB\\SDK\\Types\\Bytes value.',
+				'Text sent to SurrealDB must be valid UTF-8; send binary data as a SurrealDB\\Types\\Bytes value.',
 			);
 		}
 

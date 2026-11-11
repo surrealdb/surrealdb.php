@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
 /**
  * The vendor-neutral metrics seam. Creates instruments ({@see Counter},
@@ -8,7 +8,7 @@ namespace SurrealDB\SDK\Contracts;
  *
  * Kept separate from {@see Tracer} (interface segregation): a metrics-only
  * backend need not implement tracing, and vice versa. The default is a no-op
- * ({@see \SurrealDB\SDK\Telemetry\NullMeter}).
+ * ({@see \SurrealDB\Telemetry\NullMeter}).
  */
 interface Meter
 {

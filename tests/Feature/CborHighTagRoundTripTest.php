@@ -4,24 +4,24 @@ namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\BoundExcluded;
-use SurrealDB\SDK\Types\BoundIncluded;
-use SurrealDB\SDK\Types\File;
-use SurrealDB\SDK\Types\GeometryCollection;
-use SurrealDB\SDK\Types\GeometryLine;
-use SurrealDB\SDK\Types\GeometryMultiPoint;
-use SurrealDB\SDK\Types\GeometryPoint;
-use SurrealDB\SDK\Types\GeometryPolygon;
-use SurrealDB\SDK\Types\Range;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\Set;
-use SurrealDB\SDK\Types\Value;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Exceptions\UnavailableFeatureException;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Surreal;
+use SurrealDB\Types\BoundExcluded;
+use SurrealDB\Types\BoundIncluded;
+use SurrealDB\Types\File;
+use SurrealDB\Types\GeometryCollection;
+use SurrealDB\Types\GeometryLine;
+use SurrealDB\Types\GeometryMultiPoint;
+use SurrealDB\Types\GeometryPoint;
+use SurrealDB\Types\GeometryPolygon;
+use SurrealDB\Types\Range;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\Set;
+use SurrealDB\Types\Value;
 
 /**
  * Sends every CBOR-tagged value with a tag above 23 to a real server as a
@@ -133,7 +133,7 @@ final class CborHighTagRoundTripTest extends TestCase
 
             try {
                 [$kind] = $db->run('RETURN type::of($file)', ['file' => new File('bucket', '/path.txt')]);
-            } catch (\SurrealDB\SDK\Exceptions\ServerException $error) {
+            } catch (\SurrealDB\Exceptions\ServerException $error) {
                 self::markTestSkipped('The server does not have the experimental files feature enabled: ' . $error->getMessage());
             }
 

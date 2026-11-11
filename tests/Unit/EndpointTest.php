@@ -4,7 +4,7 @@ namespace SurrealDB\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Connection\Endpoint;
+use SurrealDB\Connection\Endpoint;
 
 final class EndpointTest extends TestCase
 {

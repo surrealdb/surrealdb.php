@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry;
+namespace SurrealDB\Telemetry;
 
-use SurrealDB\SDK\Contracts\Span;
-use SurrealDB\SDK\Enum\SpanStatus;
+use SurrealDB\Contracts\Span;
+use SurrealDB\Enum\SpanStatus;
 
 /** A span that discards everything; returned by {@see NullTracer}. */
 final class NullSpan implements Span

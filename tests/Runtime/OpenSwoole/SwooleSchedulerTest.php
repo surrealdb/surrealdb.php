@@ -4,8 +4,8 @@ namespace SurrealDB\Tests\Runtime\OpenSwoole;
 
 use OpenSwoole\Coroutine\Channel;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Scheduler\Swoole\SwooleScheduler;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Scheduler\Swoole\SwooleScheduler;
 
 /**
  * Runtime tests for the OpenSwoole coroutine scheduler and deferred. They

@@ -2,7 +2,7 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Contracts\WebSocketClientInterface;
+use SurrealDB\Contracts\WebSocketClientInterface;
 
 final class FakeWebSocketClient implements WebSocketClientInterface
 {

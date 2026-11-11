@@ -1,34 +1,34 @@
 <?php
 
-namespace SurrealDB\SDK\Engines;
+namespace SurrealDB\Engines;
 
 use Psr\Log\NullLogger;
-use SurrealDB\SDK\Auth\Tokens;
-use SurrealDB\SDK\Connection\ConnectionState;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\SessionState;
-use SurrealDB\SDK\Contracts\EngineInterface;
-use SurrealDB\SDK\Events\RpcRequestSent;
-use SurrealDB\SDK\Events\RpcResponseReceived;
-use SurrealDB\SDK\Exceptions\ConnectionUnavailableException;
-use SurrealDB\SDK\Exceptions\HttpConnectionException;
-use SurrealDB\SDK\Exceptions\ServerException;
-use SurrealDB\SDK\Middleware\LoggingMiddleware;
-use SurrealDB\SDK\Middleware\MiddlewarePipeline;
-use SurrealDB\SDK\Middleware\TelemetryMiddleware;
-use SurrealDB\SDK\Protocol\NamespaceDatabase;
-use SurrealDB\SDK\Protocol\QueryChunk;
-use SurrealDB\SDK\Protocol\VersionInfo;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
-use SurrealDB\SDK\Support\Publisher;
-use SurrealDB\SDK\Telemetry\NullMeter;
-use SurrealDB\SDK\Telemetry\NullTracer;
-use SurrealDB\SDK\Transport\HttpClientResolver;
-use SurrealDB\SDK\Transport\SessionHeaders;
-use SurrealDB\SDK\Transport\SurrealHttp;
-use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\Auth\Tokens;
+use SurrealDB\Connection\ConnectionState;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\SessionState;
+use SurrealDB\Contracts\EngineInterface;
+use SurrealDB\Events\RpcRequestSent;
+use SurrealDB\Events\RpcResponseReceived;
+use SurrealDB\Exceptions\ConnectionUnavailableException;
+use SurrealDB\Exceptions\HttpConnectionException;
+use SurrealDB\Exceptions\ServerException;
+use SurrealDB\Http\HttpConnection;
+use SurrealDB\Http\PsrHttpClientProvider;
+use SurrealDB\Middleware\LoggingMiddleware;
+use SurrealDB\Middleware\MiddlewarePipeline;
+use SurrealDB\Middleware\TelemetryMiddleware;
+use SurrealDB\Protocol\NamespaceDatabase;
+use SurrealDB\Protocol\QueryChunk;
+use SurrealDB\Protocol\VersionInfo;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
+use SurrealDB\Support\Publisher;
+use SurrealDB\Telemetry\NullMeter;
+use SurrealDB\Telemetry\NullTracer;
+use SurrealDB\Transport\SessionHeaders;
+use SurrealDB\Types\Uuid;
 use function is_array;
 use function is_string;
 
@@ -45,7 +45,7 @@ abstract class AbstractRpcEngine implements EngineInterface
     protected readonly Publisher $publisher;
     protected ?ConnectionState $state = null;
 
-    private ?SurrealHttp $http = null;
+    private ?HttpConnection $http = null;
 
     public function __construct(protected readonly DriverContext $context)
     {
@@ -241,7 +241,7 @@ abstract class AbstractRpcEngine implements EngineInterface
         $response = $this->http()->send($url, 'POST', $data, $this->httpHeaders($state->rootSession, accept: 'application/json'));
         $status = $response->getStatusCode();
         // Read once: a non-seekable stream would be empty on a second read.
-        $content = SurrealHttp::body($response);
+        $content = HttpConnection::body($response);
 
         // SurrealDB 2.x answers a successful import with every statement's
         // result, records included, and decoding all of that takes several
@@ -283,7 +283,7 @@ abstract class AbstractRpcEngine implements EngineInterface
         if ($status < 200 || $status >= 300) {
             $information = is_array($body) ? ($body['information'] ?? $body['description'] ?? null) : null;
 
-            throw SurrealHttp::failure($response, is_string($information) ? $information : null, $content);
+            throw HttpConnection::failure($response, is_string($information) ? $information : null, $content);
         }
     }
 
@@ -301,7 +301,7 @@ abstract class AbstractRpcEngine implements EngineInterface
             accept: 'text/plain',
         ));
 
-        return SurrealHttp::body($response);
+        return HttpConnection::body($response);
     }
 
     // ----------------------------------------------------------------- //
@@ -369,9 +369,13 @@ abstract class AbstractRpcEngine implements EngineInterface
         return [...$headers, ...SessionHeaders::of($session)];
     }
 
-    protected function http(): SurrealHttp
+    protected function http(): HttpConnection
     {
-        return $this->http ??= new SurrealHttp(new HttpClientResolver($this->context));
+        return $this->http ??= new HttpConnection(new PsrHttpClientProvider(
+            $this->context->options->httpClient,
+            $this->context->options->requestFactory,
+            $this->context->options->streamFactory,
+        ));
     }
 
     private function buildPipeline(): MiddlewarePipeline

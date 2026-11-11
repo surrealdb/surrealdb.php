@@ -1,16 +1,16 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Enum\Mutation;
-use SurrealDB\SDK\Exceptions\ExpressionException;
-use SurrealDB\SDK\Query\Concerns\HasDataMutation;
-use SurrealDB\SDK\Query\Concerns\HasOutput;
-use SurrealDB\SDK\Query\Concerns\HasTimeout;
-use SurrealDB\SDK\Query\Concerns\HasVersion;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Enum\Mutation;
+use SurrealDB\Exceptions\ExpressionException;
+use SurrealDB\Query\Concerns\HasDataMutation;
+use SurrealDB\Query\Concerns\HasOutput;
+use SurrealDB\Query\Concerns\HasTimeout;
+use SurrealDB\Query\Concerns\HasVersion;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 use function is_array;
 
 /**

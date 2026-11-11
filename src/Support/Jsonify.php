@@ -1,13 +1,13 @@
 <?php
 
-namespace SurrealDB\SDK\Support;
+namespace SurrealDB\Support;
 
-use SurrealDB\SDK\Types\Bytes;
-use SurrealDB\SDK\Types\Geometry;
-use SurrealDB\SDK\Types\None;
-use SurrealDB\SDK\Types\Set;
-use SurrealDB\SDK\Types\Table;
-use SurrealDB\SDK\Types\Value;
+use SurrealDB\Types\Bytes;
+use SurrealDB\Types\Geometry;
+use SurrealDB\Types\None;
+use SurrealDB\Types\Set;
+use SurrealDB\Types\Table;
+use SurrealDB\Types\Value;
 use function is_array;
 
 /**

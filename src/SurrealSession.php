@@ -1,22 +1,22 @@
 <?php
 
-namespace SurrealDB\SDK;
+namespace SurrealDB;
 
-use SurrealDB\SDK\Auth\Credentials;
-use SurrealDB\SDK\Auth\Token;
-use SurrealDB\SDK\Auth\Tokens;
-use SurrealDB\SDK\Exceptions\InvalidSessionException;
-use SurrealDB\SDK\GraphQl\GraphQlResponse;
-use SurrealDB\SDK\Live\LiveSubscription;
-use SurrealDB\SDK\Live\UnmanagedLiveSubscription;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Protocol\NamespaceDatabase;
-use SurrealDB\SDK\Query\LiveSelectQuery;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
-use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\Auth\Credentials;
+use SurrealDB\Auth\Token;
+use SurrealDB\Auth\Tokens;
+use SurrealDB\Exceptions\InvalidSessionException;
+use SurrealDB\GraphQl\GraphQlResponse;
+use SurrealDB\Live\LiveSubscription;
+use SurrealDB\Live\UnmanagedLiveSubscription;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Protocol\NamespaceDatabase;
+use SurrealDB\Query\LiveSelectQuery;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
+use SurrealDB\Types\Uuid;
 
 /**
  * A session on the server: its own namespace and database, variables,

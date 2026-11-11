@@ -3,24 +3,24 @@
 namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\DatabaseAuth;
-use SurrealDB\SDK\Auth\NamespaceAuth;
-use SurrealDB\SDK\Auth\RecordAccessAuth;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Exceptions\ConfigurationException;
-use SurrealDB\SDK\Exceptions\InvalidSessionException;
-use SurrealDB\SDK\Exceptions\ServerException;
-use SurrealDB\SDK\Exceptions\TransactionFinishedException;
-use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\SurrealSession;
-use SurrealDB\SDK\SurrealTransaction;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Auth\DatabaseAuth;
+use SurrealDB\Auth\NamespaceAuth;
+use SurrealDB\Auth\RecordAccessAuth;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Exceptions\ConfigurationException;
+use SurrealDB\Exceptions\InvalidSessionException;
+use SurrealDB\Exceptions\ServerException;
+use SurrealDB\Exceptions\TransactionFinishedException;
+use SurrealDB\Exceptions\UnsupportedFeatureException;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Surreal;
+use SurrealDB\SurrealSession;
+use SurrealDB\SurrealTransaction;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 
 /**
  * Session and transaction objects against a real server over WebSocket.

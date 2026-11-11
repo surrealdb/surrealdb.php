@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
-use SurrealDB\SDK\Protocol\Feature;
+use SurrealDB\Protocol\Feature;
 
 /** Thrown when the configured engine does not support a requested feature. */
 final class UnsupportedFeatureException extends SurrealException

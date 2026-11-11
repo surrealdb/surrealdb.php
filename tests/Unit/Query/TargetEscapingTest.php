@@ -3,15 +3,15 @@
 namespace SurrealDB\Tests\Unit\Query;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Query\CreateQuery;
-use SurrealDB\SDK\Query\DeleteQuery;
-use SurrealDB\SDK\Query\SelectQuery;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\BoundIncluded;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Query\CreateQuery;
+use SurrealDB\Query\DeleteQuery;
+use SurrealDB\Query\SelectQuery;
+use SurrealDB\Surreal;
+use SurrealDB\Types\BoundIncluded;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionUnionType;

@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
 use Beau\CborPHP\interfaces\CborTag;
 use LogicException;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Types\DateTime;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Types\DateTime;
 
 /**
  * A datetime as RFC 3339 text: tag 0. Read only; a DateTime is written as

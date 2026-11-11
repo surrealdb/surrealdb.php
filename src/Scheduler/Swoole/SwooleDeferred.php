@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Scheduler\Swoole;
+namespace SurrealDB\Scheduler\Swoole;
 
 use OpenSwoole\Coroutine\Channel;
-use SurrealDB\SDK\Contracts\Deferred;
+use SurrealDB\Contracts\Deferred;
 use function is_array;
 
 /**

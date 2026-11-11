@@ -4,15 +4,15 @@ namespace SurrealDB\Tests\Unit\Query;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Exceptions\ExpressionException;
-use SurrealDB\SDK\Query\RelateQuery;
-use SurrealDB\SDK\Types\BoundExcluded;
-use SurrealDB\SDK\Types\BoundIncluded;
-use SurrealDB\SDK\Types\Range;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Exceptions\ExpressionException;
+use SurrealDB\Query\RelateQuery;
+use SurrealDB\Types\BoundExcluded;
+use SurrealDB\Types\BoundIncluded;
+use SurrealDB\Types\Range;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
 
 final class RelateQueryTest extends TestCase
 {

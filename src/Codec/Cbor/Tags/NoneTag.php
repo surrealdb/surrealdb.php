@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
 use Beau\CborPHP\interfaces\CborTag;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Types\None;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Types\None;
 
 /**
  * NONE: tag 6 with null.

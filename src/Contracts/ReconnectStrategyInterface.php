@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
 /**
  * Governs whether and how a dropped connection is retried. Mirrors the JS

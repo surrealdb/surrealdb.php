@@ -1,18 +1,18 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Contracts\Meter;
-use SurrealDB\SDK\Contracts\MiddlewareInterface;
-use SurrealDB\SDK\Contracts\Scheduler;
-use SurrealDB\SDK\Contracts\Tracer;
-use SurrealDB\SDK\Enum\CodecEnum;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Contracts\Meter;
+use SurrealDB\Contracts\MiddlewareInterface;
+use SurrealDB\Contracts\Scheduler;
+use SurrealDB\Contracts\Tracer;
+use SurrealDB\Enum\CodecEnum;
 
 /**
  * Driver-wide configuration and dependency injection. Every field has a sane
@@ -22,12 +22,12 @@ use SurrealDB\SDK\Enum\CodecEnum;
 final class DriverOptions
 {
     /**
-     * @param array<string,callable|\SurrealDB\SDK\Contracts\EngineFactoryInterface>|null $engines
+     * @param array<string,callable|\SurrealDB\Contracts\EngineFactoryInterface>|null $engines
      *        Engine factory overrides keyed by URL scheme.
-     * @param (\Closure(Endpoint, DriverContext): \SurrealDB\SDK\Contracts\WebSocketClientInterface)|null $webSocketClientFactory
-     * @param (\Closure(DriverContext, \SurrealDB\SDK\Connection\ConnectionState): \SurrealDB\SDK\Contracts\DuplexTransportInterface)|null $webSocketTransportFactory
+     * @param (\Closure(Endpoint, DriverContext): \SurrealDB\Contracts\WebSocketClientInterface)|null $webSocketClientFactory
+     * @param (\Closure(DriverContext, \SurrealDB\Connection\ConnectionState): \SurrealDB\Contracts\DuplexTransportInterface)|null $webSocketTransportFactory
      *        Swap the entire WebSocket transport (e.g. an async Swoole/Amp implementation).
-     * @param (\Closure(DriverContext, \SurrealDB\SDK\Connection\ConnectionState): \SurrealDB\SDK\Contracts\TransportInterface)|null $httpTransportFactory
+     * @param (\Closure(DriverContext, \SurrealDB\Connection\ConnectionState): \SurrealDB\Contracts\TransportInterface)|null $httpTransportFactory
      *        Swap the entire HTTP transport (e.g. a non-blocking Amp implementation).
      * @param list<MiddlewareInterface> $middleware Additional middleware appended to the pipeline.
      *

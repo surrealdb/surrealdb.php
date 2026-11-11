@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when an operation requires a namespace and/or database to be selected. */
 final class MissingNamespaceDatabaseException extends SurrealException

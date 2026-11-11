@@ -3,13 +3,13 @@
 namespace SurrealDB\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Exceptions\ServerException;
-use SurrealDB\SDK\Live\LiveAction;
-use SurrealDB\SDK\Live\LiveMessage;
-use SurrealDB\SDK\Live\LiveSubscription;
-use SurrealDB\SDK\Surreal;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Exceptions\ServerException;
+use SurrealDB\Live\LiveAction;
+use SurrealDB\Live\LiveMessage;
+use SurrealDB\Live\LiveSubscription;
+use SurrealDB\Surreal;
 use SurrealDB\Tests\Fakes\FakeDuplexTransport;
 use function count;
 

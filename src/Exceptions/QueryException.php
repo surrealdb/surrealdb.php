@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Server error: query execution failure (timeout, cancelled, not executed). */
 final class QueryException extends ServerException {}

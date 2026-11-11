@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
 /**
  * A full-duplex, frame-level transport (e.g. WebSocket). In addition to the

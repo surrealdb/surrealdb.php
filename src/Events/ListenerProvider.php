@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Events;
+namespace SurrealDB\Events;
 
 use Psr\EventDispatcher\ListenerProviderInterface;
 

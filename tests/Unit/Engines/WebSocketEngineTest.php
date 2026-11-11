@@ -4,22 +4,22 @@ namespace SurrealDB\Tests\Unit\Engines;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Connection\ConnectionState;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Connection\Endpoint;
-use SurrealDB\SDK\Connection\SessionState;
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Contracts\DuplexTransportInterface;
-use SurrealDB\SDK\Contracts\Scheduler;
-use SurrealDB\SDK\Engines\Remote\WebSocketEngine;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Events\EventDispatcher;
-use SurrealDB\SDK\Reconnect\ExponentialBackoffReconnect;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
-use SurrealDB\SDK\Scheduler\SyncDeferred;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Connection\ConnectionState;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Connection\Endpoint;
+use SurrealDB\Connection\SessionState;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Contracts\DuplexTransportInterface;
+use SurrealDB\Contracts\Scheduler;
+use SurrealDB\Engines\Remote\WebSocketEngine;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Events\EventDispatcher;
+use SurrealDB\Reconnect\ExponentialBackoffReconnect;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
+use SurrealDB\Scheduler\SyncDeferred;
 
 final class WebSocketEngineTest extends TestCase
 {

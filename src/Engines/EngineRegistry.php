@@ -1,13 +1,13 @@
 <?php
 
-namespace SurrealDB\SDK\Engines;
+namespace SurrealDB\Engines;
 
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Contracts\EngineFactoryInterface;
-use SurrealDB\SDK\Contracts\EngineInterface;
-use SurrealDB\SDK\Engines\Remote\HttpEngine;
-use SurrealDB\SDK\Engines\Remote\WebSocketEngine;
-use SurrealDB\SDK\Exceptions\UnsupportedEngineException;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Contracts\EngineFactoryInterface;
+use SurrealDB\Contracts\EngineInterface;
+use SurrealDB\Engines\Remote\HttpEngine;
+use SurrealDB\Engines\Remote\WebSocketEngine;
+use SurrealDB\Exceptions\UnsupportedEngineException;
 
 /**
  * Maps URL schemes to engine factories. Port of the JS `createRemoteEngines`

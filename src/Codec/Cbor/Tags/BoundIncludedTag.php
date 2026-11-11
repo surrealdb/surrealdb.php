@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Codec\Cbor\CborValueMapper;
-use SurrealDB\SDK\Types\BoundIncluded;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Codec\Cbor\CborValueMapper;
+use SurrealDB\Types\BoundIncluded;
 
 /**
  * An included range bound: tag 50 with the bound value.

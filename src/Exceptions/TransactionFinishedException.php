@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when a transaction is used after it was committed or cancelled. */
 final class TransactionFinishedException extends SurrealException

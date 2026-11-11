@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Protocol;
+namespace SurrealDB\Protocol;
 
 /**
  * The catalogue of features known to the SDK, including the SurrealDB version
@@ -55,13 +55,13 @@ final class Features
         return new Feature('live-query-bindings', '3.0.0');
     }
 
-    /** Sending {@see \SurrealDB\SDK\Types\Set} values (CBOR tag 56). */
+    /** Sending {@see \SurrealDB\Types\Set} values (CBOR tag 56). */
     public static function sets(): Feature
     {
         return new Feature('sets', '3.0.0');
     }
 
-    /** Sending {@see \SurrealDB\SDK\Types\File} values (CBOR tag 55). */
+    /** Sending {@see \SurrealDB\Types\File} values (CBOR tag 55). */
     public static function files(): Feature
     {
         return new Feature('files', '3.0.0');

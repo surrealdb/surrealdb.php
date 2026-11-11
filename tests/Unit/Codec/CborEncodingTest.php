@@ -5,9 +5,9 @@ namespace SurrealDB\Tests\Unit\Codec;
 use Beau\CborPHP\classes\TaggedValue;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Codec\CborSerializer;
-use SurrealDB\SDK\Exceptions\SerializationException;
-use SurrealDB\SDK\Types\Bytes;
+use SurrealDB\Codec\CborSerializer;
+use SurrealDB\Exceptions\SerializationException;
+use SurrealDB\Types\Bytes;
 
 /**
  * What the SDK sends, through welpie21/cbor.php. Checked against RFC 8949

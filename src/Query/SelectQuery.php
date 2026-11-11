@@ -1,15 +1,15 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Query\Concerns\HasCondition;
-use SurrealDB\SDK\Query\Concerns\HasTimeout;
-use SurrealDB\SDK\Query\Concerns\HasVersion;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Query\Concerns\HasCondition;
+use SurrealDB\Query\Concerns\HasTimeout;
+use SurrealDB\Query\Concerns\HasVersion;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
 
 /**
  * Fluent `SELECT` builder.

@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Query\Frame;
+namespace SurrealDB\Query\Frame;
 
-use SurrealDB\SDK\Exceptions\ServerException;
+use SurrealDB\Exceptions\ServerException;
 
 /**
  * A statement failed. Streaming carries on with the next statement.

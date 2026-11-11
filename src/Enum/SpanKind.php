@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Enum;
+namespace SurrealDB\Enum;
 
 /**
  * The relationship between a span and its parent/children, mapped to the

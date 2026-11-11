@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Transport;
+namespace SurrealDB\Transport;
 
-use SurrealDB\SDK\Contracts\WebSocketClientInterface;
-use SurrealDB\SDK\Exceptions\SurrealException;
+use SurrealDB\Contracts\WebSocketClientInterface;
+use SurrealDB\Exceptions\SurrealException;
 use function chr;
 use function is_resource;
 use function ord;

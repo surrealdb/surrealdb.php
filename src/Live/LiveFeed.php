@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Live;
+namespace SurrealDB\Live;
 
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Contracts\Scheduler;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Contracts\Scheduler;
 
 /**
  * The notifications for one live query id, as delivered by an engine.

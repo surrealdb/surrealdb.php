@@ -3,13 +3,13 @@
 namespace SurrealDB\Tests\Unit\Query;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Query\SelectQuery;
-use SurrealDB\SDK\Query\UpdateQuery;
-use SurrealDB\SDK\Query\UpsertQuery;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\Table;
-use SurrealDB\SDK\Types\Value;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Query\SelectQuery;
+use SurrealDB\Query\UpdateQuery;
+use SurrealDB\Query\UpsertQuery;
+use SurrealDB\Surreal;
+use SurrealDB\Types\Table;
+use SurrealDB\Types\Value;
 
 final class ConditionTest extends TestCase
 {

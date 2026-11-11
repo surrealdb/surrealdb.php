@@ -1,13 +1,13 @@
 <?php
 
-namespace SurrealDB\SDK\Live;
+namespace SurrealDB\Live;
 
-use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Contracts\Scheduler;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Contracts\Scheduler;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Types\Uuid;
 
 /**
  * A subscription to a live query's notifications. Iterate it to receive

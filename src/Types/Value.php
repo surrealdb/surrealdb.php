@@ -1,10 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 use JsonSerializable;
-use SurrealDB\SDK\Contracts\SurrealType;
-use SurrealDB\SDK\Exceptions\InvalidValueException;
+use SurrealDB\Contracts\SurrealType;
+use SurrealDB\Exceptions\InvalidValueException;
 use function array_key_exists;
 use function count;
 use function get_debug_type;
@@ -96,7 +96,7 @@ abstract class Value implements SurrealType, \JsonSerializable, \Stringable
         // SurrealQL, statements included. The CBOR encoder refuses it too.
         throw new InvalidValueException(sprintf(
             'A value of type %s has no SurrealQL form. Pass a string, a number, an array, a stdClass or one of the '
-            . 'SurrealDB\\SDK\\Types values; cast an object that has a text form to a string first.',
+            . 'SurrealDB\\Types values; cast an object that has a text form to a string first.',
             get_debug_type($value),
         ));
     }

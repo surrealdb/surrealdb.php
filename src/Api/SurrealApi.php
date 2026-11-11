@@ -1,15 +1,15 @@
 <?php
 
-namespace SurrealDB\SDK\Api;
+namespace SurrealDB\Api;
 
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Query\ApiQuery;
-use SurrealDB\SDK\Types\None;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Query\ApiQuery;
+use SurrealDB\Types\None;
 
 /**
  * Calls user-defined API endpoints (`DEFINE API`) under an optional path
  * prefix, with default headers sent on every request. Obtain one from
- * {@see \SurrealDB\SDK\Surreal::api()}.
+ * {@see \SurrealDB\Surreal::api()}.
  *
  * A request without a body leaves `body` out (SurrealQL `NONE`); passing `null`
  * sends an explicit `NULL` body.
