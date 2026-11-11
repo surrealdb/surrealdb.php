@@ -4,8 +4,10 @@ namespace SurrealDB\SDK\Types;
 
 use JsonSerializable;
 use SurrealDB\SDK\Contracts\SurrealType;
+use SurrealDB\SDK\Exceptions\InvalidValueException;
 use function array_key_exists;
 use function count;
+use function get_debug_type;
 use function is_array;
 use function is_bool;
 use function is_float;
@@ -42,7 +44,12 @@ abstract class Value implements SurrealType, \JsonSerializable, \Stringable
      *
      * {@see Value} instances delegate to their own {@see self::escape()}; scalars
      * and arrays are rendered as SurrealQL primitives/objects, mirroring the JS
-     * SDK's `toSurqlString` helper.
+     * SDK's `toSurqlString` helper. A `stdClass` is an object, and a
+     * `JsonSerializable` is written as what it serializes to.
+     *
+     * @throws InvalidValueException for any other object, and for a resource:
+     *                               it has no SurrealQL form, and its own text
+     *                               (`__toString()`) would be read as SurrealQL
      */
     public static function toSurql(mixed $value): string
     {
@@ -85,7 +92,13 @@ abstract class Value implements SurrealType, \JsonSerializable, \Stringable
             return self::toSurql($value->jsonSerialize());
         }
 
-        return (string) $value;
+        // Never its own text: a Stringable written as it is would be read as
+        // SurrealQL, statements included. The CBOR encoder refuses it too.
+        throw new InvalidValueException(sprintf(
+            'A value of type %s has no SurrealQL form. Pass a string, a number, an array, a stdClass or one of the '
+            . 'SurrealDB\\SDK\\Types values; cast an object that has a text form to a string first.',
+            get_debug_type($value),
+        ));
     }
 
     /**

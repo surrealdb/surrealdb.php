@@ -4,13 +4,17 @@ namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use SurrealDB\SDK\Exceptions\InvalidValueException;
 use SurrealDB\SDK\Types\BoundExcluded;
 use SurrealDB\SDK\Types\BoundIncluded;
+use SurrealDB\SDK\Types\Range;
 use SurrealDB\SDK\Types\RecordId;
 use SurrealDB\SDK\Types\RecordIdRange;
+use SurrealDB\SDK\Types\Set;
 use SurrealDB\SDK\Types\StringRecordId;
 use SurrealDB\SDK\Types\Table;
 use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\SDK\Types\Value;
 
 final class RecordIdTest extends TestCase
 {
@@ -166,6 +170,12 @@ final class RecordIdTest extends TestCase
         yield 'an empty object' => [new \stdClass(), 't:{  }'];
         yield 'an object with numeric keys' => [(object) ['0' => 'x'], 't:{ "0": s"x" }'];
         yield 'a stdClass inside an array' => [[(object) ['a' => 1]], 't:[ { "a": 1 } ]'];
+        yield 'a JsonSerializable as what it serializes to' => [[new class implements \JsonSerializable {
+            public function jsonSerialize(): string
+            {
+                return 'a"; DELETE t; --';
+            }
+        }], 't:[ s"a\"; DELETE t; --" ]'];
     }
 
     /**
@@ -176,6 +186,51 @@ final class RecordIdTest extends TestCase
     {
         $this->assertSame($text, new RecordId('t', $id)->escape());
         $this->assertSame($text, (string) new RecordId('t', $id));
+    }
+
+    /**
+     * @return iterable<string, array{object}>
+     */
+    public static function objectsWithoutASurrealQlForm(): iterable
+    {
+        yield 'a Stringable' => [new class implements \Stringable {
+            public function __toString(): string
+            {
+                return 'a; DELETE t; --';
+            }
+        }];
+        yield 'a native date' => [new \DateTimeImmutable('2024-01-01')];
+        yield 'a closure' => [static fn (): string => 'a; DELETE t; --'];
+    }
+
+    /**
+     * An object's own text is not SurrealQL: written into a query as it is,
+     * `a; DELETE t; --` would run. Only the SDK's value types, `stdClass`
+     * and `JsonSerializable` objects have a form to write.
+     */
+    #[DataProvider('objectsWithoutASurrealQlForm')]
+    public function testAnObjectWithoutASurrealQlFormIsRefusedRatherThanWrittenAsItsText(object $object): void
+    {
+        $writes = [
+            'a record id' => static fn (): string => new RecordId('t', $object)->escape(),
+            'an array id' => static fn (): string => new RecordId('t', ['x', $object])->escape(),
+            'an object id' => static fn (): string => new RecordId('t', (object) ['key' => $object])->escape(),
+            'a set' => static fn (): string => new Set([$object])->escape(),
+            'a range bound' => static fn (): string => new Range(new BoundIncluded($object), null)->escape(),
+            'a literal' => static fn (): string => Value::toSurql($object),
+        ];
+
+        foreach ($writes as $what => $write) {
+            try {
+                $written = $write();
+            } catch (InvalidValueException $error) {
+                $this->assertStringContainsString(get_debug_type($object), $error->getMessage(), $what);
+
+                continue;
+            }
+
+            $this->fail("Expected {$what} to refuse the object, but it wrote: {$written}");
+        }
     }
 
     public function testRecordIdRangeBoundsCompareStrictly(): void
