@@ -86,6 +86,20 @@ final class CborEncodingTest extends TestCase
         (new CborSerializer())->serialize($value);
     }
 
+    public function testRejectsValuesNestedTooDeeply(): void
+    {
+        $value = 1;
+
+        for ($level = 0; $level < 513; $level++) {
+            $value = [$value];
+        }
+
+        $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Nesting deeper than 512 levels');
+
+        (new CborSerializer())->serialize($value);
+    }
+
     public function testRejectsUnsupportedValues(): void
     {
         $this->expectException(SerializationException::class);

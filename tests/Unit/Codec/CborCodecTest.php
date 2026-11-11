@@ -317,6 +317,44 @@ final class CborCodecTest extends TestCase
         );
     }
 
+    /**
+     * cbor.php gives a tag handler its byte strings as plain strings, so the
+     * tags that hold any value are read by the reviver, which keeps them.
+     */
+    public function testBytesInsideTagsThatHoldValuesStayBytes(): void
+    {
+        $bytes = new Bytes("\x00\xff");
+
+        $set = $this->roundTrip(new Set([$bytes, 'text']));
+        $this->assertInstanceOf(Set::class, $set);
+        $this->assertInstanceOf(Bytes::class, $set->values[0]);
+        $this->assertSame("\x00\xff", $set->values[0]->bytes);
+        $this->assertSame('text', $set->values[1]);
+
+        $record = $this->roundTrip(new RecordId('blob', [$bytes]));
+        $this->assertInstanceOf(RecordId::class, $record);
+        $this->assertIsArray($record->id);
+        $this->assertInstanceOf(Bytes::class, $record->id[0]);
+
+        $range = $this->roundTrip(new Range(new BoundIncluded($bytes), null));
+        $this->assertInstanceOf(Range::class, $range);
+        $this->assertInstanceOf(BoundIncluded::class, $range->begin);
+        $this->assertInstanceOf(Bytes::class, $range->begin->value);
+    }
+
+    public function testStringRecordIdEncodesAsTextInTag8(): void
+    {
+        $this->assertSame('c86c706572736f6e3a746f626965', bin2hex($this->serializer->serialize(new StringRecordId('person:tobie'))));
+    }
+
+    public function testAnUnknownTagThrowsASerializationException(): void
+    {
+        $this->expectException(SerializationException::class);
+        $this->expectExceptionMessage('Unsupported SurrealDB CBOR tag: 99');
+
+        $this->deserializer->deserialize(hex2bin('d86301'));
+    }
+
     public function testEmptyObjectEncodesAsAMap(): void
     {
         $this->assertSame('a0', bin2hex($this->serializer->serialize(new \stdClass())));
