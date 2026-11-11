@@ -16,8 +16,10 @@ use function strlen;
  * The server names each frame with an `event:` line and carries a JSON
  * `data:` payload: `meta` (`traceId`, `sessionId`), `chunk` (`text`), `done`
  * (`reply`, `citations`, `memoryUpdates`), and `error` (`error`), which is
- * raised as a {@see StreamException}. A frame named with an event this client
- * does not know is still yielded, with a null {@see ChatChunk::$event}.
+ * raised as a {@see StreamException}. So is any frame whose payload carries
+ * an `error` string, whatever its event name, as in `@surrealdb/memory`. A
+ * frame named with an event this client does not know is still yielded, with
+ * a null {@see ChatChunk::$event}.
  * Multi-line `data:` payloads, comment keep-alives, and the `[DONE]` sentinel
  * some proxies append are handled.
  * Chunks are yielded as the underlying stream delivers them, so an HTTP client
@@ -126,11 +128,12 @@ final class ChatStreamParser
         }
 
         $decoded = json_decode($data, true);
+        $error = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null;
 
-        if ($name === self::EVENT_ERROR) {
-            $message = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : $data;
-
-            throw new StreamException('Chat stream failed', 0, $message, extensions: is_array($decoded) ? $decoded : []);
+        // A frame is a failure when it is named `error`, or when its payload
+        // carries an `error` string under any other name or none.
+        if ($name === self::EVENT_ERROR || $error !== null) {
+            throw new StreamException('Chat stream failed', 0, $error ?? $data, extensions: is_array($decoded) ? $decoded : []);
         }
 
         $payload = is_array($decoded) ? $decoded : ['text' => $data];

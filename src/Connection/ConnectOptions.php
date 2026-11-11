@@ -11,6 +11,12 @@ use SurrealDB\Contracts\ReconnectStrategyInterface;
 final class ConnectOptions
 {
     /**
+     * @param bool $invalidateOnExpiry sign a session out when its access token
+     *                                 expires, rather than renew it (with the
+     *                                 refresh token or `$authentication`). The
+     *                                 token is still reused after a reconnect
+     *                                 while it is valid, and `$authentication`
+     *                                 still signs a new session in.
      * @param array<string,mixed>|bool|ReconnectStrategyInterface $reconnect
      */
     public function __construct(

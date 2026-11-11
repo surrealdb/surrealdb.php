@@ -94,14 +94,6 @@ final class Range extends Value
             return $a === $b;
         }
 
-        if ($a::class !== $b::class) {
-            return false;
-        }
-
-        if ($a->value instanceof Value) {
-            return $a->value->equals($b->value);
-        }
-
-        return $a->value == $b->value;
+        return $a::class === $b::class && self::same($a->value, $b->value);
     }
 }

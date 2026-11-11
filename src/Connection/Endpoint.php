@@ -34,8 +34,14 @@ final readonly class Endpoint
         $port = $parts['port'] ?? null;
         $path = $parts['path'] ?? '';
 
-        if (in_array($scheme, self::REMOTE_SCHEMES, true) && !str_ends_with($path, '/rpc')) {
-            $path = rtrim($path, '/') . '/rpc';
+        if (in_array($scheme, self::REMOTE_SCHEMES, true)) {
+            // `/rpc/` is the RPC path as well: a trailing slash is not a
+            // segment of its own.
+            $path = rtrim($path, '/');
+
+            if (!str_ends_with($path, '/rpc')) {
+                $path .= '/rpc';
+            }
         }
 
         return new self(self::compose($scheme, $host, $port, $path), $scheme, $host, $port, $path);

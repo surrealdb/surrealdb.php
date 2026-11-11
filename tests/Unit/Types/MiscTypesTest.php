@@ -72,4 +72,13 @@ final class MiscTypesTest extends TestCase
 
         $this->assertCount(2, $set->values);
     }
+
+    public function testSetEqualityComparesMembersStrictly(): void
+    {
+        $this->assertFalse(new Set(['1'])->equals(new Set([1])));
+        $this->assertFalse(new Set([[true]])->equals(new Set([[1]])));
+        $this->assertFalse(new Set([[null]])->equals(new Set([[false]])));
+        $this->assertTrue(new Set([[1, 'a']])->equals(new Set([[1.0, 'a']])));
+        $this->assertTrue(new Set([new Table('a')])->equals(new Set([new Table('a')])));
+    }
 }

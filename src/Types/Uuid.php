@@ -69,6 +69,11 @@ final class Uuid extends Value
         return $other instanceof self && $this->inner->equals($other->inner);
     }
 
+    protected function hashKey(): string
+    {
+        return (string) $this->inner;
+    }
+
     /**
      * The canonical RFC 4122 string (e.g. `09748193-048a-4bfb-b825-8528cf74fdc1`).
      */

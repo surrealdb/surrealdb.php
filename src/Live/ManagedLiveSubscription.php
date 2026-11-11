@@ -1,0 +1,139 @@
+<?php
+
+namespace SurrealDB\Live;
+
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Support\Jwt;
+
+/**
+ * A live subscription whose `LIVE SELECT` the SDK issued. Created by
+ * {@see \SurrealDB\Query\LiveSelectQuery::execute()}; the query is already
+ * registered on the server, and this client subscribed, when it is returned.
+ */
+final class ManagedLiveSubscription extends LiveSubscription
+{
+    private string $id = '';
+
+    /**
+     * Where, and as whom, the query first started: a replay after a reconnect
+     * runs it there again, and not as anyone else.
+     *
+     * @var array{namespace: ?string, database: ?string, identity: array<string, mixed>|null}|null
+     */
+    private ?array $origin = null;
+
+    public function __construct(
+        ConnectionController $connection,
+        private readonly BoundQuery $query,
+        ?string $session = null,
+    ) {
+        parent::__construct($connection, $session);
+    }
+
+    /**
+     * @internal issue the LIVE query and start receiving its notifications
+     */
+    public function start(): void
+    {
+        $result = null;
+
+        if ($this->origin === null) {
+            $state = $this->connection->state()?->session($this->session);
+            $this->origin = [
+                'namespace' => $state?->namespace,
+                'database' => $state?->database,
+                'identity' => Jwt::identity($state?->auth->accessToken),
+            ];
+        }
+
+        foreach ($this->connection->query($this->query, $this->session) as $chunk) {
+            $result = $chunk->resultOrThrow();
+        }
+
+        if ($result === null) {
+            throw new SurrealException('The LIVE query did not return a live query id.');
+        }
+
+        // Killed, or its session reset or signed out, while the query was in
+        // flight (another task, during a replay): don't start receiving, and
+        // stop the query just issued.
+        if ($this->killed || $this->ended) {
+            try {
+                self::killOnServer($this->connection, (string) $result, $this->session);
+            } catch (\Throwable) {
+                // The caller already considers it stopped.
+            }
+
+            return;
+        }
+
+        $this->id = (string) $result;
+        $this->feed = $this->connection->liveQuery($this->id);
+        $this->connection->trackLive($this);
+    }
+
+    /**
+     * @internal re-issue the LIVE query on a new connection. The server
+     * assigns a new id, which {@see self::id()} then returns.
+     */
+    public function replay(): void
+    {
+        // Keep what the lost socket already delivered: iteration yields it
+        // before the replayed query's notifications.
+        if ($this->feed instanceof LiveFeed) {
+            $this->feed->end();
+            $this->backlog[] = $this->feed;
+            $this->feed = null;
+        }
+
+        // On failure the connection decides: wait for the next socket, or
+        // end the subscription. On success it resumes iteration, once every
+        // subscription is replayed.
+        $this->start();
+    }
+
+    public function id(): string
+    {
+        return $this->id;
+    }
+
+    /**
+     * @internal where, and as whom, the query first started
+     *
+     * @return array{namespace: ?string, database: ?string, identity: array<string, mixed>|null}|null
+     */
+    public function origin(): ?array
+    {
+        return $this->origin;
+    }
+
+    public function isManaged(): bool
+    {
+        return true;
+    }
+
+    protected function stopped(): void
+    {
+        $this->connection->untrackLive($this);
+    }
+
+    /**
+     * Let go of without kill(): the query the SDK started runs on until the
+     * socket closes, but nobody can claim its notifications, so they are
+     * dropped rather than held.
+     */
+    public function __destruct()
+    {
+        if ($this->feed instanceof LiveFeed) {
+            $this->feed->release();
+        }
+    }
+
+    /** The `LIVE SELECT` statement this subscription runs. */
+    public function query(): BoundQuery
+    {
+        return $this->query;
+    }
+}

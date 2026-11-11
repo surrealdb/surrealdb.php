@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7fbcc9bca0c365ce8a0ba3aa5d84a434",
+    "content-hash": "3b072415d45624ef46db7ed7cb6c0701",
     "packages": [
         {
             "name": "brick/math",
@@ -488,16 +488,16 @@
         },
         {
             "name": "welpie21/cbor.php",
-            "version": "2.1.0",
+            "version": "3.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/welpie21/cbor.php.git",
-                "reference": "fd3afd848ce722761499388696db0b271502e570"
+                "reference": "1d43a3d81609723b058516b577e7be3373e85809"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/welpie21/cbor.php/zipball/fd3afd848ce722761499388696db0b271502e570",
-                "reference": "fd3afd848ce722761499388696db0b271502e570",
+                "url": "https://api.github.com/repos/welpie21/cbor.php/zipball/1d43a3d81609723b058516b577e7be3373e85809",
+                "reference": "1d43a3d81609723b058516b577e7be3373e85809",
                 "shasum": ""
             },
             "require": {
@@ -509,6 +509,9 @@
                 "phpstan/phpstan-beberlei-assert": "^1.1.2",
                 "phpunit/php-code-coverage": "^10.1",
                 "phpunit/phpunit": "^10.5.63"
+            },
+            "suggest": {
+                "ext-mbstring": "Required for a stringEncoding other than UTF-8"
             },
             "type": "library",
             "autoload": {
@@ -536,9 +539,9 @@
             ],
             "support": {
                 "issues": "https://github.com/welpie21/cbor.php/issues",
-                "source": "https://github.com/welpie21/cbor.php/tree/v2.1.0"
+                "source": "https://github.com/welpie21/cbor.php/tree/v3.0.0"
             },
-            "time": "2026-02-24T21:50:46+00:00"
+            "time": "2026-11-10T15:19:40+00:00"
         }
     ],
     "packages-dev": [

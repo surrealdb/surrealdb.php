@@ -17,6 +17,11 @@ final class Future extends Value
         return $other instanceof self && $this->body === $other->body;
     }
 
+    protected function hashKey(): string
+    {
+        return $this->body;
+    }
+
     public function __toString(): string
     {
         return '<future> ' . $this->body;

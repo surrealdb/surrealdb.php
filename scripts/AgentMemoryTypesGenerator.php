@@ -12,9 +12,11 @@
  * `minimum` and `maxItems`) are never rendered, so a documentation-only spec
  * change regenerates an identical file. `format` is ignored too: `int32` and
  * `int64` are both `int`, `float` and `double` both `float`, and `date-time`
- * and `binary` both `string`. A construct the rules do not cover throws an
- * {@see UnexpectedValueException} naming its JSON pointer instead of being
- * approximated.
+ * and `binary` both `string`. An `allOf` of object schemas is rendered as one
+ * shape holding the members of every arm, because PHPStan resolves an
+ * intersection of array shapes to `never`. A construct the rules do not cover
+ * throws an {@see UnexpectedValueException} naming its JSON pointer instead of
+ * being approximated.
  *
  * Kept out of the `SurrealDB\` namespace: it is a build tool, not SDK code.
  */
@@ -33,7 +35,7 @@ final class AgentMemoryTypesGenerator
 
     /** Keywords the rendering rules understand. */
     private const array RENDERED = [
-        '$ref', 'additionalProperties', 'enum', 'items', 'oneOf', 'properties', 'propertyNames', 'required', 'type',
+        '$ref', 'additionalProperties', 'allOf', 'enum', 'items', 'oneOf', 'properties', 'propertyNames', 'required', 'type',
     ];
 
     private const array SCALARS = ['boolean' => 'bool', 'integer' => 'int', 'number' => 'float', 'string' => 'string'];
@@ -242,6 +244,14 @@ final class AgentMemoryTypesGenerator
             return self::union($arms === [] ? ['null'] : $arms, $nullable);
         }
 
+        if (isset($node['allOf'])) {
+            if ($keywords !== ['allOf']) {
+                self::fail($pointer, '`allOf` beside `' . implode('`, `', array_diff($keywords, ['allOf'])) . '` is not supported');
+            }
+
+            return self::shape($this->allOfMembers($node['allOf'], "{$pointer}/allOf", $refs, []), $topLevel);
+        }
+
         $declared = $node['type'] ?? [];
         $declared = is_array($declared) ? $declared : [$declared];
 
@@ -313,6 +323,19 @@ final class AgentMemoryTypesGenerator
             self::fail("{$pointer}/additionalProperties", 'not supported beside `properties`');
         }
 
+        return self::shape($this->members($node, $pointer, $refs), $topLevel);
+    }
+
+    /**
+     * The members an object schema declares in `properties`, each rendered as `name: type` or `name?: type`.
+     *
+     * @param array<mixed>         $node
+     * @param array<string,string> $refs
+     *
+     * @return array<string,string> member name => rendered member, in declaration order
+     */
+    private function members(array $node, string $pointer, array &$refs): array
+    {
         $properties = $node['properties'];
         $required = $node['required'] ?? [];
 
@@ -334,11 +357,83 @@ final class AgentMemoryTypesGenerator
 
         foreach ($properties as $member => $schema) {
             $member = (string) $member;
-            $members[] = (preg_match(self::IDENTIFIER, $member) === 1 ? $member : self::literal($member, "{$pointer}/properties/" . self::escape($member)))
+            $members[$member] = (preg_match(self::IDENTIFIER, $member) === 1 ? $member : self::literal($member, "{$pointer}/properties/" . self::escape($member)))
                 . (in_array($member, $required, true) ? '' : '?') . ': '
                 . $this->type($schema, "{$pointer}/properties/" . self::escape($member), false, $refs);
         }
 
+        return $members;
+    }
+
+    /**
+     * The members of every arm of an `allOf`, as one object. Each arm is an
+     * object schema with `properties`, a `$ref` to one, or another `allOf` of
+     * them. A `$ref` arm is read in place, so it adds no alias of its own.
+     *
+     * @param array<string,string> $refs
+     * @param list<string>         $open the schemas whose `allOf` is being read, to refuse a cycle
+     *
+     * @return array<string,string> member name => rendered member, in declaration order
+     */
+    private function allOfMembers(mixed $arms, string $pointer, array &$refs, array $open): array
+    {
+        if (!is_array($arms) || $arms === [] || !array_is_list($arms)) {
+            self::fail($pointer, 'must be a non-empty list of schemas');
+        }
+
+        $members = [];
+
+        foreach ($arms as $index => $arm) {
+            $at = "{$pointer}/{$index}";
+            $stack = $open;
+
+            if (!is_array($arm) || ($arm !== [] && array_is_list($arm))) {
+                self::fail($at, 'a schema must be a JSON object');
+            }
+
+            if (isset($arm['$ref'])) {
+                if (self::keywords($arm, $at) !== ['$ref']) {
+                    self::fail($at, '`$ref` beside other keywords is not supported');
+                }
+
+                $name = $this->reference($arm['$ref'], $at);
+
+                if (in_array($name, $stack, true)) {
+                    self::fail($at, '`allOf` cycle ' . implode(' → ', [...$stack, $name]) . ' is not supported');
+                }
+
+                $stack[] = $name;
+                $arm = $this->spec['components']['schemas'][$name];
+                $at = self::SCHEMAS . self::escape($name);
+            }
+
+            $keywords = self::keywords($arm, $at);
+
+            if ($keywords === ['allOf']) {
+                $declared = $this->allOfMembers($arm['allOf'], "{$at}/allOf", $refs, $stack);
+            } elseif (($arm['type'] ?? null) === 'object' && isset($arm['properties']) && array_diff($keywords, ['type', 'properties', 'required']) === []) {
+                $declared = $this->members($arm, $at, $refs);
+            } else {
+                self::fail($at, 'an `allOf` arm must be an object schema with only `properties` and `required`, or a `$ref` to one');
+            }
+
+            foreach ($declared as $member => $rendered) {
+                if (isset($members[$member])) {
+                    self::fail($at, 'member ' . json_encode($member) . ' is declared by more than one `allOf` arm');
+                }
+
+                $members[$member] = $rendered;
+            }
+        }
+
+        return $members;
+    }
+
+    /**
+     * @param array<string,string> $members rendered members, as {@see members()} returns them
+     */
+    private static function shape(array $members, bool $topLevel): string
+    {
         if ($members === []) {
             return 'array{}';
         }

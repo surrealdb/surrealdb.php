@@ -2,14 +2,34 @@
 
 namespace SurrealDB\Tests\Feature;
 
+use Beau\CborPHP\classes\TaggedValue;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use SurrealDB\Api\ApiResponse;
+use SurrealDB\Auth\DatabaseAuth;
+use SurrealDB\Auth\RecordAccessAuth;
 use SurrealDB\Auth\RootAuth;
+use SurrealDB\Auth\Token;
 use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Exceptions\AlreadyExistsException;
+use SurrealDB\Exceptions\HttpConnectionException;
+use SurrealDB\Exceptions\InvalidValueException;
+use SurrealDB\Exceptions\ServerException;
+use SurrealDB\Exceptions\ThrownException;
+use SurrealDB\Exceptions\UnavailableFeatureException;
+use SurrealDB\Exceptions\UnsuccessfulApiException;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Query\Frame\ValueFrame;
+use SurrealDB\Exceptions\ValidationException;
 use SurrealDB\Surreal;
+use SurrealDB\Types\Bytes;
 use SurrealDB\Types\None;
 use SurrealDB\Types\RecordId;
 use SurrealDB\Types\Table;
+use SurrealDB\Tests\Fakes\AuthProxyClient;
+use SurrealDB\Tests\Fakes\CuttingClient;
+use function sprintf;
 
 /**
  * Database-backed coverage for the public SDK surface.
@@ -47,6 +67,22 @@ final class SurrealLocalDatabaseTest extends TestCase
 
             self::assertNotNull($tokens->access);
             self::assertNotSame('', $tokens->access);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testFractionalNumbersSentAsHalfPrecisionFloatsDecode(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            // Over CBOR the server sends each of these as a 16-bit float.
+            self::assertSame(
+                [[0.5, -0.25, 1.5, 0.1, 6.103515625E-5]],
+                $db->run('RETURN [0.5, -0.25, 1.5, 0.1, 0.00006103515625]'),
+            );
         } finally {
             $db->close();
         }
@@ -166,9 +202,533 @@ final class SurrealLocalDatabaseTest extends TestCase
         }
     }
 
+    #[DataProvider('protocols')]
+    public function testObjectsWithNumericKeysRoundTrip(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $person = new RecordId('person', 'tobie');
+            $db->run('CREATE person:tobie SET visits = { "2024": 5 }');
+
+            // PHP holds the key "2024" as the integer 2024; it must go back
+            // to the server as a string key.
+            $record = $db->select($person)->execute();
+            self::assertIsArray($record);
+            self::assertIsArray($record['visits']);
+            $visits = $record['visits'];
+            $visits['2025'] = 7;
+
+            $updated = $db->update($person)->merge(['visits' => $visits])->execute();
+
+            self::assertIsArray($updated);
+            self::assertSame([2024 => 5, 2025 => 7], $updated['visits']);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testBytesRoundTripThroughARecord(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $person = new RecordId('person', 'tobie');
+
+            // Not valid UTF-8: written back as text, the server would refuse it.
+            $db->run('CREATE person:tobie SET avatar = encoding::base64::decode("AP8")');
+
+            $record = $db->select($person)->execute();
+            self::assertIsArray($record);
+            self::assertEquals(new Bytes("\x00\xff"), $record['avatar']);
+
+            $record['name'] = 'Tobie';
+            $updated = $db->update($person)->content($record)->execute();
+
+            self::assertIsArray($updated);
+            self::assertEquals(new Bytes("\x00\xff"), $updated['avatar']);
+            self::assertSame([true], $db->run('RETURN person:tobie.avatar == encoding::base64::decode("AP8")'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testAnUnreadableRequestFailsInsteadOfWaiting(): void
+    {
+        $db = $this->connect('ws');
+
+        try {
+            try {
+                // SurrealDB 2.x and 3.x answer a request they cannot decode,
+                // here for a CBOR tag no version knows, without its id.
+                $db->run('RETURN $value', ['value' => new TaggedValue(9999, 'x')]);
+                self::fail('Expected the server to refuse an unknown CBOR tag.');
+            } catch (ServerException) {
+                // The connection is still usable afterwards.
+                self::assertSame([1], $db->run('RETURN 1'));
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testTablesAndIdsNamedAfterKeywordsAreQuoted(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            foreach (['none', 'true', 'select'] as $table) {
+                $db->run('DEFINE TABLE `' . $table . '` PERMISSIONS FULL');
+                $db->create($table)->content(['name' => $table])->execute();
+
+                $rows = $db->select($table)->execute();
+
+                self::assertIsArray($rows);
+                self::assertCount(1, $rows, "select('{$table}') read the table");
+                self::assertSame($table, $rows[0]['name'] ?? null);
+            }
+
+            $db->run('DEFINE TABLE person PERMISSIONS FULL');
+            $nan = new RecordId('person', 'NaN');
+            $db->create($nan)->content(['name' => 'NaN'])->execute();
+
+            $record = $db->select($nan)->execute();
+            self::assertIsArray($record);
+            self::assertSame('NaN', $record['name'] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testCallInvokesFunctionsWithAnyNumberOfArguments(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $db->run(<<<'SURQL'
+DEFINE FUNCTION fn::zero() { RETURN 'zero' };
+DEFINE FUNCTION fn::greet($name: string, $times: int) { RETURN string::repeat('hi ' + $name + ' ', $times) };
+SURQL);
+
+            self::assertSame('zero', $db->call('fn::zero')->execute());
+            self::assertSame('hi Tobie hi Tobie ', $db->call('fn::greet', args: ['Tobie', 2])->execute());
+            self::assertSame(3, $db->call('math::max', args: [[1, 3, 2]])->execute());
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testJsonReturnsPlainValuesInsteadOfSurrealTypes(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $this->defineTables($db);
+            $person = new RecordId('person', 'tobie');
+            $db->create($person)->content(['name' => 'Tobie', 'born' => new \SurrealDB\Types\DateTime(0)])->execute();
+
+            $typed = $db->select($person)->execute();
+            $plain = $db->select($person)->json()->execute();
+
+            self::assertIsArray($typed);
+            self::assertInstanceOf(RecordId::class, $typed['id']);
+            self::assertSame(['born' => '1970-01-01T00:00:00Z', 'id' => 'person:tobie', 'name' => 'Tobie'], $this->sorted($plain));
+        } finally {
+            $db->close();
+        }
+    }
+
     /**
-     * @param 'http'|'ws' $protocol
+     * @return array<array-key,mixed>
      */
+    private function sorted(mixed $value): array
+    {
+        self::assertIsArray($value);
+        ksort($value);
+
+        return $value;
+    }
+
+    #[DataProvider('protocols')]
+    public function testImportReportsFailuresAndRoundTripsAnExport(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            // Strict servers only write to defined tables.
+            $db->import("OPTION IMPORT;\nDEFINE TABLE person;\nCREATE person:tobie SET name = 'Tobie';");
+            self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
+
+            try {
+                $db->import("OPTION IMPORT;\nCREATE person:jaime SET name = 'Jaime';\nTHROW 'boom';");
+                self::fail('Expected the import to fail.');
+            } catch (ServerException $error) {
+                // SurrealDB 2.x lists every statement's result, so it can say
+                // which one failed (counted from 0, OPTION IMPORT aside); 3.x
+                // lists only the failures.
+                $where = $this->serverMajor($db) >= 3 ? 'Import failed: ' : 'Import failed at statement 1: ';
+                self::assertStringStartsWith($where, $error->getMessage());
+                self::assertStringContainsString('boom', $error->getMessage());
+
+                // SurrealDB 2.x reports no error kind, so only 3.x is typed.
+                if ($this->serverMajor($db) >= 3) {
+                    self::assertInstanceOf(ThrownException::class, $error);
+                }
+            }
+
+            try {
+                $db->import("OPTION IMPORT;\nCREATE person:tobie SET name = 'Again';");
+                self::fail('Expected the duplicate record to fail the import.');
+            } catch (ServerException $error) {
+                self::assertStringContainsString('already exists', $error->getMessage());
+
+                if ($this->serverMajor($db) >= 3) {
+                    self::assertInstanceOf(AlreadyExistsException::class, $error);
+                }
+            }
+
+            $export = $db->export();
+            self::assertStringContainsString('OPTION IMPORT;', $export);
+            self::assertStringContainsString('Tobie', $export);
+
+            $db->run('REMOVE TABLE person');
+            $db->import($export);
+
+            self::assertSame('Tobie', $db->select(new RecordId('person', 'tobie'))->execute()['name'] ?? null);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testApiInvokesUserDefinedEndpoints(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        if (!$db->isFeatureSupported(Features::api())) {
+            $db->close();
+            self::markTestSkipped('DEFINE API needs SurrealDB 3.0 or later.');
+        }
+
+        try {
+            $db->run(<<<'SURQL'
+DEFINE API "/v1/hello/:name" FOR get, post THEN {
+    RETURN {
+        status: 200,
+        headers: { "x-greeting": "hi" },
+        body: { name: $request.params.name, method: $request.method, body: $request.body, query: $request.query, trace: $request.headers["x-trace"] }
+    };
+};
+DEFINE API "/v1/missing" FOR get THEN { RETURN { status: 404, body: "nope" } };
+DEFINE API "/v1/body" FOR post THEN { RETURN { status: 200, body: { none: $request.body IS NONE, null: $request.body IS NULL } } };
+SURQL);
+
+            $api = $db->api('/v1');
+            $api->header('x-trace', 'abc');
+
+            $response = $api->post('hello/tobie', ['a' => 1])->query('k', 'v')->execute();
+
+            self::assertInstanceOf(ApiResponse::class, $response);
+            self::assertSame(200, $response->status);
+            self::assertSame('hi', $response->headers['x-greeting'] ?? null);
+            self::assertEquals(
+                ['name' => 'tobie', 'method' => 'post', 'body' => ['a' => 1], 'query' => ['k' => 'v'], 'trace' => 'abc'],
+                $response->body,
+            );
+
+            self::assertSame('get', $api->get('/hello/jaime')->value()->execute()['method'] ?? null);
+
+            self::assertSame(['none' => true, 'null' => false], $api->post('body')->value()->execute());
+            self::assertSame(['none' => false, 'null' => true], $api->post('body', null)->value()->execute());
+
+            $missing = $api->get('missing')->execute();
+            self::assertInstanceOf(ApiResponse::class, $missing);
+            self::assertSame(404, $missing->status);
+
+            try {
+                $api->get('missing')->value()->execute();
+                self::fail('Expected a non-2xx response to throw.');
+            } catch (UnsuccessfulApiException $error) {
+                self::assertSame('/v1/missing', $error->path);
+                self::assertSame('nope', $error->response->body);
+            }
+
+            // Streaming and responses() shape the result like execute().
+            $frames = iterator_to_array($api->get('/hello/jaime')->stream(), false);
+            self::assertInstanceOf(ValueFrame::class, $frames[0]);
+            self::assertInstanceOf(ApiResponse::class, $frames[0]->value);
+            self::assertSame(200, $frames[0]->value->status);
+
+            [$response] = $api->get('/hello/jaime')->value()->responses();
+            self::assertTrue($response->success);
+            self::assertSame('get', $response->result['method'] ?? null);
+
+            try {
+                $api->get('missing')->value()->responses();
+                self::fail('Expected a non-2xx response to throw.');
+            } catch (UnsuccessfulApiException $error) {
+                self::assertSame('nope', $error->response->body);
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testAVariableKeepsTheValueItWasSetTo(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            $value = new \stdClass();
+            $value->tags = ['a'];
+            $value->inner = new \stdClass();
+            $value->inner->n = 1;
+            $db->let('value', ['object' => $value]);
+
+            // HTTP sends the variable with each query: it must not pick up
+            // changes made after let(), as a WebSocket, which sent it at
+            // once, does not.
+            $value->tags[] = 'b';
+            $value->inner->n = 2;
+
+            self::assertSame([['a'], 1], $db->run('RETURN [$value.object.tags, $value.object.inner.n]')[0]);
+
+            // The SDK's own types are kept as they are, not as their JSON.
+            $db->let('record', new RecordId('person', 'tobie'));
+            self::assertEquals(new RecordId('person', 'tobie'), $db->run('RETURN $record')[0]);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testProtectedVariableNamesAreRefused(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            foreach (['access', 'auth', 'token', 'session'] as $name) {
+                try {
+                    $db->let($name, 'x');
+                    self::fail("let('{$name}') should be refused");
+                } catch (ValidationException $error) {
+                    self::assertStringContainsString("'{$name}' is a protected variable", $error->getMessage());
+                }
+            }
+
+            // Nothing was kept: HTTP would send it with every query after.
+            self::assertSame([1], $db->run('RETURN 1'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testASessionSignsInAgainOnceItsTokenHasExpired(string $protocol): void
+    {
+        $root = $this->connect($protocol);
+        [$namespace] = $root->run('RETURN session::ns()');
+        $root->run(<<<'SURQL'
+DEFINE USER app ON DATABASE PASSWORD 'pw' ROLES EDITOR DURATION FOR TOKEN 2s, FOR SESSION 1h;
+DEFINE TABLE user SCHEMALESS PERMISSIONS FULL;
+SURQL);
+        $refreshTokens = $root->isFeatureSupported(Features::refreshTokens());
+
+        if ($refreshTokens) {
+            $root->run(<<<'SURQL'
+DEFINE ACCESS account ON DATABASE TYPE RECORD
+    SIGNUP (CREATE user SET name = $name)
+    SIGNIN (SELECT * FROM user WHERE name = $name)
+    WITH REFRESH DURATION FOR TOKEN 2s, FOR SESSION 1h;
+SURQL);
+        }
+
+        $root->close();
+
+        // Signed in by the auth provider.
+        $db = new Surreal();
+        $db->connect($this->url($protocol), new ConnectOptions(
+            authentication: new DatabaseAuth($namespace, 'db', 'app', 'pw'),
+        ));
+        // Signed in explicitly, renewed with its refresh token.
+        $record = $refreshTokens ? new Surreal() : null;
+        $record?->connect($this->url($protocol));
+        $record?->signup(new RecordAccessAuth($namespace, 'db', 'account', ['name' => 'ada']));
+
+        try {
+            self::assertSame([1], $db->run('RETURN 1'));
+            sleep(3);
+
+            // HTTP sent the expired token with the sign-in, and the server
+            // refused it with a 401 before reading the credentials.
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame([1], $db->run('RETURN 1'));
+            self::assertSame($refreshTokens ? ['ada'] : [], $record?->run('RETURN $auth.name') ?? []);
+        } finally {
+            $db->close();
+            $record?->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testARefreshTokenSignInIsRefusedWhereThereAreNone(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            [$namespace] = $db->run('RETURN session::ns()');
+            $db->run('DEFINE ACCESS account ON DATABASE TYPE RECORD SIGNIN (SELECT * FROM user WHERE name = $name)');
+            $auth = new RecordAccessAuth($namespace, 'db', 'account', ['refresh' => 'surreal-refresh-not-a-real-one']);
+
+            if ($db->isFeatureSupported(Features::refreshTokens())) {
+                // The server's own answer: no such refresh token.
+                $this->expectException(ServerException::class);
+            } else {
+                $this->expectException(UnavailableFeatureException::class);
+            }
+
+            $db->signin($auth);
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testRevokingTheSessionsRefreshTokenForgetsIt(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            if (!$db->isFeatureSupported(Features::refreshTokens())) {
+                self::markTestSkipped('Refresh tokens need SurrealDB 3.0 or later.');
+            }
+
+            [$namespace] = $db->run('RETURN session::ns()');
+            $db->run(<<<'SURQL'
+DEFINE TABLE user SCHEMALESS PERMISSIONS FULL;
+DEFINE ACCESS account ON DATABASE TYPE RECORD
+    SIGNUP (CREATE user SET name = $name)
+    SIGNIN (SELECT * FROM user WHERE name = $name)
+    WITH REFRESH;
+SURQL);
+            $tokens = $db->signup(new RecordAccessAuth($namespace, 'db', 'account', ['name' => 'ada']));
+            self::assertNotNull($tokens->refresh);
+
+            $db->connection()->revoke($tokens);
+
+            // Renewal and reconnects would have sent the revoked token.
+            $auth = $db->connection()->state()?->rootSession->auth;
+            self::assertNull($auth?->refreshToken);
+            self::assertSame($tokens->access, $auth?->accessToken);
+            self::assertSame(['ada'], $db->run('RETURN $auth.name'));
+        } finally {
+            $db->close();
+        }
+    }
+
+    public function testATokenConnectsThroughAProxyThatRequiresOne(): void
+    {
+        $root = $this->connect('http');
+        $token = $root->accessToken();
+        [$namespace] = $root->run('RETURN session::ns()');
+        $root->close();
+        self::assertNotNull($token);
+
+        foreach ([true, false] as $versionCheck) {
+            $proxy = new AuthProxyClient(new \GuzzleHttp\Client());
+            $db = new Surreal(new DriverOptions(httpClient: $proxy));
+
+            // The version request went out before the token, the proxy
+            // refused it, and connect() failed with its 401.
+            $db->connect($this->url('http'), new ConnectOptions(
+                namespace: $namespace,
+                database: 'db',
+                authentication: new Token($token),
+                versionCheck: $versionCheck,
+            ));
+
+            try {
+                self::assertSame([1], $db->run('RETURN 1'));
+                // Asked again once signed in, the version is known, and
+                // features are gated by it.
+                self::assertStringStartsWith('surrealdb-', $db->version());
+                self::assertSame($this->serverMajor($db) >= 3, $db->isFeatureSupported(Features::refreshTokens()));
+                self::assertSame(['/rpc'], $proxy->refused);
+            } finally {
+                $db->close();
+            }
+        }
+    }
+
+    public function testAnExportThatBreaksOffIsAnError(): void
+    {
+        $root = $this->connect('http');
+        [$namespace] = $root->run('RETURN session::ns()');
+        $root->run('DEFINE TABLE person SCHEMALESS; CREATE person:one SET name = "one"');
+        $root->close();
+
+        $db = new Surreal(new DriverOptions(httpClient: new CuttingClient(new \GuzzleHttp\Client(), '/export')));
+        $db->connect($this->url('http'), new ConnectOptions(
+            namespace: $namespace,
+            database: 'db',
+            authentication: new RootAuth('root', 'root'),
+        ));
+
+        try {
+            $this->expectException(HttpConnectionException::class);
+            $this->expectExceptionMessage('The response ended after');
+
+            $db->export();
+        } finally {
+            $db->close();
+        }
+    }
+
+    #[DataProvider('protocols')]
+    public function testANamespaceHttpCannotCarryIsRefusedOverHttp(string $protocol): void
+    {
+        $db = $this->connect($protocol);
+
+        try {
+            [$namespace] = $db->run('RETURN session::ns()');
+
+            foreach (['café', "line\nbreak"] as $name) {
+                if ($protocol === 'ws') {
+                    // A WebSocket sends names in the request body, so any is fine.
+                    $db->use($name, 'db');
+                    self::assertSame([$name], $db->run('RETURN session::ns()'));
+                    $db->use($namespace, 'db');
+
+                    continue;
+                }
+
+                try {
+                    $db->use($name, 'db');
+                    self::fail('use() should refuse ' . json_encode($name));
+                } catch (InvalidValueException $error) {
+                    self::assertStringContainsString('HTTP header', $error->getMessage());
+                }
+
+                // The selection it had is kept, and still works.
+                self::assertSame([$namespace], $db->run('RETURN session::ns()'));
+            }
+        } finally {
+            $db->close();
+        }
+    }
+
+    private function serverMajor(Surreal $db): int
+    {
+        return (int) preg_replace('/^surrealdb-/', '', $db->version());
+    }
+
     private function connect(string $protocol): Surreal
     {
         $db = new Surreal();

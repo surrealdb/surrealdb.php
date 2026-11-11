@@ -2,6 +2,8 @@
 
 namespace SurrealDB\Auth;
 
+use SurrealDB\Support\Redacted;
+
 /** Bearer access credentials (a pre-issued access key). */
 final readonly class BearerAuth implements Credentials
 {
@@ -9,8 +11,22 @@ final readonly class BearerAuth implements Credentials
         public string $namespace,
         public string $database,
         public string $access,
+        #[\SensitiveParameter]
         public string $key,
     ) {}
+
+    /**
+     * @return array<string, ?string>
+     */
+    public function __debugInfo(): array
+    {
+        return [
+            'namespace' => $this->namespace,
+            'database' => $this->database,
+            'access' => $this->access,
+            'key' => Redacted::value($this->key),
+        ];
+    }
 
     public function toArray(): array
     {
