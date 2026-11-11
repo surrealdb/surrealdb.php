@@ -3,6 +3,7 @@
 namespace SurrealDB\Tests\Unit\AgentMemory;
 
 use GuzzleHttp\Psr7\Utils;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SurrealDB\AgentMemory\Enum\ChatEvent;
 use SurrealDB\AgentMemory\Exceptions\StreamException;
@@ -171,6 +172,35 @@ final class ChatStreamParserTest extends TestCase
             $this->assertSame(['error' => 'provider timed out'], $e->extensions);
             $this->assertSame('[0] Chat stream failed: provider timed out', $e->getMessage());
         }
+    }
+
+    /**
+     * @return iterable<string,array{string}>
+     */
+    public static function unlabelledErrorFrames(): iterable
+    {
+        yield 'no event name' => ["data: {\"error\":\"provider timed out\"}\n\n"];
+        yield 'an event name this client does not know' => ["event: failure\ndata: {\"error\":\"provider timed out\"}\n\n"];
+        yield 'a chunk frame' => ["event: chunk\ndata: {\"text\":\"partial\",\"error\":\"provider timed out\"}\n\n"];
+    }
+
+    #[DataProvider('unlabelledErrorFrames')]
+    public function testAPayloadWithAnErrorStringRaisesWhateverTheFrameIsNamed(string $frame): void
+    {
+        try {
+            $this->parse("event: meta\ndata: {\"traceId\":\"tr-3\"}\n\n" . $frame . self::DONE);
+            $this->fail('Expected StreamException');
+        } catch (StreamException $e) {
+            $this->assertSame('[0] Chat stream failed: provider timed out', $e->getMessage());
+            $this->assertSame('provider timed out', $e->extensions['error']);
+        }
+    }
+
+    public function testAnErrorMemberThatIsNotAStringIsNotAFailure(): void
+    {
+        $chunks = $this->parse("event: chunk\ndata: {\"text\":\"ok\",\"error\":null}\n\n" . self::DONE);
+
+        $this->assertSame(['ok', ''], array_map(static fn (ChatChunk $c): string => $c->delta, $chunks));
     }
 
     public function testNonJsonErrorDataIsReportedVerbatim(): void

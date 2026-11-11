@@ -131,6 +131,53 @@ final class SchemaTypesGeneratorTest extends TestCase
         ));
     }
 
+    public function testAllOfArmsBecomeOneShape(): void
+    {
+        $base = ['type' => 'object', 'required' => ['id'], 'properties' => [
+            'id' => ['type' => 'string'],
+            'hold' => ['type' => ['string', 'null']],
+            'child' => ['$ref' => self::REF . 'Child'],
+        ]];
+        $extra = ['type' => 'object', 'description' => 'What replay did.', 'required' => ['replay'], 'properties' => ['replay' => ['type' => 'string']]];
+        $schemas = [
+            'Root' => ['description' => 'A base with one more member.', 'allOf' => [['$ref' => self::REF . 'Base'], $extra]],
+            'Base' => $base,
+            'Child' => ['type' => 'string'],
+        ];
+
+        $this->assertSame(
+            "array{\n    id: string,\n    hold?: string|null,\n    child?: Child,\n    replay: string,\n}",
+            self::aliases($schemas)['Root'],
+        );
+        // A `$ref` arm is read in place: it gets no alias unless a response reaches it another way.
+        $this->assertSame(['Child', 'Root'], array_keys(self::aliases($schemas)));
+
+        $this->assertSame("array{\n    x?: array{id: string, hold?: string|null, child?: Child, replay: string},\n}", self::typeOf(
+            ['type' => 'object', 'properties' => ['x' => ['allOf' => [['$ref' => self::REF . 'Base'], $extra]]]],
+            ['Base' => $base, 'Child' => ['type' => 'string']],
+        ));
+
+        // An arm can itself be an `allOf`, inline or behind a `$ref`.
+        $this->assertSame("array{\n    a: int,\n    b?: int,\n    c?: int,\n}", self::typeOf(
+            ['allOf' => [['$ref' => self::REF . 'Pair'], ['type' => 'object', 'properties' => ['c' => ['type' => 'integer']]]]],
+            ['Pair' => ['allOf' => [
+                ['type' => 'object', 'required' => ['a'], 'properties' => ['a' => ['type' => 'integer']]],
+                ['allOf' => [['type' => 'object', 'properties' => ['b' => ['type' => 'integer']]]]],
+            ]]],
+        ));
+    }
+
+    public function testAnAllOfCycleNamesTheSchemasOnIt(): void
+    {
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage(self::REF . 'Root/allOf/0: `allOf` cycle B → Root → B is not supported');
+
+        self::aliases([
+            'Root' => ['allOf' => [['$ref' => self::REF . 'B']]],
+            'B' => ['allOf' => [['$ref' => self::REF . 'Root']]],
+        ]);
+    }
+
     public function testAdditionalPropertiesBecomeAStringKeyedMap(): void
     {
         $cases = [
@@ -264,8 +311,17 @@ final class SchemaTypesGeneratorTest extends TestCase
         $root = self::REF . 'Root';
         $member = static fn (array $schema): array => ['type' => 'object', 'properties' => ['x' => $schema]];
         $cases = [
-            'allOf' => [['Root' => ['allOf' => [['type' => 'string']]]], "{$root}/allOf"],
-            'anyOf' => [['Root' => ['anyOf' => [['type' => 'string']]]], "{$root}/anyOf"],
+            'allOf of a scalar' => [['Root' => ['allOf' => [['type' => 'string']]]], "{$root}/allOf/0"],
+            'allOf of a map' => [['Root' => ['allOf' => [['type' => 'object', 'additionalProperties' => ['type' => 'string']]]]], "{$root}/allOf/0"],
+            'allOf of a nullable object' => [['Root' => ['allOf' => [['type' => ['object', 'null'], 'properties' => ['a' => ['type' => 'string']]]]]], "{$root}/allOf/0"],
+            'allOf through a $ref to a scalar' => [['Root' => ['allOf' => [['$ref' => self::REF . 'Name']]], 'Name' => ['type' => 'string']], self::REF . 'Name'],
+            'an empty allOf' => [['Root' => $member(['allOf' => []])], "{$root}/properties/x/allOf"],
+            'allOf beside a type' => [['Root' => ['type' => 'object', 'allOf' => [['type' => 'object', 'properties' => ['a' => ['type' => 'string']]]]]], $root],
+            'allOf arms that share a member' => [['Root' => ['allOf' => [
+                ['type' => 'object', 'properties' => ['a' => ['type' => 'string']]],
+                ['type' => 'object', 'properties' => ['a' => ['type' => 'integer']]],
+            ]]], "{$root}/allOf/1"],
+            'anyOf' =>[['Root' => ['anyOf' => [['type' => 'string']]]], "{$root}/anyOf"],
             'not' => [['Root' => ['not' => ['type' => 'string']]], "{$root}/not"],
             'const' => [['Root' => $member(['const' => 'a'])], "{$root}/properties/x/const"],
             'discriminator' => [['Root' => ['oneOf' => [['type' => 'string']], 'discriminator' => ['propertyName' => 'kind']]], "{$root}/discriminator"],

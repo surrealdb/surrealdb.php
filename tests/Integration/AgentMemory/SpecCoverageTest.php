@@ -49,7 +49,16 @@ final class SpecCoverageTest extends TestCase
     /** Operations the client deliberately leaves out, and why. */
     private const array NOT_EXPOSED = [
         'scope_grants_stub' => 'the server answers 501 Not Implemented',
+        'list_judgements' => self::NOT_IN_JS,
+        'get_judgement' => self::NOT_IN_JS,
+        'judge_dry_run' => self::NOT_IN_JS,
+        'approve_hold' => self::NOT_IN_JS,
+        'reject_hold' => self::NOT_IN_JS,
+        'override_judgement' => self::NOT_IN_JS,
+        'retire_derived' => self::NOT_IN_JS,
     ];
+
+    private const string NOT_IN_JS = '`@surrealdb/memory` has no method for it yet, and this client takes its names from there';
 
     /**
      * operationId => how the client covers it:

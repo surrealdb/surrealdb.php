@@ -458,6 +458,8 @@ Where the PHP client departs from the JavaScript one on purpose:
 - Streaming chat is `chatStream()`, because PHP cannot vary a return type on an option.
 - `elaborate()` requires `ElaborateOptions` with an `entityRef` or `sweep: true`: the server refuses a request with neither with a 400.
 - Collections return a `Page` instead of the response envelope, which stays in `$page->raw`.
+- The deprecated offset parameters `page` and `pageSize` (on `documents->list()`, `documents->chunks()`, and `documents->keywords->list()`) are not offered: page with `limit` and `cursor`.
+- A lone optional value is a named argument, not an options class: `uncertainty->resolve($id, $value, note: …)`, `facts->allEdgesOf($entity, label: …, limit: …)`, `$session->context($query)`, and `max:` on the collectors.
 - Retries: a 503 is retried for every request, `Retry-After` is honoured, idempotent requests are also retried on 408 and 429 but not on 501 or 505, and an idempotent write waits out its own attempt in progress.
 - A chat stream that ends before its `done` frame raises a `StreamException` instead of ending quietly.
 - An upload with no known media type is sent without one, so the server sniffs the bytes; `@surrealdb/memory` declares `application/octet-stream`, which the server refuses. An explicit `contentType` also wins over a `DocumentFile`'s type, while `@surrealdb/memory` ignores it for a `File`.

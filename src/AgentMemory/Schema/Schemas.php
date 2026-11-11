@@ -198,6 +198,25 @@ namespace SurrealDB\AgentMemory\Schema;
  *     page: PageMeta,
  * }
  * @phpstan-type DocumentStatus 'queued'|'extracting'|'chunking'|'embedding'|'keywording'|'extracting_nodes'|'ready'|'failed'
+ * @phpstan-type DryRunItemJson array{
+ *     candidate?: DryRunVerdictJson|null,
+ *     current?: DryRunVerdictJson|null,
+ *     id: string,
+ *     original: string,
+ *     outcome: string,
+ *     overriddenTo?: string|null,
+ *     skipReason?: string|null,
+ *     stage: string,
+ * }
+ * @phpstan-type DryRunMatrixCellJson array{
+ *     count: int,
+ *     from: string,
+ *     to: string,
+ * }
+ * @phpstan-type DryRunVerdictJson array{
+ *     reasons: list<string>,
+ *     verdict: string,
+ * }
  * @phpstan-type DuplicateFindingJson array{
  *     entityA: string,
  *     entityB: string,
@@ -316,6 +335,10 @@ namespace SurrealDB\AgentMemory\Schema;
  *     neighbourLabel: string,
  *     weight: float,
  * }
+ * @phpstan-type HoldDecisionJson array{
+ *     judgement: JudgementJson,
+ *     rows: int,
+ * }
  * @phpstan-type InferMode 'full'|'triples'|'preview'|'none'
  * @phpstan-type InjectionFindingJson array{
  *     kind: InjectionKind,
@@ -345,6 +368,34 @@ namespace SurrealDB\AgentMemory\Schema;
  *     description: string,
  *     id: string,
  *     label: string,
+ * }
+ * @phpstan-type JudgeDryRunResponseJson array{
+ *     changed: int,
+ *     evaluated: int,
+ *     items: list<DryRunItemJson>,
+ *     matrix: list<DryRunMatrixCellJson>,
+ *     skipped: int,
+ *     unavailable: int,
+ * }
+ * @phpstan-type JudgementJson array{
+ *     about: string,
+ *     createdAt: string,
+ *     excerpt: string,
+ *     hold?: string|null,
+ *     id: string,
+ *     overriddenAt?: string|null,
+ *     overriddenBy?: string|null,
+ *     overriddenTo?: string|null,
+ *     reasons: list<string>,
+ *     retained: bool,
+ *     scope: list<string>,
+ *     sourceKind: string,
+ *     stage: string,
+ *     verdict: string,
+ * }
+ * @phpstan-type JudgementListJson array{
+ *     page: PageMeta,
+ *     rows: list<JudgementJson>,
  * }
  * @phpstan-type KeyDetailJson array{
  *     createdAt: string,
@@ -429,6 +480,23 @@ namespace SurrealDB\AgentMemory\Schema;
  * @phpstan-type NeighbourhoodResponseJson array{
  *     neighbours: list<NeighbourJson>,
  *     page: PageMeta,
+ * }
+ * @phpstan-type OverriddenJudgementJson array{
+ *     about: string,
+ *     createdAt: string,
+ *     excerpt: string,
+ *     hold?: string|null,
+ *     id: string,
+ *     overriddenAt?: string|null,
+ *     overriddenBy?: string|null,
+ *     overriddenTo?: string|null,
+ *     reasons: list<string>,
+ *     retained: bool,
+ *     scope: list<string>,
+ *     sourceKind: string,
+ *     stage: string,
+ *     verdict: string,
+ *     replay: string,
  * }
  * @phpstan-type PageMeta array{
  *     hasMore: bool,
@@ -602,6 +670,13 @@ namespace SurrealDB\AgentMemory\Schema;
  *     userMessage: string,
  * }
  * @phpstan-type ResultKind 'attribute'|'entity'|'action'|'chunk'|'memory_chunk'|'turn'|'section'
+ * @phpstan-type RetireDerivedResponseJson array{
+ *     stages: list<RetiredStageJson>,
+ * }
+ * @phpstan-type RetiredStageJson array{
+ *     retired: int,
+ *     stage: string,
+ * }
  * @phpstan-type RetrievalStatsJson array{
  *     avgCandidateSet: float,
  *     maxCandidateSet: int,
