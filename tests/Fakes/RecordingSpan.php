@@ -2,9 +2,9 @@
 
 namespace SurrealDB\Tests\Fakes;
 
-use SurrealDB\SDK\Contracts\Span;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Enum\SpanStatus;
+use SurrealDB\Contracts\Span;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Enum\SpanStatus;
 
 /** A {@see Span} that records everything it receives for assertions. */
 final class RecordingSpan implements Span

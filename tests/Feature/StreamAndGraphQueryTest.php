@@ -4,20 +4,20 @@ namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Exceptions\GraphQlException;
-use SurrealDB\SDK\Exceptions\InvalidSessionException;
-use SurrealDB\SDK\Exceptions\ServerException;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Query\Frame\DoneFrame;
-use SurrealDB\SDK\Query\Frame\ErrorFrame;
-use SurrealDB\SDK\Query\Frame\ValueFrame;
-use SurrealDB\SDK\Protocol\Feature;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Exceptions\GraphQlException;
+use SurrealDB\Exceptions\InvalidSessionException;
+use SurrealDB\Exceptions\ServerException;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Query\Frame\DoneFrame;
+use SurrealDB\Query\Frame\ErrorFrame;
+use SurrealDB\Query\Frame\ValueFrame;
+use SurrealDB\Protocol\Feature;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Surreal;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 
 /**
  * Streamed query frames, ISO GQL and GraphQL against a real server, over

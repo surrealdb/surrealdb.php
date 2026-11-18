@@ -5,10 +5,10 @@ namespace SurrealDB\Tests\Unit\Codec;
 use Beau\CborPHP\CborDecoder;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Codec\CborDeserializer;
-use SurrealDB\SDK\Exceptions\SerializationException;
-use SurrealDB\SDK\Types\Bytes;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Codec\CborDeserializer;
+use SurrealDB\Exceptions\SerializationException;
+use SurrealDB\Types\Bytes;
+use SurrealDB\Types\Table;
 
 /**
  * What the SDK reads from the server, through welpie21/cbor.php.

@@ -3,12 +3,12 @@
 namespace SurrealDB\Tests\Unit\Telemetry;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Enum\SpanStatus;
-use SurrealDB\SDK\Middleware\TelemetryMiddleware;
-use SurrealDB\SDK\Rpc\RpcError;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Enum\SpanStatus;
+use SurrealDB\Middleware\TelemetryMiddleware;
+use SurrealDB\Rpc\RpcError;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 use SurrealDB\Tests\Fakes\RecordingMeter;
 use SurrealDB\Tests\Fakes\RecordingTracer;
 

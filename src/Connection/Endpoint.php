@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
-use SurrealDB\SDK\Exceptions\SurrealException;
+use SurrealDB\Exceptions\SurrealException;
 use function in_array;
 
 /**

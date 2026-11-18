@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
 use Beau\CborPHP\interfaces\CborTag;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Types\Future;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Types\Future;
 
 /**
  * A future: tag 15 with its body as text.

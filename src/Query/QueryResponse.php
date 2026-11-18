@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Exceptions\ServerException;
+use SurrealDB\Exceptions\ServerException;
 
 /**
  * The outcome of one statement, successful or not, as returned by

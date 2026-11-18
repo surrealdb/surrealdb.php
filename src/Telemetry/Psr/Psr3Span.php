@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\Psr;
+namespace SurrealDB\Telemetry\Psr;
 
 use Psr\Log\LoggerInterface;
-use SurrealDB\SDK\Contracts\Span;
-use SurrealDB\SDK\Enum\SpanKind;
-use SurrealDB\SDK\Enum\SpanStatus;
+use SurrealDB\Contracts\Span;
+use SurrealDB\Enum\SpanKind;
+use SurrealDB\Enum\SpanStatus;
 
 /** A {@see Span} that emits a structured PSR-3 log line when it ends. */
 final class Psr3Span implements Span

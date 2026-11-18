@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Contracts;
+namespace SurrealDB\Contracts;
 
-use SurrealDB\SDK\Query\BoundQuery;
+use SurrealDB\Query\BoundQuery;
 
 /**
- * The terminal execution hook implemented by {@see \SurrealDB\SDK\Surreal}.
+ * The terminal execution hook implemented by {@see \SurrealDB\Surreal}.
  * The fluent query builders (companion plan) depend only on this contract,
  * decoupling them from the networking layer.
  */

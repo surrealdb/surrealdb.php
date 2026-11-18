@@ -1,15 +1,15 @@
 <?php
 
-namespace SurrealDB\SDK\Live;
+namespace SurrealDB\Live;
 
-use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Support\Jwt;
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Support\Jwt;
 
 /**
  * A live subscription whose `LIVE SELECT` the SDK issued. Created by
- * {@see \SurrealDB\SDK\Query\LiveSelectQuery::execute()}; the query is already
+ * {@see \SurrealDB\Query\LiveSelectQuery::execute()}; the query is already
  * registered on the server, and this client subscribed, when it is returned.
  */
 final class ManagedLiveSubscription extends LiveSubscription

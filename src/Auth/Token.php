@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Auth;
+namespace SurrealDB\Auth;
 
-use SurrealDB\SDK\Support\Redacted;
+use SurrealDB\Support\Redacted;
 
 /** A raw JWT/bearer token used with the `authenticate` RPC. */
 final readonly class Token

@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Query\Frame;
+namespace SurrealDB\Query\Frame;
 
 /**
  * A value produced by a statement. When a statement returns a list (a

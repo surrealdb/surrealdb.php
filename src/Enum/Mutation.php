@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Enum;
+namespace SurrealDB\Enum;
 
 /**
  * The data mutation keyword applied by CREATE / UPDATE / UPSERT statements.

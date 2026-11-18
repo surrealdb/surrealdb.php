@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Query\Frame;
+namespace SurrealDB\Query\Frame;
 
 /**
  * A statement finished successfully; all its values have been yielded.

@@ -4,15 +4,15 @@ namespace SurrealDB\Tests\Unit\Transport;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Connection\Endpoint;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Events\EventDispatcher;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Scheduler\SyncScheduler;
-use SurrealDB\SDK\Transport\WebSocketTransport;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Connection\Endpoint;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Events\EventDispatcher;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Scheduler\SyncScheduler;
+use SurrealDB\Transport\WebSocketTransport;
 use SurrealDB\Tests\Fakes\FakeWebSocketClient;
 
 final class WebSocketTransportTest extends TestCase

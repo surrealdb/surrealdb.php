@@ -3,9 +3,9 @@
 namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Types\BoundExcluded;
-use SurrealDB\SDK\Types\BoundIncluded;
-use SurrealDB\SDK\Types\Range;
+use SurrealDB\Types\BoundExcluded;
+use SurrealDB\Types\BoundIncluded;
+use SurrealDB\Types\Range;
 
 final class RangeTest extends TestCase
 {

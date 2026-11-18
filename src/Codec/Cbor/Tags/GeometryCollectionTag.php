@@ -1,13 +1,13 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
 use Beau\CborPHP\interfaces\CborTag;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Exceptions\SerializationException;
-use SurrealDB\SDK\Types\Geometry;
-use SurrealDB\SDK\Types\GeometryCollection;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Exceptions\SerializationException;
+use SurrealDB\Types\Geometry;
+use SurrealDB\Types\GeometryCollection;
 
 /**
  * A geometry collection: tag 94 with its geometries, each tagged.

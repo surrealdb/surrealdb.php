@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Exceptions\ExpressionException;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Exceptions\ExpressionException;
 
 /**
  * Fluent builder for invoking a SurrealQL / SurrealML function, e.g.

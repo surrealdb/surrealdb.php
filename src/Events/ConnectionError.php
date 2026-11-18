@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Events;
+namespace SurrealDB\Events;
 
 /** Dispatched when a connection-level error occurs. */
 final readonly class ConnectionError

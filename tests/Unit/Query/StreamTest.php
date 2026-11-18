@@ -3,17 +3,17 @@
 namespace SurrealDB\Tests\Unit\Query;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Contracts\QueryExecutor;
-use SurrealDB\SDK\Contracts\StreamingQueryExecutor;
-use SurrealDB\SDK\Exceptions\NotFoundException;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Protocol\QueryChunk;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Query\Frame\DoneFrame;
-use SurrealDB\SDK\Query\Frame\ErrorFrame;
-use SurrealDB\SDK\Query\Frame\ValueFrame;
-use SurrealDB\SDK\Query\Query;
-use SurrealDB\SDK\Types\RecordId;
+use SurrealDB\Contracts\QueryExecutor;
+use SurrealDB\Contracts\StreamingQueryExecutor;
+use SurrealDB\Exceptions\NotFoundException;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Protocol\QueryChunk;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Query\Frame\DoneFrame;
+use SurrealDB\Query\Frame\ErrorFrame;
+use SurrealDB\Query\Frame\ValueFrame;
+use SurrealDB\Query\Query;
+use SurrealDB\Types\RecordId;
 
 final class StreamTest extends TestCase
 {

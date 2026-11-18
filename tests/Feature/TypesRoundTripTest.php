@@ -4,14 +4,14 @@ namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\Decimal;
-use SurrealDB\SDK\Types\Duration;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Set;
-use SurrealDB\SDK\Types\StringRecordId;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Surreal;
+use SurrealDB\Types\Decimal;
+use SurrealDB\Types\Duration;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Set;
+use SurrealDB\Types\StringRecordId;
 
 /**
  * Value types sent to and read back from a real server, over HTTP and

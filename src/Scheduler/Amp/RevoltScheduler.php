@@ -1,10 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Scheduler\Amp;
+namespace SurrealDB\Scheduler\Amp;
 
 use Revolt\EventLoop;
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Contracts\TimerScheduler;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Contracts\TimerScheduler;
 
 /**
  * Scheduler backed by the Revolt event loop and PHP fibers (the foundation of

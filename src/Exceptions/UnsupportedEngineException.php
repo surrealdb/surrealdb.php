@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when no engine is registered for the requested URL scheme. */
 final class UnsupportedEngineException extends SurrealException

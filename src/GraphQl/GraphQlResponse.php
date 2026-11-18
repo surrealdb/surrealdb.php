@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\GraphQl;
+namespace SurrealDB\GraphQl;
 
-use SurrealDB\SDK\Exceptions\GraphQlException;
+use SurrealDB\Exceptions\GraphQlException;
 use function is_array;
 
 /**

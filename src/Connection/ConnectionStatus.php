@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
 /** The lifecycle status of a connection. */
 enum ConnectionStatus: string

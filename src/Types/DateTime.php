@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
-use SurrealDB\SDK\Exceptions\InvalidValueException;
+use SurrealDB\Exceptions\InvalidValueException;
 use function sprintf;
 
 /**

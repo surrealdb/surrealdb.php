@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
-use SurrealDB\SDK\Api\ApiResponse;
+use SurrealDB\Api\ApiResponse;
 use function sprintf;
 
-/** Thrown by {@see \SurrealDB\SDK\Query\ApiQuery::value()} calls when the endpoint answers with a non-2xx status. */
+/** Thrown by {@see \SurrealDB\Query\ApiQuery::value()} calls when the endpoint answers with a non-2xx status. */
 final class UnsuccessfulApiException extends SurrealException
 {
     /**

@@ -1,10 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 use function is_string;
 
-/** Thrown by {@see \SurrealDB\SDK\GraphQl\GraphQlResponse::dataOrThrow()} when a GraphQL request reported errors. */
+/** Thrown by {@see \SurrealDB\GraphQl\GraphQlResponse::dataOrThrow()} when a GraphQL request reported errors. */
 final class GraphQlException extends SurrealException
 {
     /**

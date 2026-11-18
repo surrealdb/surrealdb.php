@@ -8,9 +8,9 @@ use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Surreal;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Surreal;
 
 /**
  * Replies are matched to calls by request id, so every request on a

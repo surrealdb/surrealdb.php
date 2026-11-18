@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Live;
+namespace SurrealDB\Live;
 
-use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Types\Uuid;
 
 /**
  * A subscription to a live query started elsewhere (for example by a `LIVE

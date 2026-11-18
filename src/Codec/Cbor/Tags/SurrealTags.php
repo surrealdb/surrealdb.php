@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\TaggedValue;
 use Beau\CborPHP\interfaces\CborTag;
 use Closure;
-use SurrealDB\SDK\Codec\Cbor\CborValueMapper;
-use SurrealDB\SDK\Exceptions\SerializationException;
+use SurrealDB\Codec\Cbor\CborValueMapper;
+use SurrealDB\Exceptions\SerializationException;
 
 /**
  * The tag handlers for the SurrealDB value types, for the `tags` option of

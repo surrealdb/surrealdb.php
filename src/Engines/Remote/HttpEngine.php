@@ -1,18 +1,18 @@
 <?php
 
-namespace SurrealDB\SDK\Engines\Remote;
+namespace SurrealDB\Engines\Remote;
 
-use SurrealDB\SDK\Connection\ConnectionState;
-use SurrealDB\SDK\Contracts\TransportInterface;
-use SurrealDB\SDK\Engines\AbstractRpcEngine;
-use SurrealDB\SDK\Exceptions\MissingNamespaceDatabaseException;
-use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
-use SurrealDB\SDK\Protocol\FeatureSet;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
-use SurrealDB\SDK\Transport\HttpTransport;
-use SurrealDB\SDK\Transport\SessionHeaders;
+use SurrealDB\Connection\ConnectionState;
+use SurrealDB\Contracts\TransportInterface;
+use SurrealDB\Engines\AbstractRpcEngine;
+use SurrealDB\Exceptions\MissingNamespaceDatabaseException;
+use SurrealDB\Exceptions\UnsupportedFeatureException;
+use SurrealDB\Protocol\FeatureSet;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
+use SurrealDB\Transport\HttpTransport;
+use SurrealDB\Transport\SessionHeaders;
 use function in_array;
 use function is_array;
 use function is_string;

@@ -4,7 +4,7 @@ namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Types\Decimal;
+use SurrealDB\Types\Decimal;
 
 final class DecimalTest extends TestCase
 {

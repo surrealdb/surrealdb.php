@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
-use SurrealDB\SDK\Auth\AuthState;
-use SurrealDB\SDK\Live\LiveSubscription;
+use SurrealDB\Auth\AuthState;
+use SurrealDB\Live\LiveSubscription;
 
 /**
  * Mutable state for a single session: its selected namespace/database, defined

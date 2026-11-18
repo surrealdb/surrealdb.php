@@ -1,18 +1,18 @@
 <?php
 
-namespace SurrealDB\SDK\Transport\Amp;
+namespace SurrealDB\Transport\Amp;
 
 use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request;
-use SurrealDB\SDK\Connection\ConnectionState;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\SessionState;
-use SurrealDB\SDK\Contracts\TransportInterface;
-use SurrealDB\SDK\Exceptions\HttpConnectionException;
-use SurrealDB\SDK\Exceptions\UnexpectedServerResponseException;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
-use SurrealDB\SDK\Transport\SessionHeaders;
+use SurrealDB\Connection\ConnectionState;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\SessionState;
+use SurrealDB\Contracts\TransportInterface;
+use SurrealDB\Exceptions\HttpConnectionException;
+use SurrealDB\Exceptions\UnexpectedServerResponseException;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
+use SurrealDB\Transport\SessionHeaders;
 use function is_array;
 
 /**

@@ -3,12 +3,12 @@
 namespace SurrealDB\Tests\Fakes;
 
 use Revolt\EventLoop;
-use SurrealDB\SDK\Codec\CborDeserializer;
-use SurrealDB\SDK\Codec\CborSerializer;
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Contracts\DuplexTransportInterface;
-use SurrealDB\SDK\Rpc\RpcRequest;
-use SurrealDB\SDK\Rpc\RpcResponse;
+use SurrealDB\Codec\CborDeserializer;
+use SurrealDB\Codec\CborSerializer;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Contracts\DuplexTransportInterface;
+use SurrealDB\Rpc\RpcRequest;
+use SurrealDB\Rpc\RpcResponse;
 
 /**
  * A transport for the Revolt event loop whose open() takes `$openDelay`

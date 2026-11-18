@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
 use Beau\CborPHP\interfaces\CborTag;
 use LogicException;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Types\Duration;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Types\Duration;
 
 /**
  * A duration as text, such as "1h30m": tag 13. Read only; a Duration is

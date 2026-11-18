@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Scheduler;
+namespace SurrealDB\Scheduler;
 
-use SurrealDB\SDK\Contracts\Deferred;
-use SurrealDB\SDK\Contracts\Scheduler;
+use SurrealDB\Contracts\Deferred;
+use SurrealDB\Contracts\Scheduler;
 
 /**
  * The default, blocking scheduler. Background tasks are not run (synchronous

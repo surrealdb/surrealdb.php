@@ -1,17 +1,17 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Live\ManagedLiveSubscription;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Query\Concerns\HasCondition;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\RecordIdRange;
-use SurrealDB\SDK\Types\StringRecordId;
-use SurrealDB\SDK\Types\Table;
-use SurrealDB\SDK\Types\Value;
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Live\ManagedLiveSubscription;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Query\Concerns\HasCondition;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\RecordIdRange;
+use SurrealDB\Types\StringRecordId;
+use SurrealDB\Types\Table;
+use SurrealDB\Types\Value;
 use function is_string;
 
 /**
@@ -95,7 +95,7 @@ final class LiveSelectQuery extends QueryBuilder implements \IteratorAggregate
      * Not iterable: the builder starts nothing until {@see self::execute()},
      * whose subscription is what to iterate. Earlier 2.0 alphas took a live
      * query id here and were iterated directly; following a live query by id
-     * is now {@see \SurrealDB\SDK\SurrealSession::liveOf()}. Without this,
+     * is now {@see \SurrealDB\SurrealSession::liveOf()}. Without this,
      * `foreach` would quietly walk the builder's public properties.
      */
     public function getIterator(): never

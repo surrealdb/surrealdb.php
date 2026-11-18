@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 use Brick\Math\BigInteger;
-use SurrealDB\SDK\Exceptions\InvalidValueException;
+use SurrealDB\Exceptions\InvalidValueException;
 use function is_int;
 use function strlen;
 

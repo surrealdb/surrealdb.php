@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
 use Beau\CborPHP\interfaces\CborTag;
 use Beau\CborPHP\utils\CborByteString;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Types\Uuid;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Types\Uuid;
 use function strlen;
 
 /**

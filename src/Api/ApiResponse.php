@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Api;
+namespace SurrealDB\Api;
 
 use function is_array;
 use function is_int;

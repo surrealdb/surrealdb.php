@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /** Thrown when an operation requires an active connection but none is available. */
 final class ConnectionUnavailableException extends SurrealException

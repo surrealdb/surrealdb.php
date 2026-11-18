@@ -5,6 +5,7 @@ parameters:
     level: 6
     paths:
         - src
+        - tests/PHPStan
     phpVersion: 80400
     bootstrapFiles:
         - vendor/autoload.php

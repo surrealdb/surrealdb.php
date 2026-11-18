@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Query;
+namespace SurrealDB\Query;
 
-use SurrealDB\SDK\Contracts\QueryExecutor;
+use SurrealDB\Contracts\QueryExecutor;
 
 /**
  * A raw, possibly multi-statement SurrealQL query wrapped as a builder, so it

@@ -4,9 +4,9 @@ namespace SurrealDB\Tests\Unit\Query;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Exceptions\ExpressionException;
-use SurrealDB\SDK\Query\RunQuery;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Exceptions\ExpressionException;
+use SurrealDB\Query\RunQuery;
+use SurrealDB\Types\Table;
 
 final class RunQueryTest extends TestCase
 {

@@ -3,8 +3,8 @@
 namespace SurrealDB\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Exceptions\CallTerminatedException;
-use SurrealDB\SDK\Scheduler\SyncScheduler;
+use SurrealDB\Exceptions\CallTerminatedException;
+use SurrealDB\Scheduler\SyncScheduler;
 
 final class SyncSchedulerTest extends TestCase
 {

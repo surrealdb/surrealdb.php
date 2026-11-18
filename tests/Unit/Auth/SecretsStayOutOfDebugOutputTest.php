@@ -4,17 +4,17 @@ namespace SurrealDB\Tests\Unit\Auth;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\AuthState;
-use SurrealDB\SDK\Auth\BearerAuth;
-use SurrealDB\SDK\Auth\DatabaseAuth;
-use SurrealDB\SDK\Auth\NamespaceAuth;
-use SurrealDB\SDK\Auth\RecordAccessAuth;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Auth\Token;
-use SurrealDB\SDK\Auth\Tokens;
-use SurrealDB\SDK\Connection\SessionState;
-use SurrealDB\SDK\Events\AuthChanged;
-use SurrealDB\SDK\Rpc\RpcRequest;
+use SurrealDB\Auth\AuthState;
+use SurrealDB\Auth\BearerAuth;
+use SurrealDB\Auth\DatabaseAuth;
+use SurrealDB\Auth\NamespaceAuth;
+use SurrealDB\Auth\RecordAccessAuth;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Auth\Token;
+use SurrealDB\Auth\Tokens;
+use SurrealDB\Connection\SessionState;
+use SurrealDB\Events\AuthChanged;
+use SurrealDB\Rpc\RpcRequest;
 
 /**
  * Debug output ends up in logs, traces and error reports: it must not hold
@@ -75,7 +75,7 @@ final class SecretsStayOutOfDebugOutputTest extends TestCase
             $this->assertStringNotContainsString(self::SECRET, print_r($error->getTrace(), true));
         }
 
-        $parameter = new \ReflectionParameter([\SurrealDB\SDK\SurrealSession::class, 'authenticate'], 'token');
+        $parameter = new \ReflectionParameter([\SurrealDB\SurrealSession::class, 'authenticate'], 'token');
         $this->assertNotSame([], $parameter->getAttributes(\SensitiveParameter::class));
     }
 

@@ -1,8 +1,8 @@
 <?php
 
-namespace SurrealDB\SDK\Rpc;
+namespace SurrealDB\Rpc;
 
-use SurrealDB\SDK\Support\Redacted;
+use SurrealDB\Support\Redacted;
 use function in_array;
 
 /**

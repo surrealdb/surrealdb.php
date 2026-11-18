@@ -4,7 +4,7 @@ namespace SurrealDB\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Support\Version;
+use SurrealDB\Support\Version;
 
 final class VersionTest extends TestCase
 {

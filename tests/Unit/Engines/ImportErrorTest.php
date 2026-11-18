@@ -10,13 +10,13 @@ use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Exceptions\AlreadyExistsException;
-use SurrealDB\SDK\Exceptions\HttpConnectionException;
-use SurrealDB\SDK\Exceptions\ThrownException;
-use SurrealDB\SDK\Surreal;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Exceptions\AlreadyExistsException;
+use SurrealDB\Exceptions\HttpConnectionException;
+use SurrealDB\Exceptions\ThrownException;
+use SurrealDB\Surreal;
 
 /**
  * The `/import` endpoint reports failing statements in its body. SurrealDB 3.x
@@ -31,7 +31,7 @@ final class ImportErrorTest extends TestCase
             ['status' => 'ERR', 'result' => 'An error occurred: boom', 'time' => '1ms'],
         ], JSON_THROW_ON_ERROR)));
 
-        $this->expectException(\SurrealDB\SDK\Exceptions\ServerException::class);
+        $this->expectException(\SurrealDB\Exceptions\ServerException::class);
         $this->expectExceptionMessage('Import failed at statement 1: An error occurred: boom');
 
         $db->import('OPTION IMPORT; CREATE a; THROW "boom";');

@@ -1,9 +1,9 @@
 <?php
 
-namespace SurrealDB\SDK;
+namespace SurrealDB;
 
-use SurrealDB\SDK\Connection\ConnectionController;
-use SurrealDB\SDK\Exceptions\TransactionFinishedException;
+use SurrealDB\Connection\ConnectionController;
+use SurrealDB\Exceptions\TransactionFinishedException;
 
 /**
  * An interactive transaction. Every query made through this object, raw or

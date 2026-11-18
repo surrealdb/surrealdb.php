@@ -4,15 +4,15 @@ namespace SurrealDB\Tests\Runtime\FrankenPHP;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Connection\DriverContext;
-use SurrealDB\SDK\Connection\DriverOptions;
-use SurrealDB\SDK\Connection\Endpoint;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Events\EventDispatcher;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Scheduler\Amp\RevoltScheduler;
-use SurrealDB\SDK\Transport\Amp\AmpWebSocketTransport;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Connection\DriverContext;
+use SurrealDB\Connection\DriverOptions;
+use SurrealDB\Connection\Endpoint;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Events\EventDispatcher;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Scheduler\Amp\RevoltScheduler;
+use SurrealDB\Transport\Amp\AmpWebSocketTransport;
 use SurrealDB\Tests\Fakes\StuckWebSocketServer;
 
 final class AmpWebSocketTransportWriteTest extends TestCase

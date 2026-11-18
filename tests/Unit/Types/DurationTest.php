@@ -4,8 +4,8 @@ namespace SurrealDB\Tests\Unit\Types;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Exceptions\InvalidValueException;
-use SurrealDB\SDK\Types\Duration;
+use SurrealDB\Exceptions\InvalidValueException;
+use SurrealDB\Types\Duration;
 
 final class DurationTest extends TestCase
 {

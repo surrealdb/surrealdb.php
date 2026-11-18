@@ -3,20 +3,20 @@
 namespace SurrealDB\Tests\Feature;
 
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Auth\RootAuth;
-use SurrealDB\SDK\Connection\ConnectOptions;
-use SurrealDB\SDK\Exceptions\SurrealException;
-use SurrealDB\SDK\Exceptions\UnavailableFeatureException;
-use SurrealDB\SDK\Exceptions\UnsupportedFeatureException;
-use SurrealDB\SDK\Live\LiveAction;
-use SurrealDB\SDK\Live\LiveMessage;
-use SurrealDB\SDK\Live\LiveSubscription;
-use SurrealDB\SDK\Live\ManagedLiveSubscription;
-use SurrealDB\SDK\Protocol\Features;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Surreal;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Auth\RootAuth;
+use SurrealDB\Connection\ConnectOptions;
+use SurrealDB\Exceptions\SurrealException;
+use SurrealDB\Exceptions\UnavailableFeatureException;
+use SurrealDB\Exceptions\UnsupportedFeatureException;
+use SurrealDB\Live\LiveAction;
+use SurrealDB\Live\LiveMessage;
+use SurrealDB\Live\LiveSubscription;
+use SurrealDB\Live\ManagedLiveSubscription;
+use SurrealDB\Protocol\Features;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Surreal;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 use function count;
 
 /**

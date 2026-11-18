@@ -1,16 +1,16 @@
 <?php
 
-namespace SurrealDB\SDK\Connection;
+namespace SurrealDB\Connection;
 
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
-use SurrealDB\SDK\Codec\Codec;
-use SurrealDB\SDK\Contracts\Meter;
-use SurrealDB\SDK\Contracts\Scheduler;
-use SurrealDB\SDK\Contracts\Tracer;
-use SurrealDB\SDK\Enum\CodecEnum;
-use SurrealDB\SDK\Telemetry\NullMeter;
-use SurrealDB\SDK\Telemetry\NullTracer;
+use SurrealDB\Codec\Codec;
+use SurrealDB\Contracts\Meter;
+use SurrealDB\Contracts\Scheduler;
+use SurrealDB\Contracts\Tracer;
+use SurrealDB\Enum\CodecEnum;
+use SurrealDB\Telemetry\NullMeter;
+use SurrealDB\Telemetry\NullTracer;
 
 /**
  * The resolved dependency bundle passed to every engine, transport, and

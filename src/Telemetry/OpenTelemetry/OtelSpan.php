@@ -1,12 +1,12 @@
 <?php
 
-namespace SurrealDB\SDK\Telemetry\OpenTelemetry;
+namespace SurrealDB\Telemetry\OpenTelemetry;
 
 use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\Context\ScopeInterface;
-use SurrealDB\SDK\Contracts\Span;
-use SurrealDB\SDK\Enum\SpanStatus;
+use SurrealDB\Contracts\Span;
+use SurrealDB\Enum\SpanStatus;
 
 /**
  * Wraps an OpenTelemetry span. {@see end()} detaches the activated scope before

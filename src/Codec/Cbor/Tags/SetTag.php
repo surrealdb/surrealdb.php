@@ -1,11 +1,11 @@
 <?php
 
-namespace SurrealDB\SDK\Codec\Cbor\Tags;
+namespace SurrealDB\Codec\Cbor\Tags;
 
 use Beau\CborPHP\classes\CborContext;
-use SurrealDB\SDK\Codec\Cbor\CborTag as Tag;
-use SurrealDB\SDK\Codec\Cbor\CborValueMapper;
-use SurrealDB\SDK\Types\Set;
+use SurrealDB\Codec\Cbor\CborTag as Tag;
+use SurrealDB\Codec\Cbor\CborValueMapper;
+use SurrealDB\Types\Set;
 
 /**
  * A set: tag 56 with its values as an array.

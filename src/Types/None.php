@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Types;
+namespace SurrealDB\Types;
 
 /**
  * The SurrealQL `NONE` value (the absence of a value, distinct from `NULL`).

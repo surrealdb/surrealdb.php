@@ -4,15 +4,15 @@ namespace SurrealDB\Tests\Unit\Query;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use SurrealDB\SDK\Query\BoundQuery;
-use SurrealDB\SDK\Query\CreateQuery;
-use SurrealDB\SDK\Query\InsertQuery;
-use SurrealDB\SDK\Query\QueryBuilder;
-use SurrealDB\SDK\Query\RelateQuery;
-use SurrealDB\SDK\Query\UpdateQuery;
-use SurrealDB\SDK\Query\UpsertQuery;
-use SurrealDB\SDK\Types\RecordId;
-use SurrealDB\SDK\Types\Table;
+use SurrealDB\Query\BoundQuery;
+use SurrealDB\Query\CreateQuery;
+use SurrealDB\Query\InsertQuery;
+use SurrealDB\Query\QueryBuilder;
+use SurrealDB\Query\RelateQuery;
+use SurrealDB\Query\UpdateQuery;
+use SurrealDB\Query\UpsertQuery;
+use SurrealDB\Types\RecordId;
+use SurrealDB\Types\Table;
 
 /**
  * An empty PHP array is both an empty list and an empty map. As a record's

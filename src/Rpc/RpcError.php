@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Rpc;
+namespace SurrealDB\Rpc;
 
 /**
  * The structured error payload returned inside an RPC response.

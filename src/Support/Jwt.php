@@ -1,6 +1,6 @@
 <?php
 
-namespace SurrealDB\SDK\Support;
+namespace SurrealDB\Support;
 
 use function count;
 use function is_array;

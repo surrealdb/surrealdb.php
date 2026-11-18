@@ -1,8 +1,10 @@
 <?php
 
-namespace SurrealDB\SDK\Exceptions;
+namespace SurrealDB\Exceptions;
 
 /**
- * The base class for every exception thrown by the SurrealDB SDK.
+ * The base class for the SurrealDB SDK's exceptions. Catch
+ * {@see SurrealExceptionInterface} to cover every exception the SDK raises,
+ * including any that extend another SPL exception instead.
  */
-class SurrealException extends \RuntimeException {}
+class SurrealException extends \RuntimeException implements SurrealExceptionInterface {}
